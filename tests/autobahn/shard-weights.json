@@ -1,0 +1,31 @@
+{
+  "note": "Per-case wall-clock cost of one Autobahn case group, in seconds of `wstest` time. `planShards` multiplies this by the group's case count, so a group whose case count changes is re-priced without editing this file.",
+  "provenance": "The framing groups cost the same per case because the suite's cost is a per-case constant inside the Python client: two runs of the same job took 2086s for the 301 framing cases and 2100s for all 517, so the 216 per-message-deflate cases account for 14s between them, about 0.065s each against 6.93s for a framing case. The per-group case counts are derived from the suite's own case expansion and are cross-checked against the two totals the repository already asserts independently: the nine framing groups sum to 301, which is TOTAL_CASES minus COMPRESSION_CASES, and groups 12 and 13 are the 5 and 7 deflate parameter sets over 18 size rows. A run's summary.json republishes both the measured per-case durations and the realised case counts, so this table can be re-derived from a measurement rather than from a derivation.",
+  "units": "seconds of wstest time per case",
+  "groups": {
+    "1": 6.93,
+    "2": 6.93,
+    "3": 6.93,
+    "4": 6.93,
+    "5": 6.93,
+    "6": 6.93,
+    "7": 6.93,
+    "9": 6.93,
+    "10": 6.93,
+    "12": 0.065,
+    "13": 0.065
+  },
+  "caseCounts": {
+    "1": 16,
+    "2": 11,
+    "3": 7,
+    "4": 10,
+    "5": 20,
+    "6": 91,
+    "7": 37,
+    "9": 108,
+    "10": 1,
+    "12": 90,
+    "13": 126
+  }
+}

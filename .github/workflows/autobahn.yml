@@ -16,30 +16,25 @@ on:
     paths:
       - "**.zig"
       - "build.zig.zon"
-      - "tests/autobahn/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "tsconfig.json"
+      - "tests/autobahn/**"
       - ".github/workflows/autobahn.yml"
   pull_request:
     branches:
       - main
-    # Only the engine can change RFC 6455 behaviour, so only a Zig source, a
-    # build manifest, the harness, or the toolchain may start this job.
-    #
-    # An earlier version also matched `src/**`, which subsumed `**.zig` and
-    # additionally matched every TypeScript file. That meant a change to the
-    # `ws`-shaped facade, which the suite never exercises, still spent 38 minutes
-    # of runner time re-measuring something it cannot observe. `**.zig` already
-    # covers `src/**/*.zig`; `build.zig.zon` does not match `**.zig` and is
-    # listed because it pins the engine and its vendored dependencies.
+    # The same filter as `push`, and the same reasoning. It is necessary but not
+    # sufficient on its own: GitHub evaluates `paths` against the whole pull
+    # request diff, so a branch that already touched the engine starts this job on
+    # every later push. The `gate` job below closes that gap.
     paths:
       - "**.zig"
       - "build.zig.zon"
-      - "tests/autobahn/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "tsconfig.json"
+      - "tests/autobahn/**"
       - ".github/workflows/autobahn.yml"
   schedule:
     # Weekly, off the hour, so the RFC 6455 report is refreshed even when no
@@ -55,10 +50,62 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides whether the suite needs to run, in about 25 seconds and with no
+  # toolchain beyond Node: a checkout with full history and a diff against the
+  # last commit the suite ran on this ref.
+  #
+  # This is a separate job rather than a conditional step on purpose. A skipped
+  # step inside the suite job would render that job green, indistinguishable from a
+  # pass; a skipped *job* renders grey with the reason in the checks UI, and the
+  # required check is still satisfied.
+  gate:
+    name: Autobahn engine gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The decision is a diff against the watermark, so the history has to
+          # reach it. A shallow clone would make `git diff` fail, and the script
+          # answers that by running the suite rather than by skipping it.
+          fetch-depth: 0
+
+      - uses: pnpm/setup@v2
+        with:
+          version: 12.4.2
+          runtime: node@24
+          install: false
+
+      - name: Restore the last tested commit
+        uses: actions/cache/restore@v4
+        with:
+          path: .autobahn-watermark
+          # The key carries the commit, because a cache key is immutable and a
+          # fixed one would freeze the watermark at the first commit ever
+          # recorded. The prefix lookup resolves to the most recently created
+          # match, which is the newest tested commit on this ref.
+          key: autobahn-watermark-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            autobahn-watermark-${{ github.ref_name }}-
+          lookup-only: true
+          fail-on-cache-miss: false
+
+      - name: Decide whether the engine moved
+        id: decide
+        run: |
+          mkdir -p .autobahn-out
+          node tests/autobahn/diff-gate-cli.ts | tee .autobahn-out/decision
+          grep '^run=' .autobahn-out/decision | cut -d= -f2 >> "$GITHUB_OUTPUT"
+          grep '^reason=' .autobahn-out/decision | cut -d= -f2- >> "$GITHUB_STEP_SUMMARY"
+
   fuzzing-client:
     name: RFC 6455 conformance
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     environment:
       name: Autobahn
       url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -95,9 +142,16 @@ jobs:
 
       - name: Check the addon loads
         # Cheap and first, because a runtime that cannot load the addon is the
-        # only pre-suite failure mode that would otherwise be discovered after
-        # 21 minutes of suite time. See tests/autobahn/preflight.ts.
+        # only pre-suite failure mode that would otherwise be discovered after a
+        # full sharded suite. See tests/autobahn/preflight.ts.
         run: node tests/autobahn/preflight.ts
+
+      - name: Check the shard plan is self-consistent
+        # The weight table in shard-weights.json is a derivation, and it is
+        # cross-checked against the two case totals the gate already asserts. A
+        # drift here would silently rebalance the split, so it fails in seconds
+        # rather than costing a suite run.
+        run: node tests/autobahn/check-plan.ts
 
       - name: Pull the digest-pinned fuzzing client
         # Pulled before the gate so an unpullable reference fails here with a
@@ -105,19 +159,33 @@ jobs:
         run: docker pull crossbario/autobahn-testsuite@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074
 
       - name: Run the suite
-        # The harness writes its report and a JSON summary on every exit path,
-        # so the artifacts below exist even when the gate fails.
+        # Four concurrent fuzzing clients against four targets, in one job that
+        # builds the addon once.
         #
+        # The suite is 92 per cent of the job and its cost is a near-constant per
+        # case inside the Python client rather than anything on the Node or Zig
+        # side: 2086s for the 301 framing cases against 2100s for all 517. A
+        # matrix of four *jobs* would cut wall clock the same way but pay the
+        # addon build four times, so it is sharded in-process instead, which is
+        # strictly better on both axes.
         #
-        # A pull request or a push runs the default `framing` selection, which
-        # omits the two per-message-deflate groups. They are 216 of 517 cases,
-        # about 42 per cent of the runtime, and every one is UNIMPLEMENTED
-        # because `permessage-deflate` is normalised and never negotiated, so
-        # they cannot change until deflate is implemented. A schedule and a
-        # manual run use `--full`, which is the authoritative 517.
-        run: >-
-          node tests/autobahn/run.ts
-          ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--full' || '' }}
+        # The per-case `duration` the report already carries is rolled up per
+        # group in the summary, so the next run can re-derive the shard weights
+        # from a measurement rather than from a derivation.
+        env:
+          AUTOBAHN_SHARDS: "4"
+        run: node tests/autobahn/run.ts
+
+      - name: Record the tested commit
+        if: success()
+        run: echo "${{ github.sha }}" > .autobahn-watermark
+
+      - name: Save the tested commit for the gate
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .autobahn-watermark
+          key: autobahn-watermark-${{ github.ref_name }}-${{ github.sha }}
 
       - name: Upload the report
         if: always()

@@ -26,10 +26,14 @@ export function dockerArgs(input: {
   readonly uid: string;
   readonly gid: string;
   readonly configHostPath: string;
+  readonly reportsHostDir: string;
+  readonly name: string;
 }): readonly string[] {
   return [
     "run",
     "--rm",
+    "--name",
+    input.name,
     "--user",
     `${input.uid}:${input.gid}`,
     "--add-host",
@@ -37,7 +41,7 @@ export function dockerArgs(input: {
     "-v",
     `${input.configHostPath}:${CONTAINER_CONFIG_PATH}:ro`,
     "-v",
-    `${REPORTS_HOST_DIR}:${CONTAINER_REPORTS_DIR}`,
+    `${input.reportsHostDir}:${CONTAINER_REPORTS_DIR}`,
     AUTOBAHN_IMAGE,
     "wstest",
     "-m",
@@ -45,4 +49,21 @@ export function dockerArgs(input: {
     "-s",
     CONTAINER_CONFIG_PATH,
   ];
+}
+
+/// Removes a container that outlived its client.
+///
+/// `--rm` only takes effect when a container *stops*, so a run interrupted by
+/// SIGINT or by the job timeout leaves the container running: it keeps writing
+/// into the report bind mount and the next run's `resetReportDirectory` then
+/// deletes the tree out from under it. The name the shard was given is what
+/// makes a targeted `rm -f` possible.
+export function dockerRemoveArgs(name: string): readonly string[] {
+  return ["rm", "--force", name];
+}
+
+/// The unsplit run's report directory, which is the shared root. A single shard
+/// writes straight into it so the artifact layout is unchanged.
+export function defaultReportsDir(): string {
+  return REPORTS_HOST_DIR;
 }
