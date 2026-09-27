@@ -73,6 +73,11 @@ pub const Instance = struct {
     config: options.ServerConfig,
     io: std.Io.Threaded = std.Io.Threaded.init_single_threaded,
     cluster: ClusterType,
+    /// Staged payloads the engine refused after the pump had already taken them
+    /// out of the ring. Read on the Node main thread, written on the engine
+    /// thread, so it is atomic. See `socket_pump.flush` for why the loss has to
+    /// be counted rather than reported as success.
+    undelivered: std.atomic.Value(u64) align(std.atomic.cache_line) = .init(0),
     runner: ?std.Thread = null,
     state: std.atomic.Value(State) = .init(.created),
     handle: Handle,
@@ -94,6 +99,15 @@ pub fn lookup(env: napi.Env, raw: u40) ?*Instance {
 /// Engine-thread lookup for a comptime trampoline slot.
 pub fn lookup_slot(slot: u32) ?*Instance {
     return servers.lookup_slot(slot);
+}
+
+/// Maps an engine connection onto its slab slot, or null when the pool does not
+/// know it. Null means the connection was never admitted through this server, and
+/// every caller treats it as a refusal rather than proceeding.
+pub fn connection_index(target: *Instance, ws: *uwz.WebSocket) ?u32 {
+    const app = target.cluster.worker(0) orelse return null;
+    const index = app.pool.index_of(ws.conn) orelse return null;
+    return @intCast(index);
 }
 
 /// Resolves a packed connection handle and returns it only when the slab still

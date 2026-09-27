@@ -48,9 +48,18 @@ fn on_env_cleanup(raw: ?*anyopaque) callconv(.c) void {
 /// one of them. The caller must have joined the engine thread and removed the
 /// environment cleanup hook; the hook's own path calls this directly because
 /// Node is already running it.
+///
+/// The slot is retired first, not last. A comptime trampoline resolves its
+/// instance through the table, and `cluster.deinit()` tears down the event loop
+/// those trampolines run on. Retiring after the deinit left a window in which a
+/// callback that was already in flight could resolve a slot whose cluster was
+/// half destroyed. Both current callers join the engine thread first, so the
+/// window was empty, but nothing in the type system or in this function's
+/// contract enforced that, and `retire` is the release store that makes the
+/// ordering safe rather than merely currently-true.
 pub fn destroy(target: *instance.Instance) void {
+    instance.servers.retire(target.handle);
     target.channel.close();
     target.cluster.deinit();
-    instance.servers.retire(target.handle);
     std.heap.smp_allocator.destroy(target);
 }

@@ -11,7 +11,7 @@
       "cases": "5.19 5.20"
     },
     "7": {
-      "reason": "7.1.1 sends 1001 where the suite expects 1007. This one is specific and actionable: the close path maps an invalid close reason onto the normal-closure code instead of 1007. It is the only remaining failure with a remote close code that is simply wrong, rather than a cap or a message-content problem.",
+      "reason": "7.1.1 expects an echoed message and a normal close, and the fuzzing client ends the case with `killAfter(1)` rather than a close frame, so the close code it reports is its own rather than the server's. An earlier version of this entry claimed the close path maps an invalid close reason onto 1001; that case has no close reason in it at all, and the engine's mapping of invalid UTF-8 to 1007 is present and correct. The failure is observed alongside 5.19 and 5.20, which are also echoed-message cases, so the outbound echo path is the suspect rather than the close path.",
       "cases": "7.1.1"
     },
     "12": {

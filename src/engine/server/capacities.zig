@@ -11,6 +11,25 @@
 pub const connection_capacity: u32 = 128;
 
 /// Largest message the engine accepts or produces, in either direction.
+///
+/// 32 KiB, which is below what RFC 6455's conformance suite sends. Group 1
+/// delivers 65535- and 65536-byte payloads and expects a clean echo, and the
+/// vendored `zslay` frame validator closes all six of those with 1009 "Message
+/// too large", which is a correct response to a cap the suite never agreed to.
+///
+/// Raising this to 64 KiB is the floor that converts them, and the
+/// `permessage_deflate` plumbing beside it is already in place, but the two
+/// together move 92 recorded Autobahn cases and invalidate the harness's derived
+/// capacity model and shard weight table. Both are only re-derivable from a
+/// recorded suite run against the digest-pinned fuzzing client, so the raise
+/// lands with that run rather than as a guess.
+///
+/// The memory cost is charged to every live server: the message slab, the write
+/// queue, the RFC 7692 compression scratch, the cluster inbox, and both staging
+/// rings all scale with it. Raising the cap from 32 KiB to 64 KiB adds about
+/// 22 MB per server instance. `connection_capacity` is the lever that trades
+/// against it and the better one to move first, since three of those six terms
+/// are per-connection.
 pub const message_capacity: u32 = 32 * 1024;
 
 /// Largest single frame. A frame can never exceed a message, so it tracks it.
