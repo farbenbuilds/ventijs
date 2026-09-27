@@ -72,12 +72,22 @@ test(
     const peer = await scriptedPeer({ first: 404, after: 101 });
     const socket = new WebSocket(peer.url);
     try {
-      const seen: Array<[string, number]> = [];
-      socket.on("unexpected-response", (url, status) => seen.push([url, status]));
+      // The request and the response, which is what `ws` hands over and what a caller
+      // needs in order to decide: the path tells it where it went and the status tells it
+      // what it was refused with. The previous payload was a URL and a number, so
+      // reading the 404's own headers was impossible.
+      const seen: Array<[string, number, string | undefined]> = [];
+      socket.on("unexpected-response", (request, response) =>
+        seen.push([
+          request.path,
+          response.statusCode ?? 0,
+          String(response.headers["x-peek"] ?? ""),
+        ]),
+      );
       // A listener takes the refusal over, so there is no error to await: the caller is
       // the one deciding now.
-      expect(await refused(socket)).toBe(404);
-      expect(seen).toEqual([[`${peer.url}/`, 404]]);
+      expect((await refused(socket)).statusCode).toBe(404);
+      expect(seen).toEqual([["/", 404, "refused-by-peer"]]);
     } finally {
       // A `terminate` on a socket that never opened reports the aborted handshake,
       // exactly as `ws` does, so the test has to be listening for it.
@@ -95,10 +105,19 @@ test(
     const peer = await scriptedPeer({ first: 401, after: 101 });
     const socket = new WebSocket(peer.url);
     try {
-      // The event exists so a caller can read the 401 before deciding. Aborting
-      // unconditionally meant a listener could never act on what it was handed, which
-      // made the event a notification of a teardown rather than an offer.
-      expect(await refused(socket)).toBe(401);
+      // The offer is only real if the response is a live `IncomingMessage`, so its body
+      // is read here; `permessage-deflate.test.ts` and
+      // `client-handshake-events.test.ts` read its headers and its path.
+      const challenge = new Promise<string>((resolve) => {
+        socket.on("unexpected-response", (_request, response) => {
+          response.setEncoding("utf8");
+          const chunks: string[] = [];
+          response.on("data", (chunk: string) => chunks.push(chunk));
+          response.on("end", () => resolve(chunks.join("")));
+        });
+      });
+      expect((await refused(socket)).statusCode).toBe(401);
+      expect(await challenge).toBe("token required\n");
       expect(socket.readyState).not.toBe(WebSocket.CLOSED);
     } finally {
       // A `terminate` on a socket that never opened reports the aborted handshake,

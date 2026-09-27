@@ -56,3 +56,18 @@ export function promoteOptions<T>(
   }
   return { protocols: undefined, options: protocols as unknown as T };
 }
+
+/// The subprotocol check, kept beside the offer because it is the only part of the
+/// response the application can influence.
+///
+/// A server that picks nothing when the client offered something is a protocol error
+/// rather than a default: the client asked for a language or a subprotocol and would
+/// otherwise have no way to notice it got something else.
+export function protocolRejection(chosen: string | undefined, offered: ProtocolSet): string | null {
+  if (chosen === undefined) {
+    return offered.size > 0 ? "Server sent no subprotocol" : null;
+  }
+  if (offered.size === 0) return "Server sent a subprotocol but none was requested";
+  if (!offered.has(chosen)) return "Server sent an invalid subprotocol";
+  return null;
+}

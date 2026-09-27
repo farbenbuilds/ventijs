@@ -18,6 +18,14 @@ export type RedirectPeer = {
   /// The `Authorization` header of each request the peer received, in order, so a test
   /// can say whether credentials survived a hop.
   readonly authorizations: Array<string | undefined>;
+  /// The request target of each request, in order. Two hops are otherwise
+  /// indistinguishable here, and "did the second request actually go out, and where" is
+  /// what a redirect listener is for.
+  readonly paths: string[];
+  /// The `x-ventijs-hop` header of each request, in order, for the same reason: a caller
+  /// that sets a header on a redirected request can only prove it took effect by having
+  /// the peer report what arrived.
+  readonly markers: Array<string | undefined>;
   close(): Promise<void>;
 };
 
@@ -37,6 +45,8 @@ export type PeerScript = {
 /// A peer that answers according to `script`, one request per connection.
 export function scriptedPeer(script: PeerScript): Promise<RedirectPeer> {
   const authorizations: Array<string | undefined> = [];
+  const paths: string[] = [];
+  const markers: Array<string | undefined> = [];
   const sockets: Socket[] = [];
   let served = 0;
   const server: Server = createServer((socket) => {
@@ -52,6 +62,8 @@ export function scriptedPeer(script: PeerScript): Promise<RedirectPeer> {
       // The head stops before the blank line, so the last header has no trailing CRLF
       // and a pattern that requires one would miss exactly the header that is last.
       authorizations.push(/^authorization: (.*)$/im.exec(head)?.[1]?.trim());
+      markers.push(/^x-ventijs-hop: (.*)$/im.exec(head)?.[1]?.trim());
+      paths.push(/^\S+ (\S+) HTTP\/1\.1$/im.exec(head)?.[1] ?? "");
       served += 1;
       const status = served === 1 ? script.first : script.after;
       if (status >= 300 && status < 400 && script.location !== undefined) {
@@ -67,7 +79,21 @@ export function scriptedPeer(script: PeerScript): Promise<RedirectPeer> {
         return;
       }
       if (status !== 101) {
-        socket.write(`HTTP/1.1 ${status} Not A Handshake\r\nContent-Length: 0\r\n\r\n`);
+        // A body and a header of its own, because the two are what a caller reading a
+        // refusal through `unexpected-response` is actually handed: the response is a
+        // live `IncomingMessage`, so its headers and its body are both readable, and a
+        // peer that sent neither would make a test pass without proving that.
+        const body = `token required\n`;
+        socket.write(
+          [
+            `HTTP/1.1 ${status} Not A Handshake`,
+            "X-Peek: refused-by-peer",
+            "Content-Type: text/plain",
+            `Content-Length: ${Buffer.byteLength(body)}`,
+            "",
+            body,
+          ].join("\r\n"),
+        );
         return;
       }
       const key = /sec-websocket-key: (.+)\r\n/i.exec(head)?.[1]?.trim() ?? "";
@@ -89,7 +115,12 @@ export function scriptedPeer(script: PeerScript): Promise<RedirectPeer> {
       resolve({
         url: `ws://127.0.0.1:${(server.address() as { port: number }).port}`,
         authorizations,
+        paths,
+        markers,
         close: () => {
+          // Destroyed mid-handshake sockets report `ECONNRESET`, and the peer's listener
+          // is the only one that will ever see it. A test that leaves one off sees the
+          // error as an unhandled rejection against whichever test happened to be running.
           for (const socket of sockets) socket.destroy();
           return new Promise<void>((done) => {
             server.close(() => done());

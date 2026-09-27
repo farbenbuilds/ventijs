@@ -1,73 +1,52 @@
+/// A 101: report it, then decide whether it is a usable connection.
+///
+/// **The order is `ws`'s and it is load-bearing.** `ws` emits `upgrade` with the
+/// `IncomingMessage` *before* it checks anything, and a listener is allowed to close or
+/// terminate the socket there. A caller that saw the 101 and closed has answered the
+/// question the event exists to answer, and continuing to validate would attach a codec
+/// and emit `open` on a socket it just closed.
+///
+/// Every field of a 101 is then checked rather than the status alone, because a server
+/// that is not a WebSocket server can answer 101 to anything: a wrong `Upgrade` means
+/// the peer upgraded to something else, and a wrong accept digest means the response
+/// belongs to a different request.
+
 import { CODEC_ROLE } from "../../binding/codec";
+import type { IncomingMessage } from "node:http";
+import type { Socket } from "node:net";
 import type { WebSocket } from "../../types/ws";
 import { attachSocket } from "../socket/attach";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED } from "../ready-state";
-import { buildRequest, newKey } from "./request";
-import { parseResponse, rejection } from "./response";
 import { acceptExtension } from "./extension";
-import { decide, isRedirect, reportUnexpected } from "./redirect";
-import { dial } from "./connect";
-import { abort, type Attempt } from "./connect";
-import { openTransport } from "./transport";
+import { protocolRejection } from "./protocols";
+import { expectedAccept } from "./request";
+import { abort, discard } from "./dial";
+import type { Attempt } from "./connect";
 
-/// Checks a complete response, then either opens the socket or refuses it.
-///
-/// Every field of a 101 is checked rather than the status alone, because a server
-/// that is not a WebSocket server can answer 101 to anything: a wrong `Upgrade`
-/// means the peer upgraded to something else, and a wrong accept digest means the
-/// response belongs to a different request.
-export function respond(attempt: Attempt, bytes: Buffer): void {
-  // A caller that closed or terminated the socket while the handshake was in flight
-  // has already been told the socket is gone, and the transport it was waiting for is
-  // still open. Attaching now would open a codec, emit `open` on a closed socket, and
-  // leave a connection nothing will ever read.
-  if (attempt.state.readyState === CLOSED) {
-    attempt.transport.destroy();
+export function onUpgrade(
+  attempt: Attempt,
+  response: IncomingMessage,
+  socket: Socket,
+  head: Buffer,
+): void {
+  const { state } = attempt;
+  // This socket is ours from here, and every path out of this function may destroy it
+  // while a read is in flight. A socket that reports an error with no listener is an
+  // uncaught exception in the caller's process, and the read that reports it is the one
+  // the peer was in the middle of when it went away -- which is most of them.
+  socket.on("error", () => undefined);
+  emitEvent(state, "upgrade", response);
+  if (state.readyState === CLOSED) {
+    discard(socket);
     return;
   }
-  const response = parseResponse(bytes);
-  // A redirect is a routing answer rather than a refusal, so it is handled before the
-  // 101 checks: a 302 has no `Sec-WebSocket-Accept` and would be reported as an invalid
-  // handshake rather than as the redirect it is.
-  const location = response.headers.location;
-  if (isRedirect(response.status, location)) {
-    const next = decide(attempt, location ?? "", response.status, attempt.address);
-    if (next !== null) {
-      // The old transport answered and has nothing more to say; the new one takes over
-      // from the same attempt, so the socket, its options, and its redirect count all
-      // survive.
-      attempt.transport.destroy();
-      attempt.transport = openTransport(next);
-      attempt.handshake = buildRequest(
-        next,
-        attempt.options,
-        attempt.requested,
-        newKey(),
-        attempt.auth,
-      );
-      attempt.redirects += 1;
-      // One event per hop actually followed, and before the request goes out, which is
-      // what `ws` does. The event used to be skipped on the first hop, because the
-      // counter was tested before it was incremented against the wrong bound, so a
-      // caller who inspected one redirect saw no event at all.
-      emitEvent(attempt.state, "redirect", next.url);
-      dial(attempt);
-      return;
-    }
-    return;
-  }
-  if (response.status !== 101) {
-    reportUnexpected(attempt, response.status);
-    return;
-  }
-  const refused = rejection(response, attempt.handshake, attempt.offered);
+  const refused = reject(response, attempt);
   if (refused !== null) {
     abort(attempt, createError("ERR_PROTOCOL", refused));
     return;
   }
-  const state = attempt.state;
   const extension = acceptExtension(response, attempt.options.perMessageDeflate);
   if ("refusal" in extension) {
     abort(attempt, createError("ERR_PROTOCOL", extension.refusal));
@@ -75,23 +54,36 @@ export function respond(attempt: Attempt, bytes: Buffer): void {
   }
   state.protocol = response.headers["sec-websocket-protocol"] ?? "";
   state.extensions = response.headers["sec-websocket-extensions"] ?? "";
-  // Set before `attachSocket` below, because the codec reads it there: a codec built
-  // for an uncompressed connection refuses a compressed frame with 1002, so a
-  // negotiation that only reached the header would break the first message.
+  // Set before `attachSocket` below, because the codec reads it there: a codec built for
+  // an uncompressed connection refuses a compressed frame with 1002, so a negotiation
+  // that only reached the header would break the first message.
   state.compressible = extension.accepted !== null;
   // The timeout was the handshake's, not the connection's: `ws` leaves an open socket
-  // with no read deadline, and a caller that wants one sets it itself.
-  attempt.transport.setTimeout(0);
-  // Attached here rather than before the request, because the codec must not see the
-  // response: it reads the upgrade response as a frame and refuses the connection
-  // with a 1002 before a single legitimate frame was sent.
-  const socket: WebSocket | null = (state.target as WebSocket | undefined) ?? null;
-  if (socket === null) {
+  // with no read deadline, and a caller who wants one sets it itself.
+  socket.setTimeout(0);
+  const target: WebSocket | null = (state.target as WebSocket | undefined) ?? null;
+  if (target === null) {
     abort(attempt, createError("ERR_INVALID_STATE", "ventijs: the socket record is missing"));
     return;
   }
-  // `rest` is what followed the response head, so a frame that shared the read with
-  // the 101 reaches the codec, and it does so after `open` because `attachSocket`
-  // owns that order.
-  attachSocket(socket, attempt.transport, CODEC_ROLE.client, response.rest);
+  // `head` is what followed the response head, so a frame that shared the read with the
+  // 101 reaches the codec, and it does so after `open` because `attachSocket` owns that
+  // order.
+  attempt.transport = socket;
+  // The handshake is over, so `close()` has a transport to destroy from here on and the
+  // hook would only be able to abort a request that has already been superseded.
+  state.cancelHandshake = null;
+  attachSocket(target, socket, CODEC_ROLE.client, head);
+}
+
+/// Why a 101 is not a usable connection, or null when it is.
+function reject(response: IncomingMessage, attempt: Attempt): string | null {
+  const upgrade = response.headers.upgrade;
+  if (upgrade === undefined || upgrade.toLowerCase() !== "websocket") {
+    return "Invalid Upgrade header";
+  }
+  if (response.headers["sec-websocket-accept"] !== expectedAccept(attempt.handshake.key)) {
+    return "Invalid Sec-WebSocket-Accept header";
+  }
+  return protocolRejection(response.headers["sec-websocket-protocol"], attempt.offered);
 }

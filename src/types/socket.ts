@@ -1,4 +1,4 @@
-import type { IncomingMessage } from "node:http";
+import type { ClientRequest, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { ConnectionHandle } from "../binding/handle";
 import type { ServerHandle } from "../binding/server";
@@ -27,14 +27,18 @@ export type SocketEventMap = {
   ping: [data: Buffer];
   pong: [data: Buffer];
   upgrade: [request: IncomingMessage];
-  /// The URL a redirect would send the client to. `ws` passes its `ClientRequest` as a
-  /// second argument; this client owns a `net.Socket` rather than an `http.ClientRequest`
-  /// and has none to hand over, so the event carries the one thing a caller needs in
-  /// order to decide, and `close()` is how it declines. The divergence is recorded in
-  /// `docs/compliance-api.md`.
-  redirect: [url: string];
-  /// The URL that was refused and the status it was refused with, for the same reason.
-  "unexpected-response": [url: string, status: number];
+  /// The URL the next hop will dial, and the request that will carry it.
+  ///
+  /// `ws` passes both, and both are load-bearing: the URL is what a caller compares
+  /// against its own policy, and the request is the only way to change a header on a hop
+  /// that has not been sent yet. The old route had neither a request object to pass nor
+  /// a way to change a hop, which is the whole gap this event name describes.
+  redirect: [url: string, request: ClientRequest];
+  /// The request that was answered, and the answer.
+  ///
+  /// A listener that returns having taken the response is the caller deciding not to
+  /// fail: the two together are what a 401's `www-authenticate` is read from.
+  "unexpected-response": [request: ClientRequest, response: IncomingMessage];
 };
 
 /// The generation-checked handles a native connection routes through. A
@@ -104,6 +108,14 @@ export type SocketState = EmitterState<SocketEventMap> & {
   maxPayload: number;
   /// The `maxFragments` a codec opened for this socket enforces.
   maxFragments: number;
+  /// Cancels a handshake that has not produced a transport yet, or null.
+  ///
+  /// `close()` and `terminate()` on a `CONNECTING` client used to destroy a `net.Socket`
+  /// that was open from the first dial. With `http.request` there is no socket until the
+  /// 101, so the thing to cancel is the request, and the client route is the only code
+  /// that knows what it is. A hook rather than a handle because the lifecycle must not
+  /// learn about `http.ClientRequest` to close a socket.
+  cancelHandshake: (() => void) | null;
   /// Whether this connection negotiated RFC 7692 `permessage-deflate`, which is the only
   /// thing that may set RSV1. A socket that never negotiates it is the common case and
   /// the cheap one: no compressor, no inflate scratch, no RSV1 to explain.

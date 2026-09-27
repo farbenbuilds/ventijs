@@ -1,12 +1,16 @@
 //! A handshake that is refused, and a socket that never gets one.
 //!
 //! Its own file because these are the paths a caller hits when the peer is not a
-//! WebSocket server: a plain HTTP server, a closed port. Each has to arrive as a
-//! reported failure rather than as a socket that looks open and then never speaks.
+//! WebSocket server: a plain HTTP server, a closed port, a 401 with a body. Each has to
+//! arrive as a reported failure -- or, when a listener takes it over, as a live
+//! `IncomingMessage` -- rather than as a socket that looks open and then never speaks.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
+import { scriptedPeer } from "./redirect-peer";
+import { CLOSE_DEADLINE_MS, settle } from "./handshake-support";
+import { undeclared } from "./undeclared";
 
 test(
   "a connection to a closed port reports the syscall error",
@@ -66,6 +70,38 @@ test(
       await new Promise<void>((resolve) => {
         http.close(() => resolve());
       });
+    }
+  },
+);
+
+test(
+  "unexpected-response hands over a readable response",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    // The refusal a caller takes responsibility for, and the reason the event exists at
+    // all: a 401 is only useful with its challenge and its body, neither of which a
+    // status code carries.
+    const peer = await scriptedPeer({ first: 401, after: 101 });
+    const socket = new WebSocket(
+      peer.url,
+      undefined,
+      undeclared({ closeTimeout: CLOSE_DEADLINE_MS }),
+    );
+    try {
+      const taken = new Promise<[string, number, string]>((resolve) => {
+        socket.once("unexpected-response", (request, response) => {
+          response.setEncoding("utf8");
+          const chunks: string[] = [];
+          response.on("data", (chunk: string) => chunks.push(chunk));
+          response.on("end", () =>
+            resolve([request.path ?? "", response.statusCode ?? 0, chunks.join("")]),
+          );
+        });
+      });
+      expect(await taken).toEqual(["/", 401, "token required\n"]);
+    } finally {
+      await settle(socket);
+      await peer.close();
     }
   },
 );

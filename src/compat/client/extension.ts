@@ -9,7 +9,7 @@ import { acceptAsClient, type AcceptedDeflate } from "../extensions/deflate";
 import { PERMESSAGE_DEFLATE } from "../extensions/negotiated";
 import { parseExtensions, type ParsedExtension } from "../extensions/grammar";
 import type { NormalizedPerMessageDeflate } from "../../types/options";
-import type { HandshakeResponse } from "./response";
+import type { IncomingMessage } from "node:http";
 
 export type ClientExtension =
   | { readonly accepted: AcceptedDeflate | null }
@@ -22,16 +22,20 @@ export type ClientExtension =
 /// an extension the client never asked for, a malformed header, a parameter the client
 /// did not offer, and a window this implementation cannot use.
 export function acceptExtension(
-  response: HandshakeResponse,
+  response: IncomingMessage,
   options: NormalizedPerMessageDeflate | false,
 ): ClientExtension {
   const claimed = response.headers["sec-websocket-extensions"];
   if (claimed === undefined) return { accepted: null };
+  // A repeated header arrives as a joined string from Node and as an array from a
+  // hand-built response object, and RFC 7692 does not allow two answers to one
+  // negotiation.
+  const value = Array.isArray(claimed) ? claimed.join(", ") : claimed;
   if (options === false) return { refusal: "Server sent an extension but none was requested" };
 
   let offered: readonly ParsedExtension[];
   try {
-    offered = parseExtensions(claimed).get(PERMESSAGE_DEFLATE) ?? [];
+    offered = parseExtensions(value).get(PERMESSAGE_DEFLATE) ?? [];
   } catch {
     return { refusal: "Invalid Sec-WebSocket-Extensions header" };
   }

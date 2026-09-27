@@ -4,7 +4,7 @@ import type { EventMap, EventName, Handler, Listener, Registry } from "../../src
 import type { ServerEventMap, ServerState } from "../../src/types/server";
 import type { BinaryType, SocketEventMap, SocketState } from "../../src/types/socket";
 import type { ServerOptions, WebSocket } from "../../src/types/ws";
-import type { IncomingMessage } from "node:http";
+import type { ClientRequest, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 
 type HandlerTable<E extends EventMap> = {
@@ -33,12 +33,13 @@ export const socketHandlers: HandlerTable<SocketEventMap> = {
   upgrade: (request: IncomingMessage): void => {
     void request;
   },
-  redirect: (url: string): void => {
+  redirect: (url: string, request: ClientRequest): void => {
     void url;
+    void request;
   },
-  "unexpected-response": (url: string, status: number): void => {
-    void url;
-    void status;
+  "unexpected-response": (request: ClientRequest, response: IncomingMessage): void => {
+    void request;
+    void response;
   },
 };
 
@@ -81,6 +82,7 @@ export const socketState: SocketState = {
   validateUtf8: true,
   maxPayload: 100 * 1024 * 1024,
   maxFragments: 16 * 1024,
+  cancelHandshake: null,
   compressible: false,
   threshold: 0,
   closeFrameReceived: false,

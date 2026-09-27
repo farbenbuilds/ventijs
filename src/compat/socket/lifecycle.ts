@@ -128,17 +128,20 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
 /// The latch above has already moved the socket to `CLOSING`, so this path must
 /// always reach `CLOSED` on its own. Returning without doing anything stranded
 /// the socket at `CLOSING` for the life of the process: no close frame went out,
-/// the transport stayed open, and nothing else could complete the socket because
+/// the transport stayed open, and nothing else could complete the socket, because
 /// the transport's own `close` event is the only other door out. A caller that
-/// called `close()` and then read `readyState` saw a socket that would never
-/// close again, with no error and no event to explain it.
+/// called `close()` and then read `readyState` saw a socket that would never close
+/// again, with no error and no event to explain it.
 ///
-/// Until the Zig frame codec owns the upgrade route there is no close frame to
-/// write, so the transport is destroyed and the socket finishes through the
-/// transport's `close` event. The socket then reports `1006`, which is what a
-/// close whose handshake never completed deserves. The caller asked to close, the
-/// ready state reaches `CLOSED`, and `close` fires exactly once.
+/// Until the Zig frame codec owns the upgrade route there is no close frame to write, so
+/// the transport is destroyed and the socket finishes through the transport's `close`
+/// event. The socket then reports `1006`, which is what a close whose handshake never
+/// completed deserves.
 function closeUnattached(state: SocketState): void {
+  // The handshake is cancelled first, so a request in flight stops before the socket
+  // reports `close`: otherwise the socket closes while its request is still going to
+  // put a connection on the wire that nothing would ever read.
+  state.cancelHandshake?.();
   if (state.transport === null) {
     finishConnection(state, CLOSE_ABNORMAL, EMPTY);
     return;
