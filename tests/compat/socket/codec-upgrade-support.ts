@@ -37,9 +37,13 @@ export async function upgradeHarness(server?: WebSocketServer): Promise<Harness>
 }
 
 /// A `ws` client, resolved once its handshake is done.
-export function openClient(url: string): Promise<WsClient> {
+///
+/// The options are the caller's because `perMessageDeflate` is the one that changes what
+/// the peer offers, and a test that wants an uncompressed client has to say so rather
+/// than accept whatever the default is.
+export function openClient(url: string, options?: WsClient.ClientOptions): Promise<WsClient> {
   return new Promise((resolve, reject) => {
-    const client = new WsClient(url);
+    const client = new WsClient(url, options);
     client.once("open", () => resolve(client));
     client.once("error", reject);
   });

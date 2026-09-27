@@ -8,7 +8,13 @@
 const std = @import("std");
 const testing = std.testing;
 const codec = @import("../../engine/codec/state.zig");
+const limits = @import("../../engine/codec/limits.zig");
 const support = @import("frame_support.zig");
+
+/// A trusted limits record for a suite that wants its own ceilings.
+fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
+    return limits.Limits.trust(max_message, max_fragments, true, false) catch unreachable;
+}
 
 test "the encoder produces an unmasked frame for a server" {
     var peer = support.server();
@@ -59,10 +65,11 @@ test "every encoded control frame is a legal 125-byte frame" {
 test "the encoder refuses a payload over the cap" {
     // A different capacity, so the shared fixture's type does not apply and the
     // transmit state is reached directly rather than through a helper.
-    const Small = codec.codec(8, 2, 8);
-    var peer = Small.init(.server, true);
-    try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789").failed);
-    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678").ok);
+    const Small = codec.codec(2);
+    var peer = Small.init(.server, trusted(8, 8)) catch unreachable;
+    defer peer.deinit();
+    try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789", false).failed);
+    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false).ok);
 }
 
 test "a round trip through the encoder and the decoder preserves the message" {

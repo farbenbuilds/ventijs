@@ -1,5 +1,9 @@
 import type { SocketEventMap, SocketState } from "../../types/socket";
-import { DEFAULT_CLOSE_TIMEOUT } from "../options/shared";
+import {
+  DEFAULT_CLOSE_TIMEOUT,
+  DEFAULT_MAX_FRAGMENTS,
+  DEFAULT_MAX_PAYLOAD,
+} from "../options/shared";
 import { createRegistry } from "../events/registry";
 import { CONNECTING } from "../ready-state";
 
@@ -55,6 +59,11 @@ export function createSocketState(): SocketState {
     allowSynchronousEvents: true,
     pendingInput: null,
     validateUtf8: true,
+    maxPayload: DEFAULT_MAX_PAYLOAD,
+    maxFragments: DEFAULT_MAX_FRAGMENTS,
+    cancelHandshake: null,
+    compressible: false,
+    threshold: 0,
     autoPong: true,
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,

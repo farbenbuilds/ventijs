@@ -8,9 +8,30 @@
 const std = @import("std");
 const zslay = @import("zslay");
 const codec = @import("../../engine/codec/state.zig");
+const outbound = @import("../../engine/codec/outbound.zig");
+const limits = @import("../../engine/codec/limits.zig");
 
-/// The capacity the decode and encode suites share.
-pub const codec_type = codec.codec(4096, 8, 64);
+/// The codec type the decode and encode suites share, and the ceilings they give it.
+///
+/// `control_slots` is still a `comptime` parameter because it is a `comptime`
+/// parameter; the message and fragment ceilings moved to `init` and are passed here
+/// so a suite that wants a small one can ask for it and a suite that wants a large
+/// one does not have to fit inside whatever the shared fixture chose.
+pub const codec_type = codec.codec(8);
+
+/// A message ceiling that is above every payload the framing suites build and small
+/// enough that a suite which wants the boundary does not allocate its way there.
+pub const default_max_message = 4096;
+
+/// A fragment ceiling for the suites that fragment on purpose. Large enough for the
+/// split-message cases and small enough that `too many fragments` is reachable in a
+/// test.
+pub const default_max_fragments = 64;
+
+/// The limits every codec in these suites shares, trusted the way the table trusts.
+pub fn trusted() limits.Limits {
+    return limits.Limits.trust(default_max_message, default_max_fragments, true, false) catch unreachable;
+}
 
 /// One frame, built the way a peer would put it on the wire.
 pub const Frame = struct {
@@ -74,11 +95,11 @@ pub fn raw_frame(
 /// A server-role codec that validates text, which is the default every parser case
 /// wants: a case that is about framing should not have to say so.
 pub fn server() codec_type {
-    return codec_type.init(.server, true);
+    return codec_type.init(.server, trusted()) catch unreachable;
 }
 
 pub fn client() codec_type {
-    return codec_type.init(.client, true);
+    return codec_type.init(.client, trusted()) catch unreachable;
 }
 
 /// The result of encoding one frame: its verdict, its bytes, and whether it was
@@ -88,7 +109,7 @@ pub fn client() codec_type {
 /// and reading the length from one encode and the bytes from another is a test that
 /// passes while asserting nothing.
 pub const Framed = struct {
-    result: codec.Encoded,
+    result: outbound.Encoded,
     bytes: []const u8,
     masked: bool,
 };
@@ -100,7 +121,7 @@ pub fn framed(
     fin: bool,
     payload: []const u8,
 ) Framed {
-    const encoded = peer.tx.encode(kind, fin, payload);
+    const encoded = peer.tx.encode(kind, fin, payload, false);
     return .{ .result = encoded, .bytes = peer.tx.bytes(), .masked = peer.tx.last_was_masked() };
 }
 

@@ -21,9 +21,20 @@ export function codecOf(state: SocketState): bigint | null {
 /// latched on the state rather than passed per call: a codec is one connection, so
 /// there is no second call in which to change it, and a per-frame argument would be
 /// a knob that can disagree with itself halfway through a message.
+///
+/// The two ceilings ride along for the same reason and one more: a socket is
+/// `CONNECTING` before its codec exists, and the `maxPayload` its server or its own
+/// options named was decided before that. A codec opened with a default would honour
+/// 100 MiB for a connection whose server asked for 4 KiB, and the oversize message
+/// would be delivered rather than refused.
 export function openCodec(state: SocketState, role: number): bigint {
   if (state.codec !== null) return state.codec;
-  const handle = createCodec(role, state.validateUtf8);
+  const handle = createCodec(role, {
+    maxPayload: state.maxPayload,
+    maxFragments: state.maxFragments,
+    validateUtf8: state.validateUtf8,
+    permessageDeflate: state.compressible,
+  });
   state.codec = handle;
   return handle;
 }

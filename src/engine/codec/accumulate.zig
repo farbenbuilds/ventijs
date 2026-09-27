@@ -25,7 +25,7 @@ const Failure = events.Failure;
 /// `offset` advances past what was taken and comes back unchanged when a frame could
 /// not be completed, so the caller knows to re-feed from where it stopped.
 pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !void {
-    const max_message = State.max_message_bytes;
+    const max_message = peer.max_message_bytes;
     const decoded = peer.conn.decoded_header orelse return error.ProtocolError;
     // `zslay` ends an over-long frame at `max_frame_len` and reports what it
     // took as a complete frame, so a decoder that only checked the accumulated
@@ -53,14 +53,24 @@ pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !vo
     // starting inside an open one.
     if (opcode != .continuation and position == 0) {
         peer.message_opcode = opcode;
-        peer.message_len = 0;
+        peer.message.clear();
         peer.parts.clear();
         peer.utf8_state = .{};
     }
-    if (peer.message_len + count > max_message) return error.PayloadTooLarge;
-    @memcpy(peer.message[peer.message_len..][0..count], chunk);
-    peer.message_len += count;
-    if (peer.message_opcode == .text and peer.validate_utf8) {
+    // The grow is the one allocation on the inbound path and it happens at most
+    // logarithmically over a message's life, so a peer that stays under `maxPayload`
+    // never pays for `maxPayload`. A compressed message is staged rather than
+    // accumulated, and the bound is the same either way.
+    peer.append(chunk) catch |err| {
+        return switch (err) {
+            error.TooLarge => error.PayloadTooLarge,
+            error.OutOfMemory, error.Overflow => error.PayloadTooLarge,
+            error.CorruptPayload => error.InvalidUtf8,
+        };
+    };
+    // A compressed message's bytes are not text until they are inflated, so the
+    // validator runs over the plaintext at the end of the message rather than here.
+    if (!peer.inflate.is_compressed() and peer.message_opcode == .text and peer.validate_utf8) {
         peer.utf8_state = utf8.feed(peer.utf8_state, chunk) orelse return error.InvalidUtf8;
     }
 }

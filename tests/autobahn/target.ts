@@ -1,13 +1,15 @@
 import { loadVentijsAddon } from "./addon.ts";
 import type { EngineEvent } from "./addon.ts";
+import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
 import { DEFAULT_TARGET_HOST, DEFAULT_TARGET_PORT } from "./paths.ts";
 import { echoState, pack, purge, reply, type EchoState } from "./target-echo.ts";
 import { encodeTargetReady } from "./target-record.ts";
 
-/// `message_capacity` and `frame_capacity` from `src/engine/server/capacities.zig`.
-/// They are `comptime` constants compiled into the addon, so the harness cannot
-/// raise them and has to account for them in the expected case counts.
-const MESSAGE_CAP = 32 * 1024;
+/// `message_capacity` and `frame_capacity` from `src/engine/server/capacities.zig`,
+/// read out of the compiled addon. The target asks the engine for exactly the cap
+/// the engine was built with, so raising the constant needs no edit here and the
+/// target can never report a limit the engine does not enforce.
+const MESSAGE_CAP = INBOUND_LIMIT_BYTES;
 const FINALIZE_ATTEMPTS = 6;
 
 /// Target state is the echo state plus the two fields the shutdown sequence has

@@ -31,6 +31,24 @@ Pre-alpha. No npm release exists. Every entry below is on `main` and has not shi
 - `ws+unix:` client addresses: IPC over a UNIX domain socket or a Windows named pipe.
 - The compiled fragment bound is reported as `engineLimits().maxFragments`, so a caller
   can read the number it is competing with.
+- `maxPayload` and `maxFragments` are enforced per connection on the codec route, at
+  the option's value, with `0` meaning no limit as in `ws`. Buffers start at 8 KiB, 1
+  KiB, and 64 bytes and grow into the connection's ceiling on demand, so a socket costs
+  roughly 9 KiB before it has sent anything rather than its whole 100 MiB allowance.
+  This drops the old fixed layout of about 132 KiB per connection.
+- `perMessageDeflate` on the codec route, end to end: the `Sec-WebSocket-Extensions`
+  handshake in both directions, `ws`'s `acceptAsServer` and `acceptAsClient`, the
+  threshold, and a libdeflate compressor and inflater on the engine's own
+  `compression_stream`. Both directions always answer
+  `server_no_context_takeover; client_no_context_takeover`, because that stream is
+  one-shot; a `*_max_window_bits` below 15 is declined rather than accepted and
+  ignored, which is the one place this differs from `ws`.
+- The client handshake runs on `http.ClientRequest`, so `upgrade`, `redirect`, and
+  `unexpected-response` carry `ws`'s payloads: the `IncomingMessage`, the next hop's
+  un-sent request, and the request and response. A caller can read a 401's challenge
+  and change a header on a hop that has not gone out.
+- `engineLimits().maxPayloadBytes` reports the codec's own ceiling, distinct from the
+  engine route's compiled `message_capacity`.
 - A missing native addon is reported from the `WebSocketServer` constructor, so the
   failure is catchable rather than an uncaught exception inside a Node `upgrade`
   listener, and the message names the platform.
@@ -71,12 +89,36 @@ Pre-alpha. No npm release exists. Every entry below is on `main` and has not shi
 - `codec_fragments` existed but was not exported from `lib.zig`, so the first read of a
   message's fragment boundaries threw out of the native call.
 - The boundary's event-kind bound was written against `rejected`, so a kind added after
-  it was unsendable and `send` reported a protocol error for a frame the caller asked
+  it was unsendable and `send` reported a protocol error for the frame the caller asked
   for.
+- The outbound frame's length field described the caller's payload rather than the
+  framed one. With `perMessageDeflate` that is a length for bytes that were never
+  written, and the compatibility byte makes them differ even when nothing compresses.
+- The inbound inflater sliced the reassembly buffer at `maxPayload`, which holds a
+  floor rather than a ceiling, so a compressed message indexed an 8 KiB allocation at
+  100 MiB and panicked the process.
+- A redirect reused the first hop's request, so the second hop went to the first hop's
+  path: a redirect that loops back to itself until `maxRedirects`.
+- `close()` and `terminate()` on a `CONNECTING` client destroyed a socket that no
+  longer exists, so the request in flight kept going and put a connection on the wire
+  that nothing would read.
+- Every connection failed with `getaddrinfo ENOTFOUND 127.0.0.1:port`, because
+  `headers.host` was being read as the `Host` header when in `http.request`'s options
+  it is the name to resolve.
+- A socket destroyed while a read was in flight reported that read's error with no
+  listener, which is an uncaught exception in the caller's process.
 
 ### Changed
 
-- `engineLimits` reports `maxFragments` alongside the existing capacities.
+- `engineLimits` reports `maxFragments` and `maxPayloadBytes` alongside the existing
+  capacities.
+- The client opens its connection with `http.request` / `https.request` rather than
+  writing a request line onto a `net.Socket`, which removes three hand-written
+  modules and is what makes the three payload events possible.
+- The engine route's `message_capacity` is 64 KiB, the Autobahn suite's largest group-1
+  payload, so the six group-1 cases it was failing with 1009 are within reach. The
+  harness derives its capacity model from `engineLimits().messageBytes` rather than
+  restating the number, which is what let the constant move without invalidating it.
 - The codec is split by responsibility where it grew past the module budget: the byte
   copy, the fragment bookkeeping, the event dispatch, the peer's close, the deferral
   policy, and the handle table are each one module. `src/binding/codec.ts` splits the

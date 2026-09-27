@@ -9,7 +9,13 @@ const std = @import("std");
 const testing = std.testing;
 const zslay = @import("zslay");
 const codec = @import("../../engine/codec/state.zig");
+const limits = @import("../../engine/codec/limits.zig");
 const support = @import("frame_support.zig");
+
+/// A trusted limits record for a suite that wants its own ceilings.
+fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
+    return limits.Limits.trust(max_message, max_fragments, true, false) catch unreachable;
+}
 
 const Frame = support.Frame;
 const raw_frame = support.raw_frame;
@@ -33,16 +39,27 @@ test "a client refuses a masked frame" {
 }
 
 test "a reserved bit without a negotiated extension is a protocol error" {
-    // Section 5.2. RSV1 carries the compressed flag and only exists once an
-    // extension is negotiated, which the codec does not do, so a peer that sets
-    // it is claiming an extension nobody agreed to.
-    for ([_]u8{ 0x40, 0x20, 0x10 }) |reserved_bit| {
+    // Section 5.2: RSV1 only means anything once an extension defines it, and
+    // RSV2 and RSV3 never do. All three are a peer claiming something nobody agreed
+    // to, and all three close with 1002.
+    //
+    // RSV1 is named `reserved_bits` rather than `protocol_error` because the codec
+    // reads it itself -- `zslay` refuses every reserved bit without saying which, and
+    // "a reserved bit is set" is a more useful thing to hand back than "protocol
+    // error". The close code is the same either way, which is what the peer sees.
+    const cases = [_]struct { bit: u8, failure: codec.Failure }{
+        .{ .bit = 0x40, .failure = .reserved_bits },
+        .{ .bit = 0x20, .failure = .protocol_error },
+        .{ .bit = 0x10, .failure = .protocol_error },
+    };
+    for (cases) |case| {
         var buffer: [16]u8 = undefined;
         const encoded = raw_frame(&buffer, true, @intFromEnum(zslay.Opcode.text), 1, true, .{ 1, 2, 3, 4 }, "x");
-        buffer[0] |= reserved_bit;
+        buffer[0] |= case.bit;
         var peer = support.server();
+        defer peer.deinit();
         _ = peer.feed(encoded);
-        try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+        try testing.expectEqual(case.failure, peer.pending_failure().?);
         try testing.expectEqual(@as(u16, 1002), peer.failure_code());
     }
 }
@@ -50,8 +67,9 @@ test "a reserved bit without a negotiated extension is a protocol error" {
 test "a message over the cap is 1009, not 1002" {
     // A size limit reported as a protocol error tells the peer the wrong thing
     // about why its connection died, which is what a conformance suite checks.
-    const Small = codec.codec(16, 4, 8);
-    var peer = Small.init(.server, true);
+    const Small = codec.codec(4);
+    var peer = Small.init(.server, trusted(16, 8)) catch unreachable;
+    defer peer.deinit();
     var buffer: [64]u8 = undefined;
     const encoded = (Frame{ .opcode = .text, .payload = "0123456789abcdefghij", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer);
     try testing.expectEqual(codec.Outcome.failed, peer.feed(encoded).outcome);

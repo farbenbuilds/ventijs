@@ -41,7 +41,13 @@ export function sendFramed(
     : framing.binary
       ? "binary"
       : "text";
-  const status = writeFrame(state, kind, payload.bytes, framing.fin);
+  const status = writeFrame(
+    state,
+    kind,
+    payload.bytes,
+    framing.fin,
+    mayCompress(state, framing.fin, payload.bytes.length),
+  );
   // Latched on success only, so a refused send leaves the message open exactly as it
   // was and the caller may retry or finish it.
   if (status === "ok") state.fragmentsOpen = !framing.fin;
@@ -71,6 +77,21 @@ export function sendFramed(
   // Every case returns, so this is the compile-time proof that a new status is
   // handled rather than ignored: adding a member to the union makes it a type error.
   throw unhandledFrameStatus(status);
+}
+
+/// Whether this frame may carry a compressed payload.
+///
+/// Four conditions, and each one is a rule rather than a preference. The connection
+/// must have negotiated the extension, or RSV1 is a protocol error. The message must be
+/// complete, because a one-shot compressor cannot produce the sync flush that a
+/// fragmented message's later frames would need to continue the same stream -- and `ws`
+/// does compress those, so this is a documented subset: a fragmented message goes out
+/// uncompressed, which every peer reads. And the payload must reach the negotiated
+/// threshold, `ws`'s `permessage-deflate.js:56-57` default of 1024 bytes, below which
+/// deflate makes a message longer more often than not.
+function mayCompress(state: SocketState, fin: boolean, length: number): boolean {
+  if (!state.compressible || state.fragmentsOpen || !fin) return false;
+  return length >= state.threshold;
 }
 
 /// The opcode and the `fin` bit, each defaulting to the autodetected value `ws`

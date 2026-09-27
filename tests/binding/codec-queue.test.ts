@@ -7,19 +7,14 @@
 
 import { expect, test } from "vitest";
 import {
-  CODEC_ROLE,
   codecFeedResume,
-  createCodec,
   destroyCodec,
   feedCodec,
   pendingCodecEvents,
   selectCodecEvent,
 } from "../../src/binding/codec";
 import { clientFrames, drain, MASKED_HEADER_BYTES } from "./codec-frames";
-
-function serverCodec(): bigint {
-  return createCodec(CODEC_ROLE.server);
-}
+import { serverCodec } from "./codec-support";
 
 test("a queue with nothing in it selects nothing", () => {
   const handle = serverCodec();

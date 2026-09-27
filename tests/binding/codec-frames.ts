@@ -24,18 +24,30 @@ export type ClientFrame = {
 const MASK: readonly number[] = [0x37, 0xfa, 0x21, 0x3d];
 
 /// Encodes one client frame.
+///
+/// The seven-bit length field has three encodings and the one above 65535 needs an
+/// eight-byte length, not the two-byte one every earlier case fitted in. A helper
+/// that only knows two of them makes the 126 and 127 cases untestable at a capacity
+/// that reaches them, which is exactly what happened when the compiled cap moved
+/// from 32 KiB to 64 KiB: the case above the cap is the one that needs the form
+/// that was missing.
 export function clientFrame(frame: ClientFrame): Buffer {
   const length = frame.payload.length;
+  const wide = length > 0xffff;
   const extended = length > 125;
-  const header = Buffer.alloc(2 + (extended ? 2 : 0) + 4);
+  const extra = wide ? 8 : extended ? 2 : 0;
+  const header = Buffer.alloc(2 + extra + 4);
   header[0] = (frame.fin === false ? 0x00 : 0x80) | frame.opcode;
-  if (extended) {
+  if (wide) {
+    header[1] = 0x80 | 127;
+    header.writeBigUInt64BE(BigInt(length), 2);
+  } else if (extended) {
     header[1] = 0x80 | 126;
     header.writeUInt16BE(length, 2);
   } else {
     header[1] = 0x80 | length;
   }
-  header.set(MASK, 2 + (extended ? 2 : 0));
+  header.set(MASK, 2 + extra);
   const body = Buffer.from(frame.payload);
   for (let index = 0; index < body.length; index += 1) {
     body[index] = (body[index] as number) ^ (MASK[index & 3] as number);

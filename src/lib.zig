@@ -58,6 +58,8 @@ pub const codec_outbound_masked = codec_out.codec_outbound_masked;
 /// Drops every buffered byte and event.
 pub const codec_reset = codec_io.codec_reset;
 /// The role a codec was created for.
+pub const codec_ceilings = codec_status.codec_ceilings;
+
 pub const codec_role = codec_status.codec_role;
 
 /// Validates an untrusted configuration, builds an engine server around a

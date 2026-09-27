@@ -5,8 +5,6 @@
 import { expect, test } from "vitest";
 import {
   CODEC_KINDS,
-  CODEC_ROLE,
-  createCodec,
   destroyCodec,
   feedCodec,
   selectCodecEvent,
@@ -14,9 +12,10 @@ import {
   takeCodecEvent,
 } from "../../src/binding/codec";
 import { clientFrames } from "./codec-frames";
+import { serverCodec } from "./codec-support";
 
 test("the caller's buffer is not modified", () => {
-  const handle = createCodec(CODEC_ROLE.server);
+  const handle = serverCodec();
   try {
     // A masked frame is unmasked *somewhere*. If that somewhere is the caller's
     // memory, every byte of a masked payload comes back as plaintext, and a caller
@@ -39,8 +38,8 @@ test("the same bytes can be fed to two codecs", () => {
     { opcode: 0x9, payload: Buffer.from("beat") },
     { opcode: 0x1, payload: Buffer.from("hello") },
   ]);
-  const first = createCodec(CODEC_ROLE.server);
-  const second = createCodec(CODEC_ROLE.server);
+  const first = serverCodec();
+  const second = serverCodec();
   try {
     expect(feedCodec(first, frames).kind).toBe("consumed");
     expect(feedCodec(second, frames).kind).toBe("consumed");
@@ -54,7 +53,7 @@ test("a masked frame still decodes to its plaintext", () => {
   // The other half of the same change: the copy has to be a copy, not a skip. A
   // decoder that stopped unmasking to avoid touching the caller's memory would pass
   // the two tests above and deliver the mask.
-  const handle = createCodec(CODEC_ROLE.server);
+  const handle = serverCodec();
   try {
     const frames = clientFrames([{ opcode: 0x1, payload: Buffer.from("secret") }]);
     expect(feedCodec(handle, frames).kind).toBe("consumed");

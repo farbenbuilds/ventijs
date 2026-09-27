@@ -49,6 +49,7 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
         return .fragment;
     }
 
+    if (peer.inflate.is_compressed()) try decompress(State, peer);
     const message_opcode = peer.message_opcode orelse return error.ProtocolError;
     // A message that ends mid-sequence is invalid even though every byte it did
     // contain was in range, which is the case a validator that only ever checks
@@ -58,14 +59,28 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
         return error.InvalidUtf8;
     }
     const kind: Kind = if (message_opcode == .text) .text else .binary;
-    const payload = peer.message[0..peer.message_len];
-    peer.message_len = 0;
+    const payload = peer.message.written();
+    peer.message.clear();
     peer.message_opcode = null;
     peer.utf8_state = .{};
     peer.conn.complete_frame();
     return .{ .event = .{ .kind = kind, .payload = payload } };
 }
 
+/// Inflates the staged message into the reassembly buffer, in place.
+///
+/// `maxPayload` bounds the *delivered* message, so a peer that inflates a small payload
+/// to a large one is a 1009 rather than an allocation, and the buffer grows into that
+/// bound rather than starting at it. The plaintext replaces the compressed form, so
+/// everything downstream -- the UTF-8 check, the event payload, the fragment boundaries
+/// -- sees the message and not the wire.
+fn decompress(comptime State: type, peer: *State) !void {
+    const plain = try peer.inflate.inflate(&peer.message, peer.max_message_bytes);
+    peer.message.length = plain.len;
+}
+
+/// A control frame's payload and what it meant. A control frame is never fragmented and
+/// never exceeds 125 bytes, so the one buffer serves all three opcodes.
 fn finish_control(comptime State: type, peer: *State, opcode: zslay.Opcode, payload_len: u64) !receive.Decoded {
     const payload = peer.control[0..@intCast(payload_len)];
     if (opcode == .close) {

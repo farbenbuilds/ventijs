@@ -38,10 +38,11 @@ function canStillCreateCodecs(count: number): boolean {
   }
 }
 
-import { CODEC_ROLE, createCodec, destroyCodec } from "../../../src/binding/codec";
+import { destroyCodec } from "../../../src/binding/codec";
+import { serverCodec } from "../../binding/codec-support";
 
 function createOne(): bigint {
-  return createCodec(CODEC_ROLE.server);
+  return serverCodec();
 }
 
 function releaseAll(handles: bigint[]): void {

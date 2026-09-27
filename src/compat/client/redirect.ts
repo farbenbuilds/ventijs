@@ -1,110 +1,115 @@
+/// A response that was neither a 101 nor an upgrade: a redirect, or nothing like either.
+///
+/// Split out of `open.ts` because a non-101 is not a variant of a 101. It has no
+/// `Sec-WebSocket-Accept`, there is no socket to hand to the codec, and the caller is
+/// the one who decides what happens next -- which is why both events carry a
+/// `ClientRequest`.
+///
+/// **The refusal is the caller's to make.** `ws` only aborts when nothing is listening,
+/// and a listener that wants to read a 401's `www-authenticate` before deciding has been
+/// given the response and the request for exactly that. Aborting unconditionally made
+/// `unexpected-response` observable only as a notification of a teardown.
+
+import type { ClientRequest, IncomingMessage } from "node:http";
 import { listenerCount as listenerCountOf } from "../events/registry";
 import { emitEvent } from "../events/emitter";
+import { reportUnexpected } from "./unexpected";
 import { createError } from "../errors";
 import { parseAddress, type ClientAddress } from "./address";
-import { abort, type Attempt } from "./connect";
+import { abort, create } from "./dial";
+import { buildRequest, newKey } from "./request";
+import { stripCredentials } from "./credentials";
+import type { Attempt } from "./connect";
 
 /// Whether a response is a redirect this client is willing to follow.
 ///
-/// A `Location` with any other status is not a redirect: a 200 carrying one is a
-/// server that meant something else by the header, and following it would connect to
-/// a place the peer never pointed at.
+/// A `Location` with any other status is not a redirect: a 200 carrying one is a server
+/// that meant something else by the header, and following it would connect to a place the
+/// peer never pointed at.
 export function isRedirect(status: number, location: string | undefined): boolean {
   return location !== undefined && status >= 300 && status < 400;
 }
 
-/// Decides what a redirect does, and reports the rest.
-///
-/// Three things are refused, each for a reason a caller can act on:
-///
-/// - Without `followRedirects` a 3xx is refused and surfaces as
-///   `unexpected-response`, which is what the option means: the caller is told what it
-///   would have been answered with. `redirect` is *not* emitted here, because `ws` does
-///   not emit it on a hop it is not going to follow; it is emitted for every hop it does.
-/// - Past `maxRedirects` it fails, because a redirect loop between two servers would
-///   otherwise dial forever.
-/// - A `wss:` to `ws:` downgrade is refused, because following it would send the
-///   handshake in the clear to whatever the redirect named.
-///
-/// Credentials are dropped when the redirect leaves the original host, which is curl
-/// 7.77's rule and a security property rather than a preference: a redirect to another
-/// host must not carry the credentials the first host was given. A `redirect` listener
-/// suspends the rule, because the event exists so a caller can inspect and remove
-/// headers per hop and it cannot do that from a set they cannot see.
-export function decide(
+/// The answer to a non-101 response: a hop to make, a hand-back, or a refusal.
+export function onResponse(
   attempt: Attempt,
+  request: ClientRequest,
+  response: IncomingMessage,
+): void {
+  const location = response.headers.location;
+  if (isRedirect(response.statusCode ?? 0, location) && attempt.options.followRedirects) {
+    follow(attempt, request, response, location ?? "");
+    return;
+  }
+  reportUnexpected(attempt, request, response);
+}
+
+/// Follows one hop, or refuses the chain.
+///
+/// The four refusals are stated in the module doc. Each of them ends the chain, and each
+/// reports before it does, so a caller learns which one happened rather than only that
+/// something did.
+function follow(
+  attempt: Attempt,
+  request: ClientRequest,
+  response: IncomingMessage,
   location: string,
-  status: number,
-  original: ClientAddress,
-): ClientAddress | null {
-  const target = resolve(location, attempt.state.url);
-  if (!attempt.options.followRedirects) {
-    // Reported and then refused. Reporting only the status and nothing else left the
-    // socket `CONNECTING` for the life of the process, holding a transport that will
-    // never be written to.
-    reportUnexpected(attempt, status);
-    return null;
-  }
+): void {
   if (attempt.redirects + 1 > attempt.options.maxRedirects) {
-    fail(attempt, "Maximum redirects exceeded");
-    return null;
+    request.abort();
+    abort(attempt, createError("ERR_PROTOCOL", "Maximum redirects exceeded"));
+    return;
   }
+  const target = resolve(location, attempt.state.url);
   let next: ClientAddress;
   try {
     next = parseAddress(target);
   } catch (error) {
-    // A `Location` that is not a URL is the redirect's problem, not the caller's, so it
-    // is reported through the socket rather than thrown out of a callback.
-    fail(attempt, error instanceof Error ? error.message : `Invalid URL: ${target}`);
-    return null;
+    request.abort();
+    abort(
+      attempt,
+      createError(
+        "ERR_PROTOCOL",
+        error instanceof Error ? error.message : `Invalid URL: ${target}`,
+      ),
+    );
+    return;
   }
-  if (original.secure && !next.secure) {
-    fail(attempt, "Cannot follow a redirect from wss: to ws:");
-    return null;
+  if (attempt.address.secure && !next.secure) {
+    request.abort();
+    abort(attempt, createError("ERR_PROTOCOL", "Cannot follow a redirect from wss: to ws:"));
+    return;
   }
-  if (next.authority !== original.authority && listenerCount(attempt) === 0) {
+  if (next.authority !== attempt.address.authority && listenerCount(attempt) === 0) {
     // A different host must not see the credentials this one was given, and the URL a
-    // redirect names carries none, so both the header and the carried value go.
-    stripCredentials(attempt);
+    // redirect names carries none, so both the header and the carried value go. This is
+    // curl 7.77's rule and a security property rather than a preference. A `redirect`
+    // listener suspends it, because the event exists so a caller can inspect and remove
+    // headers per hop and it cannot do that from a set it cannot see.
+    stripCredentials(attempt.handshake.request.headers);
     attempt.auth = undefined;
   }
+  request.abort();
   attempt.state.url = next.url;
-  return next;
-}
-
-/// Emits the event for a response that was neither a 101 nor a redirect, and fails.
-///
-/// The refusal is the caller's to make: `ws` only aborts when nothing is listening, and
-/// a listener that wants to read the 401's `www-authenticate` before deciding has been
-/// given the response and the socket for exactly that. Aborting unconditionally made
-/// `unexpected-response` unobservable as anything but a notification of a teardown.
-///
-/// `ws` hands the caller the `ClientRequest` and the `IncomingMessage` so it can
-/// decide. This client owns the socket rather than an `http.ClientRequest`, so there is
-/// no request object to hand over; what a caller needs in order to decide is the URL
-/// it dialled and the status it was refused with, and closing the socket is how it
-/// stops. The difference is recorded in `docs/compliance-api.md`.
-export function reportUnexpected(attempt: Attempt, status: number): void {
-  const taken = emitEvent(attempt.state, "unexpected-response", attempt.state.url, status);
-  if (taken) return;
-  abort(attempt, createError("ERR_PROTOCOL", `Unexpected server response: ${status}`));
-}
-
-function listenerCount(attempt: Attempt): number {
-  return listenerCountOf(attempt.state.listeners, "redirect");
-}
-
-function fail(attempt: Attempt, message: string): void {
-  abort(attempt, createError("ERR_PROTOCOL", message));
-}
-
-/// Removes the caller's credentials when a redirect leaves the original host.
-function stripCredentials(attempt: Attempt): void {
-  const headers = { ...attempt.handshake.headers };
-  for (const name of ["Authorization", "authorization", "Cookie", "cookie"]) {
-    delete headers[name];
-  }
-  attempt.handshake = { ...attempt.handshake, headers };
+  attempt.address = next;
+  attempt.redirects += 1;
+  // Rebuilt for the hop, not reused: a fresh key is a fresh handshake, and the request
+  // target is the redirect's, not the one the socket was opened with. Reusing the first
+  // hop's request sent the second request to the first hop's path, which is a redirect
+  // that loops back to itself and looks like an infinite chain until `maxRedirects`.
+  attempt.handshake = buildRequest(
+    next,
+    attempt.options,
+    attempt.requested,
+    newKey(),
+    attempt.auth,
+  );
+  const hop = create(attempt);
+  if (hop === null) return;
+  // Before the hop goes out, which is the only order in which a listener can still
+  // change it: `ws` creates the request, emits, and then ends it.
+  emitEvent(attempt.state, "redirect", next.url, hop);
+  hop.end();
 }
 
 /// Resolves a `Location` against the address it came from, which is what a relative
@@ -115,4 +120,8 @@ function resolve(location: string, base: string): string {
   } catch {
     return location;
   }
+}
+
+function listenerCount(attempt: Attempt): number {
+  return listenerCountOf(attempt.state.listeners, "redirect");
 }

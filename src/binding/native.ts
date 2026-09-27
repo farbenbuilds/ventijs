@@ -1,3 +1,7 @@
+import type { NativeEngineLimits } from "./native-limits";
+
+export type { NativeEngineLimits };
+
 export type EngineEventKind =
   | "listening"
   | "connectionOpen"
@@ -55,21 +59,6 @@ export const NATIVE_SOCKET_STATUSES = [
 
 export type NativeSocketStatus = (typeof NATIVE_SOCKET_STATUSES)[number];
 
-/// The capacities the addon was compiled with, read from the Zig comptime
-/// constants rather than restated in TypeScript. A duplicated constant is how a
-/// compiled limit and its documented value drift apart.
-export type NativeEngineLimits = {
-  readonly connectionCapacity: number;
-  readonly messageBytes: number;
-  readonly frameBytes: number;
-  readonly inboundSlots: number;
-  readonly outboundSlots: number;
-  /// Fragments one message may be split into on the codec route, which is what a
-  /// `maxFragments` option is measured against and what a peer exceeding it is
-  /// closed with 1008 for.
-  readonly maxFragments: number;
-};
-
 export type VentiAddon = {
   engineVersion(): string;
   http3Available(): boolean;
@@ -111,12 +100,20 @@ export type VentiAddon = {
   /// reached a peer, so this is the honest measure of outbound loss.
   serverUndeliveredMessages(server: number): bigint;
 
-  /// The frame codec. Every codec has the compiled capacity, which `engineLimits`
-  /// reports; the handle is generation-checked, so a call after `codecDestroy` is a
-  /// status rather than a use-after-free.
+  /// The frame codec. `maxPayload` and `maxFragments` are the per-connection
+  /// ceilings and are honoured exactly; a value above `engineLimits()`' ceiling is
+  /// refused rather than clamped, so a caller cannot believe it negotiated a limit
+  /// the codec is not enforcing. The handle is generation-checked, so a call after
+  /// `codecDestroy` is a status rather than a use-after-free.
   /// `validateUtf8` is 1 unless the caller passed `skipUTF8Validation`; the codec is
   /// the validator, so the flag is how that option reaches the parser.
-  codecCreate(role: number, validateUtf8: number): bigint;
+  codecCreate(
+    role: number,
+    validateUtf8: number,
+    maxPayload: number,
+    maxFragments: number,
+    permessageDeflate: number,
+  ): bigint;
   codecDestroy(handle: bigint): void;
   /// Returns bytes consumed, or a negative `codec.ts` outcome ordinal.
   codecFeed(handle: bigint, bytes: Uint8Array): number;
@@ -130,10 +127,23 @@ export type VentiAddon = {
   codecFragments(handle: bigint): number[] | null;
   codecTake(handle: bigint): void;
   /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
-  codecEncode(handle: bigint, kind: number, fin: number, payload: Uint8Array): number;
+  /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
+  /// `compress` asks for a compressed payload with RSV1 set and is declined for a
+  /// control frame and for a fragment, which `rsv1.may_compress` owns.
+  codecEncode(
+    handle: bigint,
+    kind: number,
+    fin: number,
+    payload: Uint8Array,
+    compress: number,
+  ): number;
   codecOutbound(handle: bigint): Buffer;
   codecOutboundMasked(handle: bigint): boolean;
   codecFailureCode(handle: bigint): number;
   codecReset(handle: bigint): void;
   codecRole(handle: bigint): number;
+  /// The per-connection ceilings this codec enforces, as `[maxPayload, maxFragments]`,
+  /// or null once the handle is stale. Read back rather than echoed from the option,
+  /// because `maxPayload: 0` is `ws`'s "no limit" and arrives as the ceiling.
+  codecCeilings(handle: bigint): [number, number] | null;
 };

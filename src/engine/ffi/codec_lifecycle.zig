@@ -7,29 +7,46 @@
 const napi = @import("napi-zig");
 const abi = @import("codec_abi.zig");
 const handles = @import("../codec/handles.zig");
+const limits = @import("../codec/limits.zig");
 
 /// Builds a codec and returns a generation-checked handle.
 ///
-/// The capacity is not an argument: every codec has the compiled one, and
-/// `engineLimits` reports it. Taking a capacity here and honouring it only in part
-/// would be the worst of both, because a caller would have no way to tell.
+/// The two ceilings are arguments and they are honoured exactly, because they are
+/// the `maxPayload` and `maxFragments` options a caller set on a `WebSocketServer` or
+/// a `WebSocket` and a drop-in replacement has to enforce them. They are `Arg` rather
+/// than a wider integer for the reason every count on this boundary is: napi-zig maps
+/// a signed integer wider than 53 bits to a `bigint` and a narrower one to a `number`,
+/// and a `maxPayload` above 4 GiB is a value no process can hold anyway, so the
+/// boundary refuses it as a range error instead of wrapping.
 ///
-/// `validate_utf8` is the one policy the caller does choose, and it is per codec
-/// rather than per connection because a codec is one connection. It is 1 unless the
-/// caller passed `skipUTF8Validation`, so the default cannot be lost by an argument
-/// that arrives as 0 because a JavaScript boolean was `false`.
-pub fn codec_create(env: napi.Env, role: abi.Arg, validate_utf8: abi.Arg) !u64 {
+/// A value above the compiled ceiling is refused rather than clamped, and the
+/// refusal is `InvalidMessageCap` rather than a silent substitution. The alternative
+/// is the one this boundary used to have by construction: a fixed capacity, reported
+/// on `server.options` as `maxPayload`, that no caller could discover was different.
+///
+/// `validate_utf8` and `permessage_deflate` are policy flags rather than capacities, and
+/// both are 1 unless the caller asked otherwise, so a default cannot be lost by an
+/// argument that arrives as 0 because a JavaScript boolean was `false`. The second is 0
+/// for a connection whose handshake answered no `Sec-WebSocket-Extensions`, which is the
+/// only thing that may set RSV1.
+pub fn codec_create(
+    env: napi.Env,
+    role: abi.Arg,
+    validate_utf8: abi.Arg,
+    max_message: abi.Arg,
+    max_fragments: abi.Arg,
+    permessage_deflate: abi.Arg,
+) !u64 {
     _ = env;
     if (role > @intFromEnum(handles.Role.server)) return error.InvalidRole;
     const side: handles.Role = if (role == 0) .client else .server;
-    const handle = handles.create(side, validate_utf8 != 0) catch |err| {
-        return switch (err) {
-            error.CodecTableFull => error.CodecTableFull,
-            error.InvalidCapacity => error.InvalidCapacity,
-            error.UnknownCodec => unreachable,
-        };
-    };
-    return handle.to_int();
+    const trusted = try limits.Limits.trust(
+        max_message,
+        max_fragments,
+        validate_utf8 != 0,
+        permessage_deflate != 0,
+    );
+    return (try handles.create(side, trusted)).to_int();
 }
 
 /// Releases a codec. A stale handle is a no-op rather than an error, because the

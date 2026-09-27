@@ -18,17 +18,22 @@ const handles = @import("../codec/handles.zig");
 /// is what keeps the header arithmetic out of TypeScript. A negative return is the
 /// negated failure ordinal: the caller asked for a frame the codec refuses, and
 /// the reason is which failure.
+/// `compress` is 1 to ask for a compressed payload with RSV1 set. It is a request
+/// rather than a guarantee: `encode.transmit` declines it for a control frame and for a
+/// fragment, because RSV1 marks the first frame of a message and a compressed fragmented
+/// message needs a deflate context a one-shot codec does not carry between frames.
 pub fn codec_encode(
     env: napi.Env,
     handle: u64,
     kind: abi.Arg,
     fin: abi.Arg,
     payload: []const u8,
+    compress: abi.Arg,
 ) !abi.Count {
     _ = env;
     const peer = handles.resolve(handle) orelse return abi.encode_refusal(.stale_handle);
     const wanted = abi.event_kind(kind) orelse return abi.encode_refusal(.unexpected_opcode);
-    return switch (peer.tx.encode(wanted, fin != 0, payload)) {
+    return switch (peer.tx.encode(wanted, fin != 0, payload, compress != 0)) {
         .ok => |length| @intCast(length),
         .failed => |failure| abi.encode_refusal(abi.encode_failure(failure)),
     };

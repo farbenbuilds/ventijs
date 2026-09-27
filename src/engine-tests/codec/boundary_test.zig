@@ -10,7 +10,13 @@ const std = @import("std");
 const testing = std.testing;
 const zslay = @import("zslay");
 const codec = @import("../../engine/codec/state.zig");
+const limits = @import("../../engine/codec/limits.zig");
 const support = @import("frame_support.zig");
+
+/// A trusted limits record for a suite that wants its own ceilings.
+fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
+    return limits.Limits.trust(max_message, max_fragments, true, false) catch unreachable;
+}
 
 const Frame = support.Frame;
 
@@ -76,8 +82,9 @@ test "a frame longer than the cap is refused rather than truncated" {
     // `zslay` ends an over-long frame at `max_frame_len` and reports what it took as
     // a complete frame, so a decoder that only checks the accumulated message would
     // deliver a silently short message instead of refusing the frame.
-    const Small = codec.codec(16, 2, 8);
-    var peer = Small.init(.server, true);
+    const Small = codec.codec(2);
+    var peer = Small.init(.server, trusted(16, 8)) catch unreachable;
+    defer peer.deinit();
     var buffer: [64]u8 = undefined;
     const frame = support.raw_frame(&buffer, true, 0x1, 40, true, .{ 1, 2, 3, 4 }, "0123456789abcdefghijklmnopqrstuvwxyz1234");
     const result = peer.feed(frame);

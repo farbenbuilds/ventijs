@@ -2,16 +2,15 @@ import { expect, test } from "vitest";
 import { WebSocketServer as WsServer } from "ws";
 import {
   CODEC_KINDS,
-  CODEC_ROLE,
   codecFeedResume,
   codecOutbound,
   codecOutboundMasked,
-  createCodec,
   destroyCodec,
   encodeCodecFrame,
   feedCodec,
 } from "../../src/binding/codec";
 import { drain } from "./codec-frames";
+import { clientCodec, serverCodec } from "./codec-support";
 import { openRawClient, TEST_TIMEOUT_MS } from "./codec-net";
 import { openClient, startRawPeer, waitFor } from "./codec-peer";
 
@@ -31,7 +30,7 @@ test(
   async () => {
     const peer = await startRawPeer();
     const client = await openClient(`ws://127.0.0.1:${peer.port}`);
-    const handle = createCodec(CODEC_ROLE.server);
+    const handle = serverCodec();
     try {
       client.send("hello");
       client.send(Buffer.from([0, 1, 2, 255]));
@@ -81,13 +80,13 @@ test(
   async () => {
     const peer = await startRawPeer();
     const client = await openClient(`ws://127.0.0.1:${peer.port}`);
-    const handle = createCodec(CODEC_ROLE.server);
+    const handle = serverCodec();
     try {
       const message = new Promise<string>((resolve, reject) => {
         client.on("message", (data) => resolve(data.toString()));
         client.on("error", reject);
       });
-      const length = encodeCodecFrame(handle, TEXT_ORDINAL, true, Buffer.from("from the codec"));
+      const length = frame(handle, "from the codec");
       // A server must not mask, and `ws` refuses a masked frame from a server.
       expect(codecOutboundMasked(handle)).toBe(false);
       await peer.send(codecOutbound(handle).subarray(0, length));
@@ -118,14 +117,9 @@ test(
     // done here and the codec's own bytes go on the wire: `ws` reads, it does not
     // write, which is the only arrangement in which it can judge the frame.
     const socket = await openRawClient(boundPort(server));
-    const handle = createCodec(CODEC_ROLE.client);
+    const handle = clientCodec();
     try {
-      const length = encodeCodecFrame(
-        handle,
-        TEXT_ORDINAL,
-        true,
-        Buffer.from("masked by the codec"),
-      );
+      const length = frame(handle, "masked by the codec");
       // A client must mask, and `ws` closes a connection that sends an unmasked one.
       expect(codecOutboundMasked(handle)).toBe(true);
       socket.write(codecOutbound(handle).subarray(0, length));
@@ -143,4 +137,13 @@ test(
 function boundPort(server: WsServer): number {
   const address = server.address();
   return typeof address === "object" && address !== null ? address.port : 0;
+}
+
+/// One complete, uncompressed text frame from a codec, and its length.
+///
+/// The `false` is `compress`, and it is written out here rather than left to a reader:
+/// these cases are about masking and framing, so a reader should be able to see that
+/// nothing about this frame depends on RFC 7692.
+function frame(handle: bigint, text: string): number {
+  return encodeCodecFrame(handle, TEXT_ORDINAL, true, Buffer.from(text), false);
 }

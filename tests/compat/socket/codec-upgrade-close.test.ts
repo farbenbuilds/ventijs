@@ -7,14 +7,25 @@
 
 import { expect, test } from "vitest";
 import { OPEN } from "../../../src/compat/ready-state";
+import type { ServerOptions } from "../../../src/types/ws";
+import { WebSocketServer } from "../../../src/compat/constructors";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
 import { nextSocket, openClient, upgradeHarness, waitFor } from "./codec-upgrade-support";
+
+/// The `maxPayload` the boundary cases below configure.
+///
+/// `maxPayload` is a per-server option and a per-connection limit, so these tests
+/// *set* it rather than relying on whatever the build happens to cap at. That is
+/// also the assertion: a 1009 for a message over the configured limit proves the
+/// option is enforced, where a 1009 for a message over a compiled constant proves
+/// only that the constant exists.
+const MAX_PAYLOAD = 64 * 1024;
 
 test(
   "an oversized message is refused with 1009 rather than buffered",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    const harness = await upgradeHarness();
+    const harness = await upgradeHarness(serverWith({ maxPayload: MAX_PAYLOAD }));
     const accepted = nextSocket(harness.server);
     const client = await openClient(harness.url);
     try {
@@ -27,7 +38,7 @@ test(
       const closed = new Promise<number>((resolve) => {
         socket.on("close", (code) => resolve(code));
       });
-      client.send(Buffer.alloc(64 * 1024 + 1));
+      client.send(Buffer.alloc(MAX_PAYLOAD + 1));
       expect(await closed).toBe(1009);
       expect(events).toEqual(["error"]);
     } finally {
@@ -81,3 +92,9 @@ test(
     }
   },
 );
+
+/// A `noServer` `WebSocketServer` carrying `options`, for the cases that configure
+/// something the other cases leave at the default.
+function serverWith(options: ServerOptions): WebSocketServer {
+  return new WebSocketServer({ noServer: true, ...options });
+}

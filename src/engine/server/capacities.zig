@@ -12,25 +12,29 @@ pub const connection_capacity: u32 = 128;
 
 /// Largest message the engine accepts or produces, in either direction.
 ///
-/// 32 KiB, which is below what RFC 6455's conformance suite sends. Group 1
+/// 64 KiB, which is where RFC 6455's conformance suite needs it to be. Group 1
 /// delivers 65535- and 65536-byte payloads and expects a clean echo, and the
 /// vendored `zslay` frame validator closes all six of those with 1009 "Message
 /// too large", which is a correct response to a cap the suite never agreed to.
+/// 64 KiB is the floor that converts them, and it is a floor rather than a
+/// ceiling because the suite's next group above this one is bounded by
+/// something other than payload length.
 ///
-/// Raising this to 64 KiB is the floor that converts them, and the
-/// `permessage_deflate` plumbing beside it is already in place, but the two
-/// together move 92 recorded Autobahn cases and invalidate the harness's derived
-/// capacity model and shard weight table. Both are only re-derivable from a
-/// recorded suite run against the digest-pinned fuzzing client, so the raise
-/// lands with that run rather than as a guess.
+/// **This is the engine route's ceiling, and it is not the public surface's.**
+/// The route every public surface reaches is the frame codec in
+/// `src/engine/codec/`, which sizes its buffers per connection from the
+/// caller's `maxPayload` and reaches `ws`'s 100 MiB default; see
+/// `src/engine/codec/capacities.zig`. What is compiled here is the *engine*'s
+/// startup slab, which is charged to every live server for the message slab,
+/// the write queue, the RFC 7692 compression scratch, the cluster inbox, and
+/// both staging rings, all of which scale with it. A runtime value cannot lift
+/// it, which is why `options.zig` validates a configured `max_message_bytes`
+/// against this constant rather than against anything a caller passed.
 ///
-/// The memory cost is charged to every live server: the message slab, the write
-/// queue, the RFC 7692 compression scratch, the cluster inbox, and both staging
-/// rings all scale with it. Raising the cap from 32 KiB to 64 KiB adds about
-/// 22 MB per server instance. `connection_capacity` is the lever that trades
-/// against it and the better one to move first, since three of those six terms
-/// are per-connection.
-pub const message_capacity: u32 = 32 * 1024;
+/// The memory cost of the raise from 32 KiB is about 22 MB per server
+/// instance. `connection_capacity` is the lever that trades against it and the
+/// better one to move first, since three of those six terms are per-connection.
+pub const message_capacity: u32 = 64 * 1024;
 
 /// Largest single frame. A frame can never exceed a message, so it tracks it.
 pub const frame_capacity: u32 = message_capacity;

@@ -54,19 +54,22 @@ pub const Failure = enum(u8) {
     /// a peer that cannot tell the two apart cannot tell a misconfiguration from a
     /// malformed stream.
     too_many_fragments,
+    /// A compressed message that is not a DEFLATE stream. Appended rather than folded
+    /// into `invalid_utf8`, which carries the same 1007, because the two are different
+    /// faults and one of them is a compression negotiation that went wrong.
+    invalid_compressed_data,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
 ///
-/// The distinction that matters is 1002 against 1007: a frame that violates the
-/// framing is a protocol error, and a frame that is well formed but carries
-/// invalid UTF-8 is an invalid payload. A codec that collapsed both to 1002 would
-/// pass a conformance suite that only checks "an error close happened" and fail
-/// one that checks the code, which is what the Autobahn group 7 cases do.
+/// The distinction that matters is 1002 against 1007: a frame that violates the framing
+/// is a protocol error, and a well-formed frame carrying invalid UTF-8 or undecodable
+/// compressed data is an invalid payload. Collapsing both to 1002 would pass a suite
+/// that only checks "an error close happened" and fail one that checks the code.
 pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
         .message_too_large, .fragmented_message_too_large => CLOSE_MESSAGE_TOO_BIG,
-        .invalid_utf8 => CLOSE_INVALID_PAYLOAD,
+        .invalid_utf8, .invalid_compressed_data => CLOSE_INVALID_PAYLOAD,
         .too_many_fragments => CLOSE_POLICY_VIOLATION,
         .protocol_error, .unexpected_opcode, .reserved_bits => CLOSE_PROTOCOL_ERROR,
     };
@@ -89,12 +92,12 @@ pub fn failure_ordinal(failure: Failure) u8 {
 /// the caller had explicitly asked for.
 pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
 
-/// The human-readable reason, for a message the caller can log or send. `ws`
-/// sends the empty string for a protocol error and the text for a size error, and
-/// the text is the only part a peer ever sees.
+/// The human-readable reason, for a message the caller can log or send. This is the only
+/// part a peer ever sees.
 pub fn describe(failure: Failure) []const u8 {
     return switch (failure) {
         .invalid_utf8 => "Invalid UTF-8",
+        .invalid_compressed_data => "Invalid compressed data",
         .message_too_large, .fragmented_message_too_large => "Message too large",
         .too_many_fragments => "Too many message fragments",
         .protocol_error, .unexpected_opcode, .reserved_bits => "Protocol error",
@@ -121,6 +124,7 @@ pub fn classify(err: anyerror) Failure {
         error.InvalidUtf8 => .invalid_utf8,
         error.InvalidOpcode => .unexpected_opcode,
         error.TooManyFragments => .too_many_fragments,
+        error.CorruptPayload => .invalid_compressed_data,
         else => .protocol_error,
     };
 }
@@ -129,3 +133,18 @@ const CLOSE_MESSAGE_TOO_BIG: u16 = 1009;
 const CLOSE_INVALID_PAYLOAD: u16 = 1007;
 const CLOSE_POLICY_VIOLATION: u16 = 1008;
 const CLOSE_PROTOCOL_ERROR: u16 = 1002;
+
+/// What one completed frame meant.
+///
+/// `payload` borrows the receive state this was decoded into, so it is valid until the
+/// next payload is taken. The FFI layer copies it into a Node-owned `Buffer` within
+/// the call that reads it, which is what keeps engine memory unreachable from
+/// JavaScript.
+pub const Decoded = struct {
+    kind: Kind,
+    /// Close code for a `close` frame, 0 otherwise.
+    code: u16 = 0,
+    payload: []const u8 = &.{},
+    /// Why a `rejected` frame was refused.
+    failure: Failure = .protocol_error,
+};

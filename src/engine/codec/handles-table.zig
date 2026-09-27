@@ -23,11 +23,7 @@ const state = @import("state.zig");
 /// name it; `handles.zig` is the module that owns the vocabulary.
 pub const Role = enum(u8) { client, server };
 
-const Codec = state.codec(
-    capacities.max_message_bytes,
-    capacities.control_slots,
-    capacities.max_fragments,
-);
+const Codec = state.codec(capacities.control_slots);
 
 /// One table entry: the word decides whether a handle resolves, the pointer is what
 /// it resolves to. See `packed.zig` for why state and generation share a word.

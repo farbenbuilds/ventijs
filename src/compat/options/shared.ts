@@ -3,6 +3,9 @@ import type { PerMessageDeflateOptions } from "../../types/ws";
 import { createError } from "../errors";
 
 export const DEFAULT_MAX_PAYLOAD = 100 * 1024 * 1024;
+/// `ws` defaults this to 16 KiB fragments. Documented and defaulted by `ws` and
+/// absent from `@types/ws`, so it is read rather than declared.
+export const DEFAULT_MAX_FRAGMENTS = 16 * 1024;
 export const DEFAULT_MAX_REDIRECTS = 10;
 
 /// How long a close handshake may stay unfinished before the socket is torn down.
@@ -76,6 +79,14 @@ export function normalizePerMessageDeflate(
   };
 }
 
+/// The `maxPayload` a codec will enforce, in bytes.
+///
+/// **Zero means no limit, and it means that in `ws`.** `ws` guards both of its
+/// length checks with `_maxPayload > 0`, and its inflate bound with `_maxPayload < 1`,
+/// so a zero disables the check rather than refusing every message. The codec's
+/// representation of "no limit" is the largest value it can enforce, so zero is
+/// translated to the ceiling here; `engineLimits().maxPayloadBytes` reports what that
+/// number is, which makes the translation checkable rather than implicit.
 /// The close deadline, in milliseconds, or 0 for "tear down on the next tick".
 ///
 /// A non-number or a negative value is refused rather than coerced: `setTimeout`

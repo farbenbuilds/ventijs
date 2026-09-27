@@ -7,9 +7,16 @@
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
-import { engineLimits } from "../../../src/binding/server";
 import { openWithPeer, waitFor } from "./client-support";
 import { scriptedPeer } from "./redirect-peer";
+
+/// The `maxPayload` the refusal case below configures on its own socket.
+///
+/// The client option, not a compiled constant: a local send is only refused when it
+/// is over the ceiling the connection was *given*, and the ceiling the boundary now
+/// offers is its own 32-bit width, which no test can exceed. Naming the limit is also
+/// what makes this an assertion about the option rather than about a constant.
+const MAX_PAYLOAD = 64 * 1024;
 
 test(
   "a peer that never reads costs the writer a bounded queue",
@@ -79,11 +86,18 @@ test("an oversized send is refused and costs no memory", { timeout: TEST_TIMEOUT
   // to be a refusal rather than a buffer sized to whatever was offered. A failed send
   // leaves the socket open, which is `ws`'s behaviour, so what is asserted is the
   // queue and the reported failure rather than a close.
-  const limits = engineLimits();
-  const over = limits.messageBytes + 1;
-  const { socket, harness } = await openWithPeer((peer) => {
-    peer.on("message", (data) => peer.send(data));
-  });
+  // A limit the *option* sets, not a compiled constant: an oversized local send is
+  // only reachable if the connection was given a ceiling it can actually exceed, and
+  // a ceiling of four gigabytes cannot be exceeded by a test.
+  const over = MAX_PAYLOAD + 1;
+  const { socket, harness } = await openWithPeer(
+    (peer) => {
+      peer.on("message", (data) => peer.send(data));
+    },
+    undefined,
+    undefined,
+    { maxPayload: MAX_PAYLOAD },
+  );
   try {
     const failures: Error[] = [];
     socket.on("error", (error) => failures.push(error));

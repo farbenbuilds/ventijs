@@ -61,21 +61,49 @@ jobs:
           cache: true
           install: false
 
+      # The addon is built here after all, and the reason is a suite that started
+      # needing it. `normalizeServerOptions` reads the codec's compiled ceilings so a
+      # `maxPayload` above what the build supports is refused by name at construction,
+      # and that read loads the addon. The read is lazy -- an option that was not set
+      # never loads it -- so a caller who sets neither `maxPayload` nor
+      # `maxFragments` touches no native code, but the suite still has to prove the
+      # refusal, and it cannot without a binary.
+      #
+      # The cold path is minutes, because it compiles BoringSSL, lsquic, libdeflate,
+      # and zlib from source. The cache key is the one zig-test.yml uses, for this
+      # commit's build inputs, so whichever of the two jobs gets there first pays it
+      # and the other restores it. Dropping these two suites back out of the addon
+      # would put that cost back on the TS-only pull request, which is what this job
+      # exists to avoid.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: false
+
+      - name: Restore Zig caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .zig-cache
+            zig-pkg
+          key: zig-0.16.0-${{ runner.os }}-${{ github.repository }}-${{ hashFiles('build.zig', 'build.zig.zon', 'src/builds/**') }}
+          restore-keys: |
+            zig-0.16.0-${{ runner.os }}-${{ github.repository }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build the native addon
+        run: pnpm build:binding
+
       - name: Unit tests
-        # The native addon is not built in this job, and every suite that builds a
-        # WebSocket needs it: the frame codec is in the addon, so a facade socket
-        # cannot even be attached without one. That is everything under
-        # `tests/compat` except option normalisation, all of `tests/conformance`, and
-        # all of `tests/binding`. The binding job in zig-test.yml runs the whole
-        # suite, addon and all.
-        #
-        # The paths are named by inclusion for the same reason the old list was named
-        # by exclusion and then went stale: an exclusion list has to be edited every
-        # time a suite starts needing the addon, and a suite that is missed fails here
-        # on a missing addon, which reads as a broken test rather than a misplaced
-        # one. An inclusion list only needs editing when a suite genuinely stops
-        # needing one, and a new suite is in the binding job by default.
+        # The suites that are pure protocol arithmetic and option normalization, with
+        # the addon available because normalization now reads a compiled ceiling. The
+        # binding job in zig-test.yml runs the whole suite, so the inclusion here is
+        # about *fast feedback* on a pull request that touched neither Zig nor the
+        # addon, not about coverage: anything missed from this list is still run
+        # there. It is an inclusion list on purpose, because an exclusion list has to
+        # be edited every time a suite starts needing the addon, and a suite that is
+        # missed fails here on a missing addon, which reads as a broken test rather
+        # than a misplaced one.
         run: pnpm exec vitest run tests/protocol tests/compat/options

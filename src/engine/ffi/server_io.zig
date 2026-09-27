@@ -8,6 +8,7 @@
 const napi = @import("napi-zig");
 const capacities = @import("../server/capacities.zig");
 const instance = @import("../server/instance.zig");
+const codec_abi = @import("codec_abi.zig");
 const codec_caps = @import("../codec/capacities.zig");
 const options = @import("../server/options.zig");
 const server = @import("../server/server.zig");
@@ -51,7 +52,7 @@ pub fn server_dropped_events(env: napi.Env, raw: u40) !u64 {
 /// These are compile-time constants with no server behind them, so the entry
 /// point takes no handle and cannot fail.
 pub fn engine_limits(env: napi.Env) !napi.Val {
-    var out: [6]napi.Val = undefined;
+    var out: [7]napi.Val = undefined;
     out[0] = try env.createUint32(capacities.connection_capacity);
     out[1] = try env.createUint32(capacities.message_capacity);
     out[2] = try env.createUint32(capacities.frame_capacity);
@@ -62,6 +63,12 @@ pub fn engine_limits(env: napi.Env) !napi.Val {
     // documented `ws` limit: a caller who cannot read the number it is competing with
     // has to guess at it.
     out[5] = try env.createUint32(@intCast(codec_caps.max_fragments));
+    // The ceiling a codec's `maxPayload` argument may not exceed. Nothing forces a
+    // limit on a runtime-sized buffer except the boundary's own number width, so
+    // this is the honest answer to "how large a message can ventijs carry", and it
+    // is reported rather than documented so a caller asking for more finds out
+    // before the first connection rather than from a RangeError.
+    out[6] = try env.createUint32(codec_abi.ceiling_arg_max);
     // NUL-terminated because `setNamedProperty` takes a sentinel slice, so the
     // names are literals rather than a comptime-length table.
     const names = [_][:0]const u8{
@@ -71,6 +78,7 @@ pub fn engine_limits(env: napi.Env) !napi.Val {
         "inboundSlots",
         "outboundSlots",
         "maxFragments",
+        "maxPayloadBytes",
     };
     const object = try env.createObject();
     for (names, out) |name, value| {

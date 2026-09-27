@@ -6,6 +6,7 @@
 //! synchronously and a listener attached afterwards never sees the event it was
 //! waiting for.
 
+import type { IncomingMessage } from "node:http";
 import { WebSocketServer as WsServer, type WebSocket as WsSocket } from "ws";
 import { WebSocket, type ClientOptions } from "../../../src/index";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
@@ -124,12 +125,21 @@ export function closed(socket: WebSocket): Promise<void> {
   });
 }
 
-/// Resolves on the next `unexpected-response`, carrying the status the peer sent.
+/// Resolves on the next `unexpected-response`, carrying the response itself.
 ///
 /// A promise rather than a poll because a listener takes the refusal over: there is no
 /// `error` and no `close` to await on a socket a caller has taken responsibility for.
-export function refused(socket: WebSocket): Promise<number> {
+///
+/// The whole `IncomingMessage` rather than its status, because that is what `ws` hands
+/// over and what the event is for: a status code alone cannot be read for a
+/// `www-authenticate` challenge or a body, which is the entire reason to take it over.
+export function refused(socket: WebSocket): Promise<IncomingMessage> {
   return new Promise((resolve) => {
-    socket.once("unexpected-response", (_url, status) => resolve(status));
+    socket.once("unexpected-response", (_request, response) => resolve(response));
   });
+}
+
+/// The status a refused handshake reported, from the error the socket emitted.
+export function refusalStatus(error: Error): number {
+  return Number(/Unexpected server response: (\d+)/.exec(error.message)?.[1] ?? 0);
 }

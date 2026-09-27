@@ -2,8 +2,7 @@
 //!
 //! A full event store is not a protocol fault and must never be reported as one.
 //! These tests pin where the decoder stops, what survives, and that a caller
-//! draining the store and feeding the same bytes again gets the frame it was
-//! waiting for, with nothing lost and nothing delivered twice.
+//! draining the store and re-feeding gets the frame it was
 
 const std = @import("std");
 const testing = std.testing;
@@ -16,8 +15,9 @@ test "a backpressured frame resumes from the byte it stopped at" {
     // A full queue is not a protocol fault and must not be reported as one. The
     // header is taken, the payload is not, and the caller re-feeds the remainder
     // after draining, so nothing is lost and nothing is delivered twice.
-    const One = codec.codec(256, 1, 8);
-    var peer = One.init(.server, true);
+    const One = codec.codec(1);
+    var peer = One.init(.server, support.trusted()) catch unreachable;
+    defer peer.deinit();
     var buffers: [2][64]u8 = undefined;
     const first = (Frame{ .opcode = .text, .payload = "a", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffers[0]);
     const second = (Frame{ .opcode = .text, .payload = "b", .mask = .{ 5, 6, 7, 8 } }).bytes(&buffers[1]);
