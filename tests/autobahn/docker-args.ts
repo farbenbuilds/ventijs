@@ -1,4 +1,4 @@
-import { CONTAINER_CONFIG_PATH, CONTAINER_REPORTS_DIR, REPORTS_HOST_DIR } from "./paths.ts";
+import { CONTAINER_CONFIG_PATH, CONTAINER_REPORTS_DIR } from "./paths.ts";
 
 /// Pinned by digest alone. A tag would let a rebuilt image change the case set
 /// under the gate, and the 517-case contract is only meaningful against a
@@ -49,21 +49,4 @@ export function dockerArgs(input: {
     "-s",
     CONTAINER_CONFIG_PATH,
   ];
-}
-
-/// Removes a container that outlived its client.
-///
-/// `--rm` only takes effect when a container *stops*, so a run interrupted by
-/// SIGINT or by the job timeout leaves the container running: it keeps writing
-/// into the report bind mount and the next run's `resetReportDirectory` then
-/// deletes the tree out from under it. The name the shard was given is what
-/// makes a targeted `rm -f` possible.
-export function dockerRemoveArgs(name: string): readonly string[] {
-  return ["rm", "--force", name];
-}
-
-/// The unsplit run's report directory, which is the shared root. A single shard
-/// writes straight into it so the artifact layout is unchanged.
-export function defaultReportsDir(): string {
-  return REPORTS_HOST_DIR;
 }

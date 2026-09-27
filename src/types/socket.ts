@@ -11,8 +11,12 @@ export type BinaryType = "nodebuffer" | "arraybuffer" | "fragments";
 
 /// The same union widened by the one value `ws` accepts at runtime but the
 /// vendored types omit: `binaryType = "blob"` is legal wherever the `Blob`
-/// global exists. The record holds this and the public getter narrows to
-/// `BinaryType`, so the state is never typed as a value it can hold wrongly.
+/// global exists.
+///
+/// The record is typed as this and the getter reports it as this, so the state is
+/// never typed as a value it cannot hold. The public surface is narrowed by
+/// `createSocket`'s return annotation rather than by the getter, which is where
+/// the vendored contract's own omission of `"blob"` belongs.
 export type BinaryTypeValue = BinaryType | "blob";
 
 export type SocketEventMap = {

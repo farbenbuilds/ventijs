@@ -32,8 +32,10 @@ export function createWebSocketServer(
   const resolved = {
     allowSynchronousEvents: true,
     autoPong: true,
-    // `ws` defaults the three sender limits that `@types/ws` declares but its
-    // reference does not list, and they are observable on `server.options`.
+    // `ws` defaults these three and they are observable on `server.options`, but
+    // `@types/ws` declares none of them, so a consumer cannot name them without a
+    // cast. Matching `ws` means inheriting the same gap in the type, which is
+    // better than a runtime record that is a strict subset of the contract.
     maxBufferedChunks: 262144,
     maxFragments: 16384,
     closeTimeout: 30000,

@@ -18,14 +18,12 @@ export function finishConnection(state: SocketState, code: number, reason: Buffe
   emitEvent(state, "close", code, reason);
 }
 
-/// Reports a failure and closes, matching `ws`'s `emitErrorAndClose`.
+/// Reports a failure and closes, matching `ws`'s `abortHandshake`: it latches
+/// `CLOSING`, emits `error`, and only then emits `close`, so a listener reading
+/// `readyState` during `error` sees `CLOSING` and a second failure produces no
+/// second event. Reached by a `close` or `terminate` while still `CONNECTING`.
 ///
-/// The order is the point. `ws` sets `CLOSING`, latches `_errorEmitted`, emits
-/// `error`, and only then emits `close`, so a listener reading `readyState`
-/// during `error` sees `CLOSING` and a second failure produces no second event.
-/// This is the path for a send that failed on an *open* socket, which is the only
-/// place `ws` emits at all: a send on a socket that is already closing or closed
-/// goes to its callback and touches nothing else.
+/// A send failure does not come here. See `reportWithoutClosing`.
 export function failConnection(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
   if (!state.errorEmitted) {
@@ -40,6 +38,26 @@ export function failConnection(state: SocketState, error: Error): void {
     return;
   }
   finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+}
+
+/// Emits `error` once and leaves the socket exactly as it was.
+///
+/// `ws` is silent for a failed send: the write error reaches the caller's
+/// callback, and the socket's own listener destroys the transport without
+/// emitting on the `WebSocket`. A ventijs send on a socket with no callback
+/// therefore has nothing to observe at all, and silence was the previous
+/// behaviour here.
+///
+/// This is a deliberate divergence and it is narrow on purpose. It emits, because
+/// a caller that cannot pass a callback would otherwise learn nothing; and it does
+/// **not** close, because the condition it reports is a missing implementation
+/// rather than a fault of the connection, so tearing the socket down would cost
+/// the caller a live connection for a bug in the library.
+export function reportWithoutClosing(state: SocketState, error: Error): void {
+  if (state.errorEmitted) return;
+  if (state.readyState === CLOSED) return;
+  state.errorEmitted = true;
+  emitEvent(state, "error", error);
 }
 
 export function closeConnection(state: SocketState, code?: unknown, reason?: unknown): void {

@@ -119,12 +119,12 @@ JavaScript option can raise them. Each row names the constant that governs it.
 The constants live in `src/engine/server/capacities.zig` and are re-exported
 from `options.zig`, which owns their validation.
 
-| Limit                  | Value                                  | Governed by                                            | Observable as                                                                                |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Inbound message size   | 32 KiB                                 | `message_capacity`, `src/engine/server/capacities.zig` | Engine closes with 1009 "Message too large"; `maxPayload` cannot lift it                     |
-| Outbound frame size    | 32 KiB                                 | `max_frame_bytes`, same                                | `send` reports `ERR_MAX_PAYLOAD`                                                             |
-| Inbound burst          | 64 messages before the consumer drains | `inbound_slots`, `src/engine/server/instance.zig`      | `serverDroppedMessages` counts the loss; `tests/binding/socket-echo.test.ts` pins both sides |
-| Connections per server | 128                                    | `connection_capacity`, same                            | A connection past the cap is terminated on open                                              |
+| Limit                  | Value                                  | Governed by                                            | Observable as                                                                                                                                              |
+| ---------------------- | -------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inbound message size   | 32 KiB                                 | `message_capacity`, `src/engine/server/capacities.zig` | Engine closes with 1009 "Message too large"; `maxPayload` cannot lift it                                                                                   |
+| Outbound frame size    | 32 KiB                                 | `max_frame_bytes`, same                                | `send` reports `ERR_MAX_PAYLOAD`                                                                                                                           |
+| Inbound burst          | 64 messages before the consumer drains | `inbound_slots`, `src/engine/server/instance.zig`      | `serverDroppedMessages` counts the loss, and also counts a message discarded from a paused connection; `tests/binding/socket-echo.test.ts` pins both sides |
+| Connections per server | 128                                    | `connection_capacity`, same                            | A connection past the cap is terminated on open                                                                                                            |
 
 `ws` defaults `maxPayload` to 100 MiB and vents 500 MiB frames in its own speed
 harness, so the message-size rows are a missing capability rather than a slower

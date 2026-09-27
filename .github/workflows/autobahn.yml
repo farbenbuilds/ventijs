@@ -58,6 +58,12 @@ jobs:
   # step inside the suite job would render that job green, indistinguishable from a
   # pass; a skipped *job* renders grey with the reason in the checks UI, and the
   # required check is still satisfied.
+  #
+  # A gate job that *fails* -- no Node, no git history, a crash -- leaves the
+  # suite skipped rather than failed, which reads the same as a deliberate skip.
+  # That cannot be fixed from inside the step, because a failing step publishes no
+  # outputs at all. The mitigation is that this job is itself a check, so its
+  # failure is visible; add it to branch protection alongside the suite.
   gate:
     name: Autobahn engine gate
     runs-on: ubuntu-24.04
@@ -95,13 +101,6 @@ jobs:
       - name: Decide whether the engine moved
         id: decide
         run: |
-          # Seeded before the script runs, and never removed. A gate that fails
-          # for any reason other than a decision -- no Node, no git history, a
-          # crash -- must leave the suite running rather than skipping it, and
-          # seeding is the only way to guarantee that: a failing dependency
-          # reports as *skipped*, not as failed, which is indistinguishable from a
-          # deliberate skip in the checks UI.
-          echo "run=true" >> "$GITHUB_OUTPUT"
           mkdir -p .autobahn-out
           node tests/autobahn/diff-gate-cli.ts | tee .autobahn-out/decision
           grep '^run=' .autobahn-out/decision | cut -d= -f2 >> "$GITHUB_OUTPUT"
@@ -112,12 +111,14 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    # The critical path is the suite at about 748s plus roughly 160s of setup.
-    # The budget is set by the cold-build path rather than the warm one: the Zig
-    # cache key hashes `build.zig`, `build.zig.zon`, and `src/builds/**`, and a
-    # change to any of them with no prefix fallback available compiles BoringSSL,
-    # lsquic, libdeflate, and zlib from source, which is minutes on its own.
-    timeout-minutes: 45
+    # The critical path is the suite plus roughly 160s of setup. The budget is
+    # set by the cold-build path rather than the warm one: the Zig cache key
+    # hashes `build.zig`, `build.zig.zon`, and `src/builds/**`, and a change to
+    # any of them with no prefix fallback available compiles BoringSSL, lsquic,
+    # libdeflate, and zlib from source, which is minutes on its own. Unchanged
+    # from `main` on purpose: sharding cut the suite, but nothing on this side cut
+    # the build.
+    timeout-minutes: 60
     environment:
       name: Autobahn
       url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

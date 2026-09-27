@@ -66,6 +66,8 @@ test("perMessageDeflate true is rewritten to an object", () => {
 /// The three sender limits `@types/ws` declares and the reference does not list.
 /// They are observable on `server.options`, so omitting them made a defaulted
 /// record a strict subset of the contract.
+/// `ws` defaults all three and exposes them on `server.options`, while
+/// `@types/ws` declares none of them. ventijs matches the runtime.
 test.each([
   ["maxBufferedChunks", 262144],
   ["maxFragments", 16384],

@@ -81,7 +81,7 @@ test("an oversize close reason is refused", { timeout: TEST_TIMEOUT_MS }, async 
 });
 
 test(
-  "a close rejected by the ring surfaces an error and latches",
+  "sends the ring rejects surface an error and latch the socket",
   {
     timeout: TEST_TIMEOUT_MS,
   },

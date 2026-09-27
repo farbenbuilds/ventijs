@@ -38,8 +38,8 @@ export const SUMMARY_HOST_PATH = join(REPORTS_HOST_DIR, "summary.json");
 /// Per-shard paths.
 ///
 /// A sharded run gives every shard its own report tree and its own generated
-/// spec, so two containers can never write into the same bind mount and the
-/// union in `report-union.ts` is the only place the cases are combined. A single
+/// spec, so two containers can never write into the same bind mount and
+/// `unionCases` in `shard-reports.ts` is the only place the cases are combined. A single
 /// shard keeps the unsplit layout, which is what the committed configuration and
 /// a local `--full` run still produce.
 export function shardReportsDir(id: number): string {

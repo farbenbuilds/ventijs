@@ -222,6 +222,10 @@ the only place a burst can be absorbed. It holds 64 messages
 more than that before the Node main thread drains has the excess dropped and
 counted by `serverDroppedMessages`. `ws` applies backpressure instead, so it does
 not have this cliff. `tests/binding/socket-echo.test.ts` pins both sides of it.
+`serverDroppedMessages` counts one other thing: a message from a connection an
+application has paused, which the engine discards because the pinned engine has
+no per-connection read pause to stop it reading. Both are a peer outrunning the
+consumer, which is what the number is for.
 
 Two harnesses account for it rather than working around it:
 

@@ -136,7 +136,9 @@ pub fn payload_ring(comptime slots: usize, comptime slot_bytes: usize) type {
             return enqueued -% dequeued;
         }
 
-        /// Stages rejected because the ring was full.
+        /// Stages rejected because the ring was full. One of the two reasons
+        /// `serverDroppedMessages` is non-zero; the other is a paused connection,
+        /// counted by `queues.count_dropped`.
         pub fn dropped_count(ring: *const Self) u64 {
             return ring.dropped.load(.acquire);
         }

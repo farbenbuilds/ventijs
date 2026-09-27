@@ -1,13 +1,12 @@
 //! Per-connection records and the exactly-once terminal latch.
 //!
-//! The socket slab mirrors the connection slab: one record per engine pool
-//! slot, indexed by the same slot index the handle names. `send`, `close`,
+//! The socket slab mirrors the connection slab: one record per engine pool slot,
+//! indexed by the same slot index the handle names. `send`, `close`,
 //! `pause_dispatch`, and `resume_dispatch` are explicit transitions over that
 //! record (see `socket_ops.zig`), and the record owns the bounded payload ring
 //! those operations stage into. A per-slot lock serializes the engine thread's
-//! open/finish against the Node main thread's operations, so a recycled
-//! generation can never receive a stale send or close. The terminal latch
-//! flips once per generation, so a close race cannot emit two terminal events.
+//! open/finish against the Node main thread's operations, and the terminal latch
+//! flips once per generation.
 
 const std = @import("std");
 const payload = @import("payload.zig");
@@ -88,13 +87,12 @@ pub fn socket_slab(
             return ops.set_paused(slot, generation, paused);
         }
 
-        /// Latches the terminal transition and marks the slot closed. The
-        /// winning caller owns the single close emission and slab release.
+        /// Latches the terminal transition and marks the slot closed. The winning
+        /// caller owns the single close emission and slab release.
         ///
-        /// This is the only terminal latch. It used to have a second,
-        /// lock-free form that flipped the same word without setting the state;
-        /// nothing in the addon called it, so there were two latches for one job
-        /// and one of them was reachable only from a test.
+        /// The only terminal latch. There used to be a second, lock-free form that
+        /// flipped the same word without setting the state; nothing in the addon
+        /// called it, so one of two latches was reachable only from a test.
         pub fn finish(slab: *Self, index: u32) bool {
             const slot = slab.slot_at(index) orelse return false;
             slot.lock();
@@ -104,14 +102,12 @@ pub fn socket_slab(
             return true;
         }
 
-        /// Accounts bytes the engine thread drained from the staging ring.
-        /// The drain is the single caller; the lock keeps the saturation check
-        /// atomic against it.
+        /// Accounts bytes the engine thread drained from the staging ring. The
+        /// drain is the single caller; the lock keeps the saturation check atomic.
         ///
-        /// The generation is re-checked under the record lock like every other
-        /// transition. A payload released after its connection's slot was
-        /// recycled would otherwise debit the new occupant's `bufferedAmount`,
-        /// which reports a connection as drained when nothing of its was sent.
+        /// The generation is re-checked under the lock like every other transition:
+        /// a payload released after its slot was recycled would otherwise debit
+        /// the new occupant's `bufferedAmount`.
         pub fn note_drained(slab: *Self, index: u32, generation: u32, drained: u32) void {
             const slot = slab.slot_at(index) orelse return;
             slot.lock();
@@ -132,6 +128,9 @@ pub fn socket_slab(
             return slot.buffered.load(.acquire);
         }
 
+        /// The one transition without a generation check: the engine thread has
+        /// no handle, and this arrives from the connection's own callback, so the
+        /// index is its pool slot. `open` resets the flag per generation.
         pub fn is_paused(slab: *const Self, index: u32) bool {
             if (index >= capacity) return false;
             return slab.slots[index].paused.load(.acquire);

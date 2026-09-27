@@ -48,9 +48,13 @@ pub fn pump_socket(env: napi.Env, server: u40, connection: u64) !Status {
     return @intFromEnum(flush(target));
 }
 
-/// Inbound messages the inbound ring refused because the Node main thread had
-/// not drained it. Non-zero means a peer outran JavaScript and messages were
-/// lost, which the compatibility layer surfaces rather than hides.
+/// Inbound messages lost before JavaScript could see them, from either cause.
+///
+/// The ring refuses a stage when the Node main thread has not drained it, and the
+/// engine also discards a message from a connection an application has paused.
+/// Both are a peer outrunning the consumer and both are invisible from JavaScript
+/// otherwise, so they share the one counter rather than each having a number
+/// nothing reads. A paused connection is bounded to itself; a full ring is not.
 pub fn server_dropped_messages(env: napi.Env, server: u40) !u64 {
     const target = instance.lookup(env, server) orelse return error.UnknownServer;
     return target.sockets.inbound.dropped_count();

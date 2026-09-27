@@ -83,13 +83,34 @@ test.each([
   expect(socket.errors).toHaveLength(0);
 });
 
-/// A failed send still closes, and it does so whether the report was delivered or
-/// swallowed by an unhandled `error` with no listener.
-test("a failed send closes the socket", () => {
+/// A failed send reports and leaves the socket alone.
+///
+/// This is the sharpest divergence from `ws` in the send path, and the reason is
+/// what is being reported. `ws` is silent, because a write error reaches the
+/// caller's callback and its socket listener destroys the transport. ventijs has
+/// to emit, because a caller that passed no callback has nothing else, and it must
+/// not close, because the condition is a missing transport rather than a fault of
+/// the connection. Closing here would turn "this build cannot send yet" into "your
+/// connection died" for every caller that writes before the native attachment
+/// exists, which is every caller of a `WebSocketServer`.
+test("a failed send reports and leaves the socket usable", () => {
   const state = createSocketState();
   state.readyState = OPEN;
   expect(() => sendData(state, "hello", undefined, undefined)).toThrow();
-  expect(state.readyState).toBe(CLOSED);
+  expect(state.readyState).toBe(OPEN);
+  expect(state.errorEmitted).toBe(true);
+});
+
+/// The latch holds, so a second failure is not a second event. A caller that
+/// re-sends after the first report would otherwise get an unbounded stream of
+/// identical events for one condition.
+test("a second failure after the first is not reported again", () => {
+  const socket = detached(OPEN);
+  socket.send("first");
+  expect(socket.errors).toHaveLength(1);
+  socket.send("second");
+  expect(socket.errors).toHaveLength(1);
+  expect(socket.errors[0].message).toMatch(/no native transport attached/);
 });
 
 /// The native route still stages, so a send that reaches the engine has nothing
