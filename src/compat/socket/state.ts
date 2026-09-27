@@ -47,6 +47,7 @@ export function createSocketState(): SocketState {
     errorEmitted: false,
     attachment: null,
     transport: null,
+    codec: null,
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,
     warned: new Set<string>(),

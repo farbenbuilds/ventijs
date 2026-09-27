@@ -10,6 +10,16 @@
             .hash = "uWebZockets-1.7.0-SD3SPApsJACN_oGYGQFTBKhH8J-00JwJ-RQsfE5Pid2q",
         },
 
+        // farbenbuilds/zslay
+        // The frame codec in `src/engine/codec` is a state machine over this
+        // package's pure primitives, so the two paths onto the wire agree by
+        // construction. Pinned to the artifact uWebZockets already resolves, so
+        // the build graph carries one copy rather than two.
+        .zslay = .{
+            .url = "https://github.com/farbenbuilds/zslay/archive/refs/tags/v0.2.1.tar.gz",
+            .hash = "zslay-0.2.1-OB-IfBl0AQCHCIVUH0AbAjErcCG_LNkaLp8Gz1BUXnoy",
+        },
+
         // yuku-toolchain/napi-zig
         .napi_zig = .{
             .url = "git+https://github.com/yuku-toolchain/napi-zig?ref=v0.2.8#253f5a92b1c0c70ad13a6583993a9befb88d1116",

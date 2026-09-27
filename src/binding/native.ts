@@ -32,6 +32,11 @@ export type NativeServerConfig = {
 
 export type EngineDispatch = (event: EngineEvent) => void;
 
+/// One decoded frame from the codec, as `[kindOrdinal, closeCode, payload]`. The
+/// ordinal tables are in `codec.ts`; the payload is already a Node-owned `Buffer`
+/// because the copy happens on the native side of the boundary.
+export type NativeCodecEvent = [number, number, Buffer];
+
 /// Per-connection operation results mirrored from `socket.Status` in
 /// `src/engine/socket/status.zig`. The ABI carries the enum ordinal; this array is
 /// the ordinal-to-name table and must keep the Zig declaration order.
@@ -101,4 +106,25 @@ export type VentiAddon = {
   /// outbound ring. Non-zero means `pumpSocket` reported `ok` for bytes that never
   /// reached a peer, so this is the honest measure of outbound loss.
   serverUndeliveredMessages(server: number): bigint;
+
+  /// The frame codec. Every codec has the compiled capacity, which `engineLimits`
+  /// reports; the handle is generation-checked, so a call after `codecDestroy` is a
+  /// status rather than a use-after-free.
+  codecCreate(role: number): bigint;
+  codecDestroy(handle: bigint): void;
+  /// Returns bytes consumed, or a negative `codec.ts` outcome ordinal.
+  codecFeed(handle: bigint, bytes: Uint8Array): number;
+  /// Where the last `codecFeed` stopped, or a negative outcome ordinal.
+  codecResume(handle: bigint): number;
+  codecPending(handle: bigint): number;
+  codecSelect(handle: bigint): boolean;
+  codecEvent(handle: bigint): NativeCodecEvent | null;
+  codecTake(handle: bigint): void;
+  /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
+  codecEncode(handle: bigint, kind: number, fin: number, payload: Uint8Array): number;
+  codecOutbound(handle: bigint): Buffer;
+  codecOutboundMasked(handle: bigint): boolean;
+  codecFailureCode(handle: bigint): number;
+  codecReset(handle: bigint): void;
+  codecRole(handle: bigint): number;
 };

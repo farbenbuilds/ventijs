@@ -8,6 +8,7 @@
 
 test {
     _ = @import("ffi/lib_test.zig");
+    _ = @import("ffi/codec_abi_test.zig");
     _ = @import("socket/handles_test.zig");
     _ = @import("server/options_test.zig");
     _ = @import("server/registry_test.zig");
@@ -21,4 +22,13 @@ test {
     _ = @import("socket/socket_ops_test.zig");
     _ = @import("socket/connections_test.zig");
     _ = @import("socket/inbound_purge_test.zig");
+    _ = @import("codec/utf8_test.zig");
+    _ = @import("codec/decode_test.zig");
+    _ = @import("codec/encode_test.zig");
+    _ = @import("codec/boundary_test.zig");
+    _ = @import("codec/reject_test.zig");
+    _ = @import("codec/fragment_test.zig");
+    _ = @import("codec/backpressure_test.zig");
+    _ = @import("codec/close_test.zig");
+    _ = @import("codec/handles_test.zig");
 }

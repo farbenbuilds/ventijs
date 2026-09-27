@@ -71,18 +71,28 @@ over the adopted `Duplex` was rejected because it duplicates framing the
 architecture says Zig will own and hands UTF-8 validation, masking, and length
 checks to the runtime. Reducing `WebSocketServer` to a `noServer`-shaped shim was
 rejected because it changes the transport model of every public server surface and
-drops the client. What replaces both is a third shape: Node keeps the transport,
+drops the client. What replaced both is a third shape: Node keeps the transport,
 which is what the drop-in contract requires anyway, and a pure Zig frame codec
 behind a Node-API handle takes over parsing, masking, UTF-8, fragmentation,
 control frames, and backpressure.
 
-The upgrade route is not left broken while that lands. `close()` now reaches
+That codec is in place and the upgrade route runs on it.
+`src/compat/socket/codec-inbound.ts` folds the transport's bytes into a
+server-role codec and dispatches what comes out; `codec-outbound.ts`,
+`codec-send.ts`, and `codec-close.ts` frame `send`, `ping`, `pong`, and `close`
+on the way out. The route's own defects are fixed as well: `close()` reaches
 `CLOSED` rather than stranding the socket at `CLOSING`, a transport failure
 reaches the socket as `error` rather than a silent `close(1006)`, a multi-byte
 typed array puts every byte it holds on the wire, and `close(code, reason)`
 measures the argument before dispatching on its type, which is the order `ws`
 uses and which decides the error class a caller sees.
-`tests/compat/socket/upgrade-route.test.ts` is the suite for that route.
+
+`tests/compat/socket/upgrade-route.test.ts` is the suite for that route's
+lifecycling, and `tests/compat/socket/codec-upgrade*.test.ts` runs it against
+real `ws` peers in both directions. The second suite is the one that would have
+caught the four boundary defects the codec's Node-API surface carried, and its
+harness note matters: a `noServer` facade test built on a `ws` server proves only
+that `ws` agrees with `ws`, so the server under test has to be ventijs's own.
 
 The inbound ring's starvation defect turned out to be visible in the conformance
 report as well. `5.19`, `5.20`, and `7.1.1` were recorded as three separate

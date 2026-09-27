@@ -69,26 +69,35 @@ mapping, event dispatch ordering, boundary lifetime rules, and capacity
 exhaustion. The build job uploads `dist/` and the generated `.d.ts` bundle so
 reviewers can inspect the published type surface without building locally.
 
-`ts-test.yml` runs a bare `vitest run` without the native toolchain, so it
-discovers new suites instead of enumerating directories, and excludes the four
-globs that need the addon: `tests/binding/**`, `tests/compat/socket/**`,
-`tests/compat/stream.test.ts`, and `tests/conformance/close.conformance.test.ts`,
-the last because it needs a live server to close on. A new suite that loads the
-addon must be added to that exclusion list or it will fail this job.
+`ts-test.yml` runs without the native toolchain, so it cannot run a suite that
+builds a WebSocket: the frame codec is in the addon, so a facade socket cannot be
+attached without one. It names the two trees that provably do not need it:
+
+```sh
+pnpm exec vitest run tests/protocol tests/compat/options
+```
+
+The paths are an inclusion list rather than the exclusion list this used to be,
+because an exclusion list is a claim about every file in the repository and it went
+stale as soon as the codec landed: a new suite that needed the addon failed in the
+wrong job, on a missing addon, which reads as a broken test rather than a misplaced
+one. An inclusion list only needs editing when a suite genuinely stops needing one,
+and a suite added anywhere else lands in the job that has the addon.
 
 `zig-test.yml` runs two jobs with the same toolchain and cache: units
 (`zig build test`, compiling `src/engine_tests.zig` and the per-module suites
 under `src/engine-tests/`, mirroring the `src/engine/` planes) and the
-addon-backed lifecycle suite, which runs `pnpm build:binding`, checks the built
-declarations with `pnpm exec tsdown && pnpm run typecheck:dist`, and then runs:
+addon-backed suite, which runs `pnpm build:binding`, checks the built declarations
+with `pnpm exec tsdown && pnpm run typecheck:dist`, and then runs the whole
+vitest suite:
 
 ```sh
-vitest run tests/binding tests/compat/socket tests/compat/stream.test.ts tests/conformance
+pnpm exec vitest run --no-file-parallelism
 ```
 
-so every suite `ts-test.yml` excludes is covered here, and the conformance
-suites run against the real addon. Both jobs cache `.zig-cache` and `zig-pkg`
-between runs. Neither installs a vendor C toolchain: the engine compiles
+so every suite `ts-test.yml` leaves out is covered here, and no file list here can
+disagree with the one there. Both jobs cache `.zig-cache` and `zig-pkg` between
+runs. Neither installs a vendor C toolchain: the engine compiles
 BoringSSL, lsquic, libdeflate, and zlib itself from pinned package sources.
 
 ## Native addon matrix

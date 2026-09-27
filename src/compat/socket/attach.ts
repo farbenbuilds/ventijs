@@ -5,6 +5,8 @@ import type { WebSocket } from "../../types/ws";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, OPEN } from "../ready-state";
+import { closeCodec, openCodec } from "./codec-handle";
+import { driveInbound } from "./codec-inbound";
 import { finishConnection } from "./lifecycle";
 import { failTransport } from "./transport";
 import { socketStateOf } from "./state";
@@ -29,9 +31,13 @@ export function attachNativeSocket(
   emitEvent(state, "open");
 }
 
-/// Adopts an upgraded Node stream. The transport wiring keeps the terminal
-/// latch and `terminate()` functional while the native receiver is pending;
-/// bytes in `head` are dropped until it owns the socket.
+/// Adopts an upgraded Node stream and opens its frame codec.
+///
+/// The codec is what reads the peer from here: the transport's bytes go into it and
+/// its events come out as the facade's, per
+/// `docs/adr/0001-transport-and-framing-ownership.md`. Before the codec existed this
+/// path dropped every inbound byte, which is a socket that accepts a connection and
+/// then never hears from it.
 export function attachSocket(socket: WebSocket, transport: Duplex): void {
   const state = socketStateOf(socket);
   if (state === undefined) {
@@ -41,6 +47,8 @@ export function attachSocket(socket: WebSocket, transport: Duplex): void {
     );
   }
   state.transport = transport;
+  openCodec(state);
+  driveInbound(state, transport);
   transport.on("end", () => {
     if (state.readyState !== CLOSED) state.readyState = CLOSING;
     transport.end();
@@ -57,6 +65,10 @@ export function attachSocket(socket: WebSocket, transport: Duplex): void {
     }
   });
   transport.on("close", () => {
+    // The codec is released here rather than on the close event: the transport is
+    // gone, so nothing can read or write through it, and holding the slot until the
+    // event drains would leak one per connection under load.
+    closeCodec(state);
     finishConnection(state, state.closeCode, state.closeReason);
   });
   state.readyState = OPEN;

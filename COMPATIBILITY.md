@@ -91,14 +91,29 @@ to split transport from framing: Node owns the socket, and a pure Zig frame code
 behind a Node-API handle owns parsing, masking, UTF-8, fragmentation, control
 frames, and backpressure, which is what `AGENTS.md` already says Zig owns.
 
-Until that codec lands, the upgrade route's defects are fixed rather than
-papered over. `close()` reaches `CLOSED` instead of stranding the socket at
+The codec has landed, and the upgrade route runs on it. `src/engine/codec/**` is a
+pure parser and formatter: it never sees a socket, allocates nothing on the message
+path, and takes its header parsing, encoding, and masking from the same `zslay`
+the engine route uses, so the two routes onto the wire agree by construction rather
+than by inspection. `src/engine/ffi/codec_*.zig` is the boundary, and
+`src/compat/socket/codec-*.ts` is the route: the transport's bytes go into a
+server-role codec and its events come out as the facade's, while `send`, `ping`,
+`pong`, and `close` frame through it on the way out.
+
+The upgrade route's earlier defects are fixed rather than papered over, and the
+route works. `close()` reaches `CLOSED` instead of stranding the socket at
 `CLOSING` (`closeUnattached` in `src/compat/socket/lifecycle.ts`), a transport
 failure reaches the socket as `error` rather than a silent `close(1006)`, a
 multi-byte typed array puts every byte it holds on the wire rather than one byte
 per element, `close(code, reason)` measures before it dispatches on the type so
 the error class matches `ws`, and `bufferedAmount` no longer grows without bound
 on a route with nothing to drain it.
+
+One limit is inherited rather than chosen. Every codec has the compiled
+`message_capacity`, and there is no per-connection `maxPayload`: the codec's
+message buffer is comptime-sized, so honouring a smaller per-socket limit would
+mean runtime-sized buffers. An argument that was accepted and only partly
+honoured was removed instead, because a caller would have no way to tell.
 
 ## Engine capacity limits
 

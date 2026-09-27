@@ -57,6 +57,9 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// The upgraded Node stream, retained so `terminate()` can destroy it and
   /// the close event can latch. Null for native attachments.
   transport: Duplex | null;
+  /// The frame codec for this connection, or null before one is opened and after
+  /// one is released. Null for native attachments, which the engine frames itself.
+  codec: bigint | null;
 };
 
 export type SocketRegistry = Registry<SocketEventMap>;

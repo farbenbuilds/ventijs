@@ -3,6 +3,7 @@ import type { SocketState } from "../../types/socket";
 import type { EngineStatus } from "../../types/status";
 import { createError } from "../errors";
 import { CONNECTING, OPEN } from "../ready-state";
+import { sendFramed } from "./codec-send";
 import { reportWithoutClosing } from "./lifecycle";
 import { notAttachedError, reportFailure } from "./send-failure";
 import { bufferedAmountOf, defer, notOpenError, statusError, toPayload } from "./payload";
@@ -22,6 +23,12 @@ export function sendData(
     // socket that was merely mid-close.
     accountUnsentBytes(state, payload.bytes.length);
     defer(failure, notOpenError(state.readyState));
+    return;
+  }
+  if (state.codec !== null) {
+    // The codec owns the framing for a socket that has a transport, so a message
+    // goes out as a frame rather than as bytes the engine would have to frame.
+    sendFramed(state, payload, failure);
     return;
   }
   if (state.attachment === null) {
