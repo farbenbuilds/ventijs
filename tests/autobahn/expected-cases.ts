@@ -2,18 +2,6 @@
 /// groups 1-7 and 9-13, and which of them the pinned engine build cannot reach
 /// because of its compiled-in message capacity.
 ///
-/// 517 is the total in `CI_CD_PIPELINE.md` and is the number the gate holds the
-/// run to. `fuzzingclient.json` also selects `11.*`, but the pinned suite defines
-/// no group 11 cases, so the pattern contributes nothing and 517 already accounts
-/// for it.
-///
-/// The `behaviorClose` vocabulary is what the gate uses to tell a truncated or
-/// foreign report from a conformant one. The 514 `OK` and 3 `INFORMATIONAL` split
-/// the reference `ws` report produces is recorded in `CI_CD_PIPELINE.md` as
-/// context, not asserted here: holding ventijs to it would assert that all 389
-/// evaluated cases pass, which is the per-case gate's job.
-export const TOTAL_CASES = 517;
-
 export const CLOSURE_BEHAVIORS: ReadonlySet<string> = new Set([
   "OK",
   "INFORMATIONAL",
@@ -41,6 +29,7 @@ export const REFERENCE_CLOSURE_INFORMATIONAL_CASES = 3;
 // one number here that is read out of the built addon rather than written down, which is
 // why it is re-exported rather than recomputed.
 export { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
+export { TOTAL_CASES } from "./case-sizes.ts";
 export {
   CAPACITY_CASES,
   CAPACITY_RULES,

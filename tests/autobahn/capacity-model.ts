@@ -13,7 +13,7 @@ import {
   DEFLATE_PARAMETER_SETS_GROUP_12,
   DEFLATE_PARAMETER_SETS_GROUP_13,
 } from "./case-sizes.ts";
-import { TOTAL_CASES } from "./expected-cases.ts";
+import { TOTAL_CASES } from "./case-sizes.ts";
 
 export { INBOUND_LIMIT_BYTES };
 

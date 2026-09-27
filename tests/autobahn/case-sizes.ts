@@ -13,6 +13,18 @@
 //! engine still could not hold -- which is how ten group-9 failures that are the cap
 //! being the cap got reported as protocol failures.
 
+/// 517 is the total in `CI_CD_PIPELINE.md` and is the number the gate holds the
+/// run to. `fuzzingclient.json` also selects `11.*`, but the pinned suite defines
+/// no group 11 cases, so the pattern contributes nothing and 517 already accounts
+/// for it.
+///
+/// The `behaviorClose` vocabulary is what the gate uses to tell a truncated or
+/// foreign report from a conformant one. The 514 `OK` and 3 `INFORMATIONAL` split
+/// the reference `ws` report produces is recorded in `CI_CD_PIPELINE.md` as
+/// context, not asserted here: holding ventijs to it would assert that all 389
+/// evaluated cases pass, which is the per-case gate's job.
+export const TOTAL_CASES = 517;
+
 /// One entry of the suite's `Cases` expansion, with the byte count the suite actually puts
 /// on the wire. `prefix` matches a case id by string prefix, so "9.1" covers 9.1.1 through
 /// 9.1.6.
