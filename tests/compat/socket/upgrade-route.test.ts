@@ -1,15 +1,47 @@
 import { expect, test } from "vitest";
-import { PassThrough } from "node:stream";
+import { Duplex } from "node:stream";
 import { WebSocket } from "../../../src/index";
 import { attachSocket } from "../../../src/compat/socket/attach";
 import { CLOSED, CLOSING, OPEN } from "../../../src/compat/ready-state";
 
+/// A transport that takes writes and never echoes them, with the frames it was
+/// given kept for a test to assert against.
+///
+/// A `PassThrough` used to stand in here, and it was wrong the moment the socket
+/// wrote a real frame: a pass-through returns everything written to it as readable
+/// data, so the socket decoded its own close frame as a peer's and refused it. A
+/// real socket does not loop its writes back, so this is the transport that
+/// reproduces one.
+type TestTransport = Duplex & {
+  /// Every frame the socket has written, in order.
+  readonly frames: () => Buffer;
+  /// Hands the socket bytes as though a peer had sent them.
+  receive: (bytes: Buffer) => void;
+};
+
+function loopbackFreeTransport(): TestTransport {
+  const written: Buffer[] = [];
+  const transport = new Duplex({
+    read: () => undefined,
+    write: (chunk: Buffer, _encoding: string, done: (error?: Error) => void) => {
+      written.push(Buffer.from(chunk));
+      done();
+    },
+  });
+  return Object.assign(transport, {
+    frames: () => Buffer.concat(written),
+    receive: (bytes: Buffer) => {
+      transport.push(bytes);
+    },
+  });
+}
+
 /// A socket from the Node upgrade path, open, with a live transport and no native
 /// attachment. This is the shape `WebSocketServer` produces, and the one every
 /// regression below is about: the facade reaches it, the engine does not.
-function upgradedSocket(): { socket: WebSocket; transport: PassThrough } {
+function upgradedSocket(): { socket: WebSocket; transport: TestTransport } {
   const socket = new WebSocket(null);
-  const transport = new PassThrough();
+  const transport = loopbackFreeTransport();
   attachSocket(socket, transport);
   return { socket, transport };
 }

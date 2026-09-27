@@ -71,3 +71,21 @@ test "a multi-byte sequence split across fragments is valid" {
     }
     try testing.expectEqualStrings("\xe2\x82\xac", (try support.take_only(&peer)).payload);
 }
+
+test "a frame longer than the cap is refused rather than truncated" {
+    // `zslay` ends an over-long frame at `max_frame_len` and reports what it took as
+    // a complete frame, so a decoder that only checks the accumulated message would
+    // deliver a silently short message instead of refusing the frame.
+    const Small = codec.codec(16, 2);
+    var peer = Small.init(.server);
+    var buffer: [64]u8 = undefined;
+    const frame = support.raw_frame(&buffer, true, 0x1, 40, true, .{ 1, 2, 3, 4 }, "0123456789abcdefghijklmnopqrstuvwxyz1234");
+    const result = peer.feed(frame);
+    try testing.expectEqual(codec.Outcome.failed, result.outcome);
+    try testing.expectEqual(codec.Failure.message_too_large, peer.pending_failure().?);
+    try testing.expectEqual(@as(u16, 1009), peer.failure_code());
+    // Nothing was queued: a truncated message is worse than no message.
+    try testing.expect(peer.select());
+    try testing.expectEqual(codec.Kind.rejected, peer.selected_event().?.kind);
+    peer.take();
+}

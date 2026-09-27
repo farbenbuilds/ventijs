@@ -5,6 +5,7 @@ import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
 import { toCloseReason } from "./close-reason";
+import { closeFramed } from "./codec-close";
 import { bufferedAmountOf } from "./payload";
 import { closeFailure } from "./close-failure";
 
@@ -80,6 +81,10 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   state.readyState = CLOSING;
   const closeCode = code === undefined ? CLOSE_NORMAL : Math.trunc(assertCloseCode(code));
   const closeReason = toCloseReason(reason);
+  if (state.codec !== null) {
+    closeFramed(state, closeCode, closeReason);
+    return;
+  }
   if (state.attachment === null) {
     closeUnattached(state);
     return;

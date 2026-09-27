@@ -1,17 +1,13 @@
 //! The receive half of the frame codec: bytes in, decoded events out.
 //!
-//! This owns every byte of per-connection receive state and nothing else. It
-//! holds no queue and knows nothing about the caller: `finish` reports what a
-//! completed frame meant and the codec in `state.zig` decides what to do with
-//! that. The split is by responsibility rather than by size, and the reason is
-//! that the receive path and the transmit path have nothing in common except the
-//! connection they belong to.
+//! This owns every byte of per-connection receive state and nothing else. It holds no
+//! queue and knows nothing about the caller: `finish` reports what a completed frame
+//! meant and the codec in `state.zig` decides what to do with that.
 //!
-//! The frame state machine itself is `zslay.Conn`, documented as I/O-agnostic,
-//! and the engine's own `WebSocket.on_data` drives the same `Conn` with the same
-//! loop. Header parsing, header encoding, and masking therefore come from one
-//! implementation on both routes rather than two that have to agree by
-//! inspection.
+//! The frame state machine is `zslay.Conn`, documented as I/O-agnostic, and the
+//! engine's own `WebSocket.on_data` drives the same `Conn` with the same loop, so
+//! header parsing and masking come from one implementation on both routes rather than
+//! two that have to agree by inspection.
 
 const std = @import("std");
 const zslay = @import("zslay");
@@ -53,7 +49,6 @@ pub fn receive(comptime max_message: usize) type {
 
     return struct {
         const Self = @This();
-
         pub const max_message_bytes = max_message;
 
         /// The frame state machine: the header buffer, the decoded header, the
@@ -99,6 +94,11 @@ pub fn receive(comptime max_message: usize) type {
         /// than about the bytes.
         pub fn consume(self: *Self, input: []const u8, offset: *usize) !void {
             const decoded = self.conn.decoded_header orelse return error.ProtocolError;
+            // `zslay` ends an over-long frame at `max_frame_len` and reports what it
+            // took as a complete frame, so a decoder that only checked the
+            // accumulated message would deliver a silently short one. Refused here,
+            // before a byte of the payload is copied.
+            if (decoded.payload_len > max_message) return error.PayloadTooLarge;
             const opcode: zslay.Opcode = @enumFromInt(decoded.header.opcode);
             const position = self.conn.payload_bytes_processed;
             const remaining = decoded.payload_len - position;

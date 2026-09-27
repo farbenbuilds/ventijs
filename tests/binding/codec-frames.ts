@@ -16,6 +16,9 @@ export const MASKED_HEADER_BYTES = 6;
 export type ClientFrame = {
   readonly opcode: number;
   readonly payload: Buffer;
+  /// False for a fragment, which the continuation opcode and the RFC both make
+  /// mandatory rather than optional: a message split across frames has to say so.
+  readonly fin?: boolean;
 };
 
 const MASK: readonly number[] = [0x37, 0xfa, 0x21, 0x3d];
@@ -25,7 +28,7 @@ export function clientFrame(frame: ClientFrame): Buffer {
   const length = frame.payload.length;
   const extended = length > 125;
   const header = Buffer.alloc(2 + (extended ? 2 : 0) + 4);
-  header[0] = 0x80 | frame.opcode;
+  header[0] = (frame.fin === false ? 0x00 : 0x80) | frame.opcode;
   if (extended) {
     header[1] = 0x80 | 126;
     header.writeUInt16BE(length, 2);
