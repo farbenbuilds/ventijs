@@ -48,60 +48,40 @@ construction, and calling them `todo` would imply a plan that does not exist.
 
 Update the affected row in the same change that moves the status.
 
-`message` and `send` moved together, and they are worth naming because they are
-the pair that decides whether a ventijs socket can echo at all. They are
-implemented on the engine route, where `src/engine/server/connections.zig` takes
-the parsed payload and `src/engine/ffi/socket_pump.zig` moves staged replies onto
-the wire, and they are still `todo` on the facade's HTTP upgrade route, which
-adopts a raw Node stream and does no framing.
+## Where the surface stands
 
-**That second `todo` is the whole of it, and the distinction is not a nuance.** No
-file under `src/compat/` calls `createServer`, `listenServer`, `pumpSocket`, or
-`takeSocketMessage`. The engine route is reachable only from `tests/binding/`,
-`tests/autobahn/`, and `bench/`, so a status that says "implemented on the engine
-route" describes the test harness and not the product. Every row in these tables
-describes the facade, so a route the facade cannot reach is a `todo`, and a row
-whose note mentions the engine route is a row whose real gap is that no public
-socket is ever attached to one.
+The two socket routes are named throughout these tables:
 
-Both of the architectures `COMPATIBILITY.md` used to name here are now settled,
+- **codec route**: `WebSocketServer` builds a Node `http.Server`, answers the `upgrade`
+  request in `src/compat/server/upgrade.ts`, adopts the resulting `Duplex` in
+  `src/compat/socket/attach.ts`, and hands its bytes to the Zig frame codec in
+  `src/compat/socket/codec-inbound.ts`. This is the route every public surface reaches.
+- **engine route**: a socket created by `attachNativeSocket`, which the facade's
+  constructors never call. It is exercised by `tests/binding/`, `tests/autobahn/`, and
+  `bench/`, and it is where the engine's own RFC 6455 implementation is measured.
+
+Both architectures `COMPATIBILITY.md` used to name for the codec route are now settled,
 and the decision is recorded as
-[ADR 0001](adr/0001-transport-and-framing-ownership.md). A TypeScript receiver
-over the adopted `Duplex` was rejected because it duplicates framing the
-architecture says Zig will own and hands UTF-8 validation, masking, and length
-checks to the runtime. Reducing `WebSocketServer` to a `noServer`-shaped shim was
-rejected because it changes the transport model of every public server surface and
-drops the client. What replaced both is a third shape: Node keeps the transport,
-which is what the drop-in contract requires anyway, and a pure Zig frame codec
-behind a Node-API handle takes over parsing, masking, UTF-8, fragmentation,
-control frames, and backpressure.
+[ADR 0001](adr/0001-transport-and-framing-ownership.md). A TypeScript receiver over the
+adopted `Duplex` was rejected because it duplicates framing the architecture says Zig
+will own and hands UTF-8 validation, masking, and length checks to the runtime. Reducing
+`WebSocketServer` to a `noServer`-shaped shim was rejected because it changes the
+transport model of every public server surface and drops the client. What replaced both
+is a third shape: Node keeps the transport, which is what the drop-in contract requires
+anyway, and a pure Zig frame codec behind a Node-API handle takes over parsing, masking,
+UTF-8, fragmentation, control frames, and backpressure.
 
-The client is the other half of the same decision and is implemented: Node's
-`net`/`tls` own the connection and the codec owns the framing, in the client role,
-because a client masks and a server must not. `src/compat/client/` splits the
-handshake into the decisions it is made of, and `tests/compat/client/` runs a real
-`ws` server as the peer in both directions, the mirror of the upgrade route's suites.
+The client is the other half of the same decision and is implemented: Node's `net` and
+`tls` own the connection and the codec owns the framing, in the client role, because a
+client masks and a server must not. `src/compat/client/` splits the handshake into the
+decisions it is made of, and `tests/compat/client/` runs a real `ws` server as the peer
+in both directions, the mirror of the codec route's suites.
 
-That codec is in place and the upgrade route runs on it.
-`src/compat/socket/codec-inbound.ts` folds the transport's bytes into a
-server-role codec and dispatches what comes out; `codec-outbound.ts`,
-`codec-send.ts`, and `codec-close.ts` frame `send`, `ping`, `pong`, and `close`
-on the way out. The route's own defects are fixed as well: `close()` reaches
-`CLOSED` rather than stranding the socket at `CLOSING`, a transport failure
-reaches the socket as `error` rather than a silent `close(1006)`, a multi-byte
-typed array puts every byte it holds on the wire, and `close(code, reason)`
-measures the argument before dispatching on its type, which is the order `ws`
-uses and which decides the error class a caller sees.
+## Updating these tables
 
-`tests/compat/socket/upgrade-route.test.ts` is the suite for that route's
-lifecycling, and `tests/compat/socket/codec-upgrade*.test.ts` runs it against
-real `ws` peers in both directions. The second suite is the one that would have
-caught the four boundary defects the codec's Node-API surface carried, and its
-harness note matters: a `noServer` facade test built on a `ws` server proves only
-that `ws` agrees with `ws`, so the server under test has to be ventijs's own.
+Update the affected row in the same change that moves the status.
 
-The inbound ring's starvation defect turned out to be visible in the conformance
-report as well. `5.19`, `5.20`, and `7.1.1` were recorded as three separate
-failures with three different explanations; the run after the purge passes all
-three, which is the evidence that they shared one cause, on the shared inbound
-ring, and that the previous three explanations were all symptoms of it.
+`COMPATIBILITY.md` carries a "What is still outstanding" section naming the four rows
+that are not `done`, what each one is missing, and what the change costs. That section
+is the honest summary: a matrix whose rows are all `done` and whose prose describes
+limitations is worse than one that says which four and why.

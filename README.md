@@ -22,43 +22,48 @@ in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Its body is the upstream
 
 ## Project status
 
-**ventijs is pre-alpha. Do not deploy it, and do not treat it as a drop-in
-replacement for `ws` yet.** No npm release exists.
+**ventijs is pre-alpha.** No npm release exists, and an install ships the native
+addon for one platform, so `pnpm build:binding` is part of getting it running.
 
-A handshake completes: a real `ws` client connects to a ventijs server. The
-message path does not. What exists and what does not:
+A full round trip works on both routes: a real `ws` client connects to a ventijs
+server, sends text and binary, and receives the replies. The framing is a pure Zig
+codec behind a Node-API handle, and the transport is Node's, which is the shape
+`docs/adr/0001-transport-and-framing-ownership.md` records as the decision.
 
 | Area                                         | State                                                                 |
 | -------------------------------------------- | --------------------------------------------------------------------- |
 | Native addon build, load, and engine version | Works. Reports engine 1.7.0 and its HTTP/3 capability                 |
 | `WebSocketServer` shape and handshake policy | Works. Construction, options, events, `handleUpgrade`, `verifyClient` |
 | Server-side `WebSocket` record               | Works. Properties, DOM handlers, ready states, exactly-once `close`   |
-| `createWebSocketStream`                      | Works, subject to the message path below                              |
-| Client construction, `new WebSocket(url)`    | **Throws `ERR_INVALID_STATE`.** There is no client                    |
-| Inbound `message` event                      | **Never fires.** No inbound message callback on either route          |
-| Outbound `send`                              | **Reaches no wire on either route**                                   |
-| `ping`, `pong`, and their events             | Arguments are validated, then the missing transport is reported       |
-| Per-message deflate                          | Options are normalised, then never negotiated                         |
-| Maximum message size                         | **32 KiB**, compiled into the engine rather than configured           |
+| `WebSocket` client, `new WebSocket(url)`     | Works. `net` and `tls`, redirects, `ws+unix:`, and a real `ws` peer   |
+| `message` and `send`, both directions        | Works on both routes, including fragmentation and `binaryType`        |
+| `ping`, `pong`, `autoPong`, control events   | Works. The pong goes out before the application sees the ping         |
+| `close` codes, reasons, exactly-once `close` | Works, including 1005 for a code-less close and `closeTimeout`        |
+| `binaryType`, `skipUTF8Validation`           | Works. All four values, and the validator is switchable               |
+| `allowSynchronousEvents`, `maxFragments`     | Works. The pause stops the parse loop, as `ws` does                   |
+| `createWebSocketStream`                      | Works, compared against `ws`                                          |
+| `clientTracking`, `server.options` shape     | Works, property for property against `ws`                             |
+| Per-message deflate                          | **Not offered on the codec route.** See below                         |
+| Maximum message size                         | **32 KiB**, compiled into the codec rather than configured            |
 
-The rows in bold share two missing pieces. No route decodes an inbound frame:
-the engine's WebSocket route registers `open` and `close` callbacks and no
-message callback, and the compatibility server adopts the upgraded socket
-without ever reading from it. No route writes an outbound frame either: the
-staging ring has no engine-thread drain, and a socket from the upgrade path has
-no native transport attached, so its `send` reports `ERR_INVALID_STATE` instead
-of staging. ventijs therefore cannot echo a message end to end: a `ws` client
-connects and then waits. The Autobahn probe records that shape directly,
-`handshake: true` alongside `echo: false`.
+The one option in that table a caller is most likely to want is the one that is
+not there. `perMessageDeflate` is normalized, reported on `server.options`, and
+then ignored: a client offering the extension still connects, uncompressed. The
+engine route negotiates it and the codec route has no compressor, and a caller
+cannot tell the two apart from the option. It is recorded rather than faked
+because a `perMessageDeflate: true` that does not compress is a peer that believes
+it negotiated something it did not.
 
-A second limit is fixed for the lifetime of a build: a message is capped at
-32 KiB, where `ws` defaults to 100 MiB. See
+The second limit is compiled into the build rather than configured: a message is
+capped at 32 KiB, where `ws` defaults to 100 MiB, so `maxPayload` is reported at
+its `ws` value and the compiled cap is what applies. See
 [The 32 KiB message ceiling](#the-32-kib-message-ceiling).
 
 The itemised matrix, with the module and the evidence test behind every row, is
 [COMPATIBILITY.md](COMPATIBILITY.md). The mapping from the upstream API
 reference to the module that implements each item is
-[docs/compliance.md](docs/compliance.md).
+[docs/compliance.md](docs/compliance.md). Moving from `ws` is
+[docs/migrating.md](docs/migrating.md).
 
 ## Architecture at a glance
 
@@ -108,10 +113,8 @@ about a gigabyte; later builds are incremental.
 
 ## Quick start
 
-The server surface is the part that works today:
-
 ```ts
-import { WebSocketServer } from "ventijs";
+import { WebSocket, WebSocketServer } from "ventijs";
 
 const server = new WebSocketServer({ port: 8080 });
 
@@ -120,18 +123,23 @@ server.on("listening", () => {
 });
 
 server.on("connection", (socket) => {
-  // Fires today. A "message" handler on this socket is accepted and then never
-  // invoked, so an echo loop written against this branch will hang.
+  socket.on("message", (data, isBinary) => {
+    socket.send(isBinary ? data : `echo: ${data.toString()}`);
+  });
   socket.on("close", (code, reason) => {
     console.log("closed", code, reason.toString());
   });
 });
+
+const client = new WebSocket("ws://127.0.0.1:8080/");
+client.on("open", () => client.send("hello"));
+client.on("message", (data) => console.log("client saw", data.toString()));
+client.on("error", (error) => console.error(error));
 ```
 
-The client is not available: `new WebSocket(url)` throws `ERR_INVALID_STATE`,
-because only server-side sockets are implemented. Every suite and the benchmark
-in this repository therefore drive a ventijs server with a real `ws` client, so
-the client side of an application stays on `ws` today.
+Both halves of that run against a real `ws` peer in this repository's suites:
+`tests/compat/socket/codec-upgrade*.test.ts` drives a ventijs server with a `ws`
+client, and `tests/compat/client/**` drives a ventijs client with a `ws` server.
 
 Constructor-shaped exports are plain functions that return explicit state
 records; they never use `class`, `this`, or a prototype chain. See
@@ -148,26 +156,29 @@ Status vocabulary, shared with [COMPATIBILITY.md](COMPATIBILITY.md):
 | `todo`     | Planned, not implemented                                     |
 | `deferred` | Deliberately out of scope until the named prerequisite lands |
 
-| Surface                                             | Status     | Note                                                                                                   |
-| --------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| Package exports, ESM bundle, generated declarations | `done`     | Resolved through the `exports` map                                                                     |
-| Native addon build, load, engine version, HTTP/3    | `done`     | ReleaseSafe, Zig 0.16.0                                                                                |
-| `WebSocketServer` construction, options, events     | `done`     | Including the `WebSocket` class option                                                                 |
-| `handleUpgrade`, `shouldHandle`, `address`, `close` | `done`     | Node HTTP upgrade path                                                                                 |
-| `verifyClient`, `handleProtocols`, `wsClientError`  | `done`     | Hardened beyond `ws`, divergence documented                                                            |
-| `createWebSocketStream`                             | `done`     | Duplex adapter, compared against `ws`                                                                  |
-| Server-side `WebSocket` properties and DOM handlers | `done`     | Ready states, `binaryType`, `addEventListener`, `on*`                                                  |
-| `WebSocket` client construction                     | `deferred` | Throws `ERR_INVALID_STATE`                                                                             |
-| Inbound text and binary messages                    | `partial`  | Engine route round-trips both; the upgrade route still does no framing                                 |
-| Fragmented messages                                 | `todo`     | `send` does not yet read the `fin` option                                                              |
-| Outbound `send` and `bufferedAmount`                | `partial`  | Engine route reaches the wire; upgrade route reports `ERR_INVALID_STATE`                               |
-| `ping`, `pong`, and their events                    | `partial`  | Arguments validated, control-frame transport missing                                                   |
-| Close codes, reasons, exactly-once `close`          | `partial`  | Latching and argument handling compared with `ws`; the close frame is not written on the upgrade route |
-| `maxPayload` and `1009`                             | `partial`  | Normalised but never read; the engine's 32 KiB cap applies                                             |
-| `perMessageDeflate`                                 | `partial`  | Normalised, never negotiated                                                                           |
-| `server.clients` and `server.options` shape         | `partial`  | Defaults compared with `ws`; the client set is now absent when tracking is off                         |
-| RFC 6455 Autobahn suite                             | `done`     | `autobahn.yml`, capacity-scoped at 128 of 517 cases                                                    |
-| `ws` side-by-side conformance suite                 | `partial`  | Upgrade, close, stream, and options; message cases pending                                             |
+| Surface                                              | Status    | Note                                                              |
+| ---------------------------------------------------- | --------- | ----------------------------------------------------------------- |
+| Package exports, ESM and CJS bundles, declarations   | `done`    | `import` and `require` conditions, `types` under both             |
+| Native addon build, load, engine version, HTTP/3     | `done`    | ReleaseSafe, Zig 0.16.0                                           |
+| `WebSocketServer` construction, options, events      | `done`    | Including the `WebSocket` class option                            |
+| `handleUpgrade`, `shouldHandle`, `address`, `close`  | `done`    | Node HTTP upgrade path                                            |
+| `verifyClient`, `handleProtocols`, `wsClientError`   | `done`    | Hardened beyond `ws`, divergence documented                       |
+| `createWebSocketStream`                              | `done`    | Duplex adapter, compared against `ws`                             |
+| Server-side `WebSocket` properties and DOM handlers  | `done`    | Ready states, `binaryType`, `addEventListener`, `on*`             |
+| `WebSocket` client construction                      | `done`    | `net` and `tls`, redirects, `unexpected-response`, `ws+unix:`     |
+| Inbound text and binary messages                     | `done`    | Both routes, with a real `ws` peer on each                        |
+| Fragmented messages                                  | `done`    | `send`'s `fin` reads, and continuations carry opcode 0            |
+| Outbound `send` and `bufferedAmount`                 | `done`    | `binary` and `fin` both reach the wire                            |
+| `ping`, `pong`, and their events                     | `done`    | Automatic pong precedes the application event                     |
+| Close codes, reasons, exactly-once `close`           | `done`    | 1005 for a code-less close, `closeTimeout` bounds the handshake   |
+| `binaryType`, `skipUTF8Validation`                   | `done`    | All four values; the validator is switchable                      |
+| `allowSynchronousEvents`, `maxFragments`             | `done`    | The pause stops the parse loop; excess fragments close 1008       |
+| `maxPayload` and `1009`                              | `partial` | Reported at its `ws` value; the compiled 32 KiB cap applies       |
+| `perMessageDeflate`                                  | `partial` | Normalised and reported; not negotiated on the codec route        |
+| Client `upgrade` event, `finishRequest`              | `partial` | Not emitted; the client owns a `net.Socket`, not an HTTP request  |
+| Client `redirect` and `unexpected-response` payloads | `partial` | Fire, carrying the URL and status rather than the request objects |
+| RFC 6455 Autobahn suite                              | `done`    | `autobahn.yml`, capacity-scoped at 128 of 517 cases               |
+| `ws` side-by-side conformance suite                  | `partial` | Every surface above has a compared case; see the matrix           |
 
 ## Protocol conformance, honestly
 

@@ -6,7 +6,14 @@
     "declaration": false,
     "emitDeclarationOnly": false,
     "noEmit": true,
-    "skipLibCheck": false
+    "skipLibCheck": false,
+    // Off for this project only, and deliberately. The repository builds ESM, so its
+    // own `tsconfig` turns this on; a CommonJS consumer writing a `.cts` file with a
+    // named import is the shape `tests/declarations/consumer.cts` checks, and that
+    // shape is an error under this flag. Leaving it on would make the CommonJS check
+    // prove nothing: the file would be rejected for a reason that has nothing to do
+    // with whether the `require` condition resolves.
+    "verbatimModuleSyntax": false
   },
   "include": ["tests/declarations"]
 }
