@@ -19,11 +19,17 @@ import { writeCloseFrame, writePong } from "./codec-outbound";
 import { finishConnection } from "./lifecycle";
 
 /// Folds the transport's bytes into the socket's codec and delivers what comes out.
+/// `pending` is what arrived with the upgrade response, if anything did.
 ///
 /// The codec is the only thing that knows what a frame is, per
 /// `docs/adr/0001-transport-and-framing-ownership.md`: this module moves bytes and
 /// dispatches events, and never looks at an opcode or a length itself.
-export function driveInbound(state: SocketState, transport: Duplex): void {
+export function driveInbound(state: SocketState, transport: Duplex, pending?: Buffer): void {
+  // The bytes that came with the upgrade response are fed before the listener goes on,
+  // because a read can deliver the response and the first frame together and the
+  // listener would otherwise take the newer bytes first. Ordering is observable: a
+  // peer that greets with a frame expects that frame first.
+  if (pending !== undefined && pending.length > 0) ingest(state, pending);
   transport.on("data", (chunk: Buffer) => {
     ingest(state, chunk);
   });

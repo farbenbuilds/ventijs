@@ -1,4 +1,4 @@
-import { CODEC_ROLE, createCodec, destroyCodec } from "../../binding/codec";
+import { createCodec, destroyCodec } from "../../binding/codec";
 import type { SocketState } from "../../types/socket";
 import { createError } from "../errors";
 
@@ -8,14 +8,17 @@ export function codecOf(state: SocketState): bigint | null {
   return state.codec;
 }
 
-/// Opens the server-side codec for a socket.
+/// Opens the codec for a socket in the given role.
 ///
-/// A server role, because the peer is a client and RFC 6455 requires every frame
-/// from a client to be masked; a codec built the other way round would accept a
-/// stream the RFC calls malformed, and would refuse the one that is legal.
-export function openCodec(state: SocketState): bigint {
+/// The role is the connection's, not a constant: RFC 6455 requires every frame
+/// from a client to be masked and forbids a server from masking, so a codec built
+/// the other way round refuses the one legal stream and accepts the illegal one. A
+/// server socket opens `CODEC_ROLE.server` and a client socket
+/// `CODEC_ROLE.client`, and the wrong choice is a connection that dies on its first
+/// frame with a 1002 neither side expected.
+export function openCodec(state: SocketState, role: number): bigint {
   if (state.codec !== null) return state.codec;
-  const handle = createCodec(CODEC_ROLE.server);
+  const handle = createCodec(role);
   state.codec = handle;
   return handle;
 }

@@ -21,8 +21,15 @@ test("the constructor passes instanceof and carries the ready-state constants", 
   expect(WebSocket.createWebSocketStream).toBe(createWebSocketStream);
 });
 
-test("client construction reports the deferred scope", () => {
-  expect(() => new WebSocket("ws://127.0.0.1:1")).toThrow(/client construction is deferred/);
+/// A bad address is a programming error, so it throws from the constructor rather
+/// than arriving later as an `error` on a socket the caller already holds.
+test("an invalid client address throws from the constructor", () => {
+  expect(() => new WebSocket("not a url")).toThrow(SyntaxError);
+  expect(() => new WebSocket("ftp://127.0.0.1/")).toThrow(/protocol must be one of/);
+  expect(() => new WebSocket("ws://127.0.0.1/#fragment")).toThrow(/fragment identifier/);
+  expect(() => new WebSocket("ws://127.0.0.1/", ["bad protocol"])).toThrow(
+    /invalid or duplicated subprotocol/,
+  );
 });
 
 test(

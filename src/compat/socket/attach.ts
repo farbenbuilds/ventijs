@@ -1,6 +1,8 @@
 import type { Duplex } from "node:stream";
+import { CODEC_ROLE } from "../../binding/codec";
 import type { ConnectionHandle } from "../../binding/handle";
 import type { ServerHandle } from "../../binding/server";
+import type { SocketState } from "../../types/socket";
 import type { WebSocket } from "../../types/ws";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
@@ -27,18 +29,25 @@ export function attachNativeSocket(
     );
   }
   state.attachment = { server, connection };
-  state.readyState = OPEN;
-  emitEvent(state, "open");
+  // A native connection is already established, so the socket is open the moment it
+  // is adopted; there is no handshake to wait for on this route.
+  openSocket(state);
 }
 
-/// Adopts an upgraded Node stream and opens its frame codec.
+/// Adopts an upgraded Node stream, opens its frame codec in the given role, opens the
+/// socket, and hands it whatever arrived with the handshake.
 ///
 /// The codec is what reads the peer from here: the transport's bytes go into it and
 /// its events come out as the facade's, per
 /// `docs/adr/0001-transport-and-framing-ownership.md`. Before the codec existed this
 /// path dropped every inbound byte, which is a socket that accepts a connection and
 /// then never hears from it.
-export function attachSocket(socket: WebSocket, transport: Duplex): void {
+export function attachSocket(
+  socket: WebSocket,
+  transport: Duplex,
+  role?: number,
+  pending?: Buffer,
+): void {
   const state = socketStateOf(socket);
   if (state === undefined) {
     throw createError(
@@ -47,8 +56,7 @@ export function attachSocket(socket: WebSocket, transport: Duplex): void {
     );
   }
   state.transport = transport;
-  openCodec(state);
-  driveInbound(state, transport);
+  openCodec(state, role ?? CODEC_ROLE.server);
   transport.on("end", () => {
     if (state.readyState !== CLOSED) state.readyState = CLOSING;
     transport.end();
@@ -71,6 +79,24 @@ export function attachSocket(socket: WebSocket, transport: Duplex): void {
     closeCodec(state);
     finishConnection(state, state.closeCode, state.closeReason);
   });
+  // The order here is the contract: the socket opens, and only then are the bytes
+  // that arrived with the upgrade handed to the codec. A peer that greets with a
+  // close frame in the same read as the handshake would otherwise see `close` before
+  // `open`, and a caller that reads the first event as "the connection is live" is
+  // looking at a socket that is already gone.
+  openSocket(state);
+  driveInbound(state, transport, pending);
+}
+
+/// Opens the socket: `OPEN`, then `open`.
+///
+/// A server socket opens when the upgrade completes and a client socket opens when
+/// its handshake is accepted, and those are the only two moments `ws` opens on. It is
+/// private because the order relative to the codec's first read is this module's
+/// decision, not a caller's: a caller that opened the socket itself would have to
+/// know that ordering exists to get it right.
+function openSocket(state: SocketState): void {
+  if (state.readyState === OPEN) return;
   state.readyState = OPEN;
   emitEvent(state, "open");
 }

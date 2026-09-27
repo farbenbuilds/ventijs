@@ -57,8 +57,8 @@ export function completeUpgrade(
   detachHandshakeError(socket);
   socket.write(headers.concat("\r\n").join("\r\n"));
   void head;
-  // The negotiated values are published before the socket is adopted, because
-  // adoption is what sets `OPEN` and emits `open`, and `ws` has already assigned
+  // The negotiated values are published before the socket is opened, because opening
+  // is what emits `open`, and `ws` has already assigned
   // `_protocol` by the time that event fires. An `open` listener, including an
   // `onopen` attribute or a custom `WebSocket` class, otherwise observed an
   // empty protocol on a connection the server had already selected one for.
