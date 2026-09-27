@@ -12,6 +12,8 @@ pub fn inject(b: *std.Build) void {
     const napi_dep = b.dependency("napi_zig", .{});
     const engine_dep = vendor.engine_dependency(b, target, optimize);
     const engine = engine_dep.module("uWebZockets");
+    const zslay_dep = b.dependency("zslay", .{ .target = target, .optimize = optimize });
+    const zslay = zslay_dep.module("zslay");
 
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "engine_version", vendor.engine_version(b, engine_dep));
@@ -24,6 +26,7 @@ pub fn inject(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "uWebZockets", .module = engine },
+            .{ .name = "zslay", .module = zslay },
             .{ .name = "build_options", .module = options_module },
         },
     });
@@ -31,6 +34,7 @@ pub fn inject(b: *std.Build) void {
     testing.inject(b, .{
         .napi = napi_dep,
         .engine = engine,
+        .zslay = zslay,
         .options = options_module,
         .target = target,
         .optimize = optimize,

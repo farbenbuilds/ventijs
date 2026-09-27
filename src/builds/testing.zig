@@ -3,6 +3,7 @@ const std = @import("std");
 pub const Input = struct {
     napi: *std.Build.Dependency,
     engine: *std.Build.Module,
+    zslay: *std.Build.Module,
     options: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -19,6 +20,7 @@ pub fn inject(b: *std.Build, input: Input) void {
             .imports = &.{
                 .{ .name = "napi-zig", .module = input.napi.module("napi") },
                 .{ .name = "uWebZockets", .module = input.engine },
+                .{ .name = "zslay", .module = input.zslay },
                 .{ .name = "build_options", .module = input.options },
             },
         }),
