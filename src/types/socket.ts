@@ -58,6 +58,11 @@ export type SocketState = EmitterState<SocketEventMap> & {
   closeReason: Buffer;
   closeFrameSent: boolean;
   closeFrameReceived: boolean;
+  /// Whether an outbound message is open, which a send with `fin: false` starts and
+  /// the next send finishes. It is what decides the opcode of the next frame, because
+  /// RFC 6455 section 5.4 requires a continuation to carry opcode 0 and a peer reads
+  /// a second data frame with `fin` set as a second complete message.
+  fragmentsOpen: boolean;
   errorEmitted: boolean;
   attachment: SocketAttachment | null;
   /// The upgraded Node stream, retained so `terminate()` can destroy it and
@@ -75,6 +80,23 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// options because a socket outlives the option record's scope, and a server socket
   /// has no server reference to read it from.
   closeTimeout: number;
+  /// Whether `message`, `ping`, and `pong` are delivered on the read that decoded
+  /// them or on a later tick. `ws`'s `allowSynchronousEvents` is the same choice, and
+  /// its default is `true`, which is the synchronous path this state starts in.
+  allowSynchronousEvents: boolean;
+  /// The bytes a deferred delivery has not decoded yet, or null.
+  ///
+  /// A pause is a *parse* pause, which is what `ws` does: the frames behind the
+  /// message the application has not heard about are not read until it has. The
+  /// transport has already handed the chunk over, so the tail has to be held here for
+  /// the resume to re-feed. At most one read's worth, so the cost is bounded and only
+  /// for a socket that asked for deferred events.
+  pendingInput: Buffer | null;
+  /// Whether the codec validates a text payload as UTF-8, which is
+  /// `skipUTF8Validation` read the other way round. Latched at codec creation because
+  /// the validator is in Zig and a codec is one connection: changing it later would
+  /// mean a second codec mid-connection.
+  validateUtf8: boolean;
   /// Whether a ping is answered automatically. On the socket because the decision is
   /// made per frame in the inbound path, where the peer is known to be a client.
   autoPong: boolean;

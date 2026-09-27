@@ -1,27 +1,22 @@
-//! The bounded table of live codecs, and the opaque handles that name them.
+//! The opaque handles that name a live codec, and the operations on one.
 //!
-//! The engine's own connection slab is one per server and sized by the engine's
-//! pool, because the engine owns the sockets. A codec's owner is Node: the
-//! transport is a `net.Socket` or a `tls.TLSSocket` the compatibility layer
-//! accepted, and its count is whatever the application opened. So this is a
-//! process-wide table rather than a per-server one, and it is the second sanctioned
-//! module-level variable in the addon, for the same reason `server/instance.zig` is
-//! the first: the Node-API callback ABI carries no user context, and a codec
-//! handle is all a call site has to go on.
-//!
-//! State and generation share one atomic word, so a resolve can never pair a fresh
-//! generation with a stale state or observe a torn transition. The generation
-//! rejects a handle after its codec is destroyed, so a stale JavaScript call is a
-//! typed error instead of a use-after-free.
+//! The table itself is in `handles-table.zig`; this module is the handle arithmetic
+//! and the three verbs a caller has. State and generation share one atomic word, so
+//! a resolve can never pair a fresh generation with a stale state or observe a torn
+//! transition. The generation rejects a handle after its codec is destroyed, so a
+//! stale JavaScript call is a typed status instead of a use-after-free.
 
 const std = @import("std");
 const napi = @import("napi-zig");
 const capacities = @import("capacities.zig");
 const slot_word = @import("packed.zig");
+const slots = @import("handles-table.zig");
 const state = @import("state.zig");
 
-/// Which side of the connection enforces masking.
-pub const Role = enum(u8) { client, server };
+/// Which side of the connection enforces masking. Defined by the table, because the
+/// table is what holds it; re-exported here because this is the module a caller
+/// reads the vocabulary from.
+pub const Role = slots.Role;
 
 /// Opaque codec handle: 32 bit index, 32 bit generation.
 pub const Handle = struct {
@@ -41,24 +36,14 @@ pub const Handle = struct {
 pub const Error = error{ CodecTableFull, InvalidCapacity, UnknownCodec };
 
 /// The codec the table holds.
-pub const Codec = state.codec(capacities.max_message_bytes, capacities.control_slots);
+pub const Codec = state.codec(
+    capacities.max_message_bytes,
+    capacities.control_slots,
+    capacities.max_fragments,
+);
 
-/// One table entry: the word decides whether a handle resolves, the pointer is
-/// what it resolves to. See `packed.zig` for why state and generation share a word.
-const Slot = struct {
-    word: std.atomic.Value(u64) = .init(0),
-    /// The live codec, or null when the slot is free. Null rather than an
-    /// undefined inlined value so a stale read of a freed slot cannot return
-    /// something that looks like a codec.
-    codec: ?*Codec = null,
-    role: Role = .server,
-};
-
-/// Mutable process-wide binding table. Written only by create/destroy on the Node
-/// main thread and read through generation-checked handles: the invariant
-/// `CODING_CONVENTION.md` states for the server table, and the reason a second
-/// module-level variable is allowed to exist.
-pub var table: [capacities.codec_capacity]Slot = [_]Slot{.{}} ** capacities.codec_capacity;
+/// One table entry.
+const Slot = slots.Slot;
 
 /// Claims a slot and builds a codec in it.
 ///
@@ -68,10 +53,10 @@ pub var table: [capacities.codec_capacity]Slot = [_]Slot{.{}} ** capacities.code
 /// `maxPayload` the codec would not honour, and the first oversized message would be
 /// a 1009 nobody asked for. `capacities.max_message_bytes` is the one capacity, and
 /// `engineLimits` is how a caller reads it.
-pub fn create(role: Role) Error!Handle {
+pub fn create(role: Role, validate_utf8: bool) Error!Handle {
     var index: usize = 0;
     while (index < capacities.codec_capacity) : (index += 1) {
-        const slot = &table[index];
+        const slot = &slots.table[index];
         const word = slot.word.load(.acquire);
         if (slot_word.state_of(word) != .free) continue;
         const generation = slot_word.generation_of(word) +% 1;
@@ -80,7 +65,7 @@ pub fn create(role: Role) Error!Handle {
         }
         errdefer slot.word.store(slot_word.pack(.free, generation), .release);
         const peer = allocator.create(Codec) catch return error.CodecTableFull;
-        peer.* = Codec.init(if (role == .client) .client else .server);
+        peer.* = Codec.init(if (role == .client) .client else .server, validate_utf8);
         slot.codec = peer;
         slot.role = role;
         return .{ .index = @intCast(index), .generation = generation };
@@ -95,7 +80,7 @@ pub fn create(role: Role) Error!Handle {
 pub fn resolve(raw: u64) ?*Codec {
     const handle = Handle.from_int(raw);
     if (handle.index >= capacities.codec_capacity) return null;
-    const slot = &table[handle.index];
+    const slot = &slots.table[handle.index];
     const word = slot.word.load(.acquire);
     if (slot_word.state_of(word) != .active) return null;
     if (slot_word.generation_of(word) != handle.generation) return null;
@@ -107,7 +92,7 @@ pub fn resolve(raw: u64) ?*Codec {
 pub fn destroy(raw: u64) void {
     const handle = Handle.from_int(raw);
     if (handle.index >= capacities.codec_capacity) return;
-    const slot = &table[handle.index];
+    const slot = &slots.table[handle.index];
     const word = slot.word.load(.acquire);
     if (slot_word.state_of(word) != .active) return;
     if (slot_word.generation_of(word) != handle.generation) return;
@@ -132,7 +117,7 @@ const allocator = std.heap.smp_allocator;
 /// Live codecs, for a test that asserts the table is balanced.
 pub fn live_count() usize {
     var count: usize = 0;
-    for (&table) |*slot| {
+    for (&slots.table) |*slot| {
         if (slot.codec != null) count += 1;
     }
     return count;
@@ -142,7 +127,7 @@ pub fn live_count() usize {
 pub fn role_of(raw: u64) ?Role {
     const handle = Handle.from_int(raw);
     if (handle.index >= capacities.codec_capacity) return null;
-    const slot = &table[handle.index];
+    const slot = &slots.table[handle.index];
     const word = slot.word.load(.acquire);
     if (slot_word.state_of(word) != .active) return null;
     if (slot_word.generation_of(word) != handle.generation) return null;

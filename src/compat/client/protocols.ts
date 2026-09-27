@@ -38,3 +38,21 @@ export type ProtocolSet = ReadonlySet<string>;
 export function protocolSet(protocols: readonly string[]): ProtocolSet {
   return new Set(protocols);
 }
+
+/// `new WebSocket(address, options)` is a declared overload, so the second argument is
+/// read before it is validated.
+///
+/// A non-array object in the subprotocol slot is promoted to the options slot, which is
+/// what `ws` does and what `@types/ws` declares. Passing it through instead reached
+/// `normalizeProtocols`, which refused an object as an invalid subprotocol: a documented,
+/// typed, routinely used signature threw a `SyntaxError` about subprotocols on every
+/// call. The promotion is why `new WebSocket(url, { handshakeTimeout })` is legal at all.
+export function promoteOptions<T>(
+  protocols: string | string[] | undefined,
+  options: T | undefined,
+): { protocols: string | string[] | undefined; options: T | undefined } {
+  if (typeof protocols !== "object" || protocols === null || Array.isArray(protocols)) {
+    return { protocols, options };
+  }
+  return { protocols: undefined, options: protocols as unknown as T };
+}

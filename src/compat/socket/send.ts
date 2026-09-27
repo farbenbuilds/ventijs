@@ -28,7 +28,7 @@ export function sendData(
   if (state.codec !== null) {
     // The codec owns the framing for a socket that has a transport, so a message
     // goes out as a frame rather than as bytes the engine would have to frame.
-    sendFramed(state, payload, failure);
+    sendFramed(state, payload, options, failure);
     return;
   }
   if (state.attachment === null) {

@@ -8,6 +8,7 @@
 const napi = @import("napi-zig");
 const capacities = @import("../server/capacities.zig");
 const instance = @import("../server/instance.zig");
+const codec_caps = @import("../codec/capacities.zig");
 const options = @import("../server/options.zig");
 const server = @import("../server/server.zig");
 
@@ -50,12 +51,17 @@ pub fn server_dropped_events(env: napi.Env, raw: u40) !u64 {
 /// These are compile-time constants with no server behind them, so the entry
 /// point takes no handle and cannot fail.
 pub fn engine_limits(env: napi.Env) !napi.Val {
-    var out: [5]napi.Val = undefined;
+    var out: [6]napi.Val = undefined;
     out[0] = try env.createUint32(capacities.connection_capacity);
     out[1] = try env.createUint32(capacities.message_capacity);
     out[2] = try env.createUint32(capacities.frame_capacity);
     out[3] = try env.createUint32(@intCast(instance.inbound_slots));
     out[4] = try env.createUint32(@intCast(instance.payload_slots));
+    // The codec's own fragment bound, which is what a `maxFragments` option is
+    // measured against. Reported here rather than left out because the option is a
+    // documented `ws` limit: a caller who cannot read the number it is competing with
+    // has to guess at it.
+    out[5] = try env.createUint32(@intCast(codec_caps.max_fragments));
     // NUL-terminated because `setNamedProperty` takes a sentinel slice, so the
     // names are literals rather than a comptime-length table.
     const names = [_][:0]const u8{
@@ -64,6 +70,7 @@ pub fn engine_limits(env: napi.Env) !napi.Val {
         "frameBytes",
         "inboundSlots",
         "outboundSlots",
+        "maxFragments",
     };
     const object = try env.createObject();
     for (names, out) |name, value| {

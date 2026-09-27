@@ -13,6 +13,8 @@ const std = @import("std");
 const zslay = @import("zslay");
 const events = @import("events.zig");
 const complete = @import("complete.zig");
+const accumulate = @import("accumulate.zig");
+const fragments = @import("fragments.zig");
 const utf8 = @import("utf8.zig");
 
 pub const Kind = events.Kind;
@@ -43,13 +45,15 @@ pub const Decoded = struct {
 /// the only size the caller has to choose; every other buffer follows from it. A
 /// peer that sends more is closed with 1009 rather than growing anything, which
 /// is the whole reason the buffer is comptime-sized.
-pub fn receive(comptime max_message: usize) type {
+pub fn receive(comptime max_message: usize, comptime max_fragments: usize) type {
     if (max_message == 0) @compileError("codec message capacity must be greater than zero");
     if (max_message > std.math.maxInt(u32)) @compileError("codec message capacity must fit a u32 length");
+    if (max_fragments == 0) @compileError("codec needs room for at least one fragment");
 
     return struct {
         const Self = @This();
         pub const max_message_bytes = max_message;
+        pub const max_fragments_per_message = max_fragments;
 
         /// The frame state machine: the header buffer, the decoded header, the
         /// payload position, and the fragment accumulator.
@@ -68,6 +72,20 @@ pub fn receive(comptime max_message: usize) type {
         message_opcode: ?zslay.Opcode = null,
         utf8_state: utf8.State = .{},
 
+        /// The fragment boundaries of the message in progress, and the text policy.
+        /// Both are here rather than beside the buffer they describe because both are
+        /// per connection and both are read on the same path; `fragments.zig` owns
+        /// the arithmetic and the bound.
+        parts: fragments.fragments(max_fragments) = .{},
+        /// Whether a text payload is validated as UTF-8 as it arrives.
+        ///
+        /// `ws` exposes this as `skipUTF8Validation` and the docs are explicit that
+        /// it is for a caller who trusts the peer. Validating is the default because
+        /// an invalid text message is a protocol fault (1007) and delivering it
+        /// anyway hands the application bytes that are not the string they will
+        /// decode.
+        validate_utf8: bool,
+
         /// Control payload. A control frame is never fragmented and never exceeds
         /// 125 bytes, so one buffer serves all three control opcodes.
         control: [control_capacity]u8 = undefined,
@@ -76,61 +94,39 @@ pub fn receive(comptime max_message: usize) type {
         /// discipline is enforced: a server refuses an unmasked frame and a client
         /// refuses a masked one, and getting it backwards means a connection
         /// accepts a stream the RFC says is malformed.
-        pub fn init(role: zslay.EndpointRole) Self {
+        pub fn init(role: zslay.EndpointRole, validate_utf8: bool) Self {
             return .{
                 .conn = zslay.Conn.init(&[_]zslay.FrameNode{}, .{
                     .role = role,
                     .max_frame_len = max_message,
                     .max_message_len = max_message,
                 }) catch unreachable,
+                .validate_utf8 = validate_utf8,
             };
         }
 
-        /// Folds `input` in, returning the next thing the driver has to do.
+        /// Records where a fragment ended, or reports that the message is split into
+        /// more pieces than the bound allows.
+        pub fn note_fragment(self: *Self) error{TooManyFragments}!void {
+            return self.parts.note(self.message_len);
+        }
+
+        /// The fragment boundaries of the message in progress, ascending.
+        pub fn fragment_ends(self: *const Self) []const u32 {
+            return self.parts.ends();
+        }
+
+        /// Forgets the boundaries, for a message that is starting or has ended.
+        pub fn clear_fragments(self: *Self) void {
+            self.parts.clear();
+        }
+
+        /// Folds one input in, advancing `offset` past what it took.
         ///
-        /// A `need_payload` step reports how much it took, and a completed frame
-        /// comes back as a `Decoded`. The loop that drives them is in `state.zig`,
-        /// because stopping for a full queue is a decision about the caller rather
-        /// than about the bytes.
+        /// The arithmetic and the refusals are in `accumulate.zig`; this is the
+        /// method the driver calls, so the state type owns its own copy loop.
         pub fn consume(self: *Self, input: []const u8, offset: *usize) !void {
-            const decoded = self.conn.decoded_header orelse return error.ProtocolError;
-            // `zslay` ends an over-long frame at `max_frame_len` and reports what it
-            // took as a complete frame, so a decoder that only checked the
-            // accumulated message would deliver a silently short one. Refused here,
-            // before a byte of the payload is copied.
-            if (decoded.payload_len > max_message) return error.PayloadTooLarge;
-            const opcode: zslay.Opcode = @enumFromInt(decoded.header.opcode);
-            const position = self.conn.payload_bytes_processed;
-            const remaining = decoded.payload_len - position;
-            const available: u64 = @intCast(input.len - offset.*);
-            const count: usize = @intCast(@min(remaining, available));
-            const chunk = input[offset.*..][0..count];
-
-            // In place, so the caller's buffer is scratch. The engine's own
-            // `on_data` does the same over the same primitive.
-            if (decoded.masking_key) |key| zslay.frame.mask(@constCast(chunk), key, position);
-            offset.* += count;
-            self.conn.advance_payload_read(count) catch return error.ProtocolError;
-
-            if (opcode.is_control()) {
-                const start: usize = @intCast(position);
-                @memcpy(self.control[start..][0..count], chunk);
-                return;
-            }
-            // The accumulator is reset on the first byte of a new message and
-            // nowhere else. Doing it per chunk made every chunk after the first
-            // look like a new message starting inside an open one.
-            if (opcode != .continuation and position == 0) {
-                self.message_opcode = opcode;
-                self.message_len = 0;
-                self.utf8_state = .{};
-            }
-            if (self.message_len + count > max_message) return error.PayloadTooLarge;
-            @memcpy(self.message[self.message_len..][0..count], chunk);
-            self.message_len += count;
-            if (self.message_opcode == .text) {
-                self.utf8_state = utf8.feed(self.utf8_state, chunk) orelse return error.InvalidUtf8;
-            }
+            return accumulate.consume(Self, self, input, offset);
         }
 
         /// Decides what a completed frame meant.
@@ -144,6 +140,7 @@ pub fn receive(comptime max_message: usize) type {
             self.conn.reset_rx();
             self.message_len = 0;
             self.message_opcode = null;
+            self.parts.clear();
             self.utf8_state = .{};
         }
     };

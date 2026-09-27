@@ -64,6 +64,10 @@ export type NativeEngineLimits = {
   readonly frameBytes: number;
   readonly inboundSlots: number;
   readonly outboundSlots: number;
+  /// Fragments one message may be split into on the codec route, which is what a
+  /// `maxFragments` option is measured against and what a peer exceeding it is
+  /// closed with 1008 for.
+  readonly maxFragments: number;
 };
 
 export type VentiAddon = {
@@ -110,7 +114,9 @@ export type VentiAddon = {
   /// The frame codec. Every codec has the compiled capacity, which `engineLimits`
   /// reports; the handle is generation-checked, so a call after `codecDestroy` is a
   /// status rather than a use-after-free.
-  codecCreate(role: number): bigint;
+  /// `validateUtf8` is 1 unless the caller passed `skipUTF8Validation`; the codec is
+  /// the validator, so the flag is how that option reaches the parser.
+  codecCreate(role: number, validateUtf8: number): bigint;
   codecDestroy(handle: bigint): void;
   /// Returns bytes consumed, or a negative `codec.ts` outcome ordinal.
   codecFeed(handle: bigint, bytes: Uint8Array): number;
@@ -119,6 +125,9 @@ export type VentiAddon = {
   codecPending(handle: bigint): number;
   codecSelect(handle: bigint): boolean;
   codecEvent(handle: bigint): NativeCodecEvent | null;
+  /// The fragment boundaries of the selected data message, or null when it arrived
+  /// whole. Read between `codecEvent` and `codecTake`.
+  codecFragments(handle: bigint): number[] | null;
   codecTake(handle: bigint): void;
   /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
   codecEncode(handle: bigint, kind: number, fin: number, payload: Uint8Array): number;

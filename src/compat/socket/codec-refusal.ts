@@ -1,6 +1,4 @@
 import type { SocketState } from "../../types/socket";
-import { createError } from "../errors";
-import { codecOf } from "./codec-handle";
 import { refuseFramed } from "./codec-close";
 
 /// Why the codec refused, in the words the close code already uses, so the error an
@@ -12,7 +10,10 @@ export function failureReason(code: number): string {
     case 1007:
       return "invalid payload";
     case 1008:
-      return "policy violation";
+      // Reached by a message split into more fragments than the compiled bound, and
+      // by a policy refusal. `ws` says "Too many message fragments" for the first and
+      // both carry 1008, so the socket's own reason is the one a caller can act on.
+      return "too many message fragments";
     case 1009:
       return "message too big";
     case 1010:
@@ -29,13 +30,4 @@ export function failureReason(code: number): string {
 /// decoder, and the decoder replaced without inventing a policy.
 export function refuseByCodec(state: SocketState, code: number): void {
   refuseFramed(state, code, failureReason(code));
-}
-
-/// The latched close code, or a protocol error when the codec is already gone.
-///
-/// A socket with no codec has nothing to have refused, so reporting 1002 rather than
-/// throwing keeps a teardown path from failing on a race it did not cause.
-export function latchedCode(state: SocketState): number {
-  if (codecOf(state) === null) return 1002;
-  throw createError("ERR_INVALID_STATE", "ventijs: the socket has no codec");
 }

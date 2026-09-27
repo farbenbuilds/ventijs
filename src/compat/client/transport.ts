@@ -18,7 +18,14 @@ export type ClientTransport = Socket;
 /// `ws` leaves it: a drop-in replacement that skipped verification would accept every
 /// certificate an attacker's proxy presented, which is the one behaviour a caller
 /// cannot detect from the outside.
+///
+/// A `ws+unix:` address dials the socket path, which is the only field that has one
+/// to dial: there is no host and no port, and passing an empty host to `net.connect`
+/// would resolve it as a name rather than open it as a file.
 export function openTransport(address: ClientAddress): ClientTransport {
+  if (address.socketPath !== undefined) {
+    return netConnect({ path: address.socketPath });
+  }
   const target = { host: address.host, port: address.port };
   if (address.secure) {
     return tlsConnect({ ...target, servername: address.host });

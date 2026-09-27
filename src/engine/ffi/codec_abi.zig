@@ -40,17 +40,23 @@ pub const EncodeFailure = enum(u8) {
 /// The ordinal-to-event-kind mapping, so a JavaScript ordinal that is not a kind is
 /// a typed refusal rather than a frame with a nonsense opcode.
 pub fn event_kind(ordinal: Arg) ?state.Kind {
-    if (ordinal > @intFromEnum(state.Kind.rejected)) return null;
+    if (ordinal > state.max_ordinal) return null;
     return @enumFromInt(@as(u8, @intCast(ordinal)));
 }
 
 /// The codec's failure vocabulary onto the boundary's, which is offset by one so
 /// that zero can mean "no failure".
+///
+/// The receive-only failures are listed rather than defaulted. `too_many_fragments` is
+/// a decision the receive path makes and `encode` cannot, so naming it says the
+/// boundary's writer vocabulary and the parser's are not the same set — which is why
+/// `events.Failure` is one enum and this is another.
 pub fn encode_failure(failure: state.Failure) EncodeFailure {
     return switch (failure) {
         .unexpected_opcode => .unexpected_opcode,
         .message_too_large, .fragmented_message_too_large => .message_too_large,
         .protocol_error, .reserved_bits, .invalid_utf8 => .protocol_error,
+        .too_many_fragments => .protocol_error,
     };
 }
 

@@ -1,6 +1,6 @@
+import { listenerCount as listenerCountOf } from "../events/registry";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
-import { CLOSED } from "../ready-state";
 import { parseAddress, type ClientAddress } from "./address";
 import { abort, type Attempt } from "./connect";
 
@@ -17,8 +17,10 @@ export function isRedirect(status: number, location: string | undefined): boolea
 ///
 /// Three things are refused, each for a reason a caller can act on:
 ///
-/// - Without `followRedirects` the `redirect` event fires and the socket fails, which
-///   is what the option means: the caller is told where it would have been sent.
+/// - Without `followRedirects` a 3xx is refused and surfaces as
+///   `unexpected-response`, which is what the option means: the caller is told what it
+///   would have been answered with. `redirect` is *not* emitted here, because `ws` does
+///   not emit it on a hop it is not going to follow; it is emitted for every hop it does.
 /// - Past `maxRedirects` it fails, because a redirect loop between two servers would
 ///   otherwise dial forever.
 /// - A `wss:` to `ws:` downgrade is refused, because following it would send the
@@ -26,21 +28,21 @@ export function isRedirect(status: number, location: string | undefined): boolea
 ///
 /// Credentials are dropped when the redirect leaves the original host, which is curl
 /// 7.77's rule and a security property rather than a preference: a redirect to another
-/// host must not carry the credentials the first host was given.
+/// host must not carry the credentials the first host was given. A `redirect` listener
+/// suspends the rule, because the event exists so a caller can inspect and remove
+/// headers per hop and it cannot do that from a set they cannot see.
 export function decide(
   attempt: Attempt,
   location: string,
+  status: number,
   original: ClientAddress,
 ): ClientAddress | null {
   const target = resolve(location, attempt.state.url);
   if (!attempt.options.followRedirects) {
-    // Reported and then refused: `ws` emits `redirect` for a 3xx the client will not
-    // follow, and if the caller does not take over the connection the handshake is
-    // aborted with the status it was refused with. Returning without either would
-    // leave the socket `CONNECTING` for the life of the process, holding a transport
-    // that will never be written to.
-    emitEvent(attempt.state, "redirect", target);
-    reportUnexpected(attempt, 302);
+    // Reported and then refused. Reporting only the status and nothing else left the
+    // socket `CONNECTING` for the life of the process, holding a transport that will
+    // never be written to.
+    reportUnexpected(attempt, status);
     return null;
   }
   if (attempt.redirects + 1 > attempt.options.maxRedirects) {
@@ -60,7 +62,7 @@ export function decide(
     fail(attempt, "Cannot follow a redirect from wss: to ws:");
     return null;
   }
-  if (next.authority !== original.authority) {
+  if (next.authority !== original.authority && listenerCount(attempt) === 0) {
     // A different host must not see the credentials this one was given, and the URL a
     // redirect names carries none, so both the header and the carried value go.
     stripCredentials(attempt);
@@ -72,19 +74,24 @@ export function decide(
 
 /// Emits the event for a response that was neither a 101 nor a redirect, and fails.
 ///
+/// The refusal is the caller's to make: `ws` only aborts when nothing is listening, and
+/// a listener that wants to read the 401's `www-authenticate` before deciding has been
+/// given the response and the socket for exactly that. Aborting unconditionally made
+/// `unexpected-response` unobservable as anything but a notification of a teardown.
+///
 /// `ws` hands the caller the `ClientRequest` and the `IncomingMessage` so it can
 /// decide. This client owns the socket rather than an `http.ClientRequest`, so there is
 /// no request object to hand over; what a caller needs in order to decide is the URL
 /// it dialled and the status it was refused with, and closing the socket is how it
 /// stops. The difference is recorded in `docs/compliance-api.md`.
 export function reportUnexpected(attempt: Attempt, status: number): void {
-  emitEvent(attempt.state, "unexpected-response", attempt.state.url, status);
+  const taken = emitEvent(attempt.state, "unexpected-response", attempt.state.url, status);
+  if (taken) return;
   abort(attempt, createError("ERR_PROTOCOL", `Unexpected server response: ${status}`));
 }
 
-/// Fails an attempt whose socket is already gone, which a redirect can race with.
-export function alreadyClosed(attempt: Attempt): boolean {
-  return attempt.state.readyState === CLOSED;
+function listenerCount(attempt: Attempt): number {
+  return listenerCountOf(attempt.state.listeners, "redirect");
 }
 
 function fail(attempt: Attempt, message: string): void {

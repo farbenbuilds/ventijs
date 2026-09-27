@@ -28,6 +28,16 @@ pub const max_message_bytes: usize = @import("../server/capacities.zig").message
 /// it gets backpressure rather than a silently dropped ping.
 pub const control_slots: usize = 8;
 
+/// Fragments one message may be split into, which is the boundary's `maxFragments`.
+///
+/// `ws` defaults this to 16384 and treats a larger count as a policy failure
+/// (1008), not a protocol error, so matching the number is matching the contract
+/// rather than picking a limit. The cost is four bytes per fragment per connection,
+/// and the list is what lets a caller asking for `binaryType: 'fragments'` slice the
+/// reassembled message without a second copy, so it is not a cost spent only on
+/// the cap: it is the only place the fragment boundaries exist.
+pub const max_fragments: usize = 16_384;
+
 /// Bytes one `ingest` call copies before feeding them.
 ///
 /// Node's default socket high-water mark is 64 KiB, so a scratch at 16 KiB means a

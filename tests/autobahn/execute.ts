@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
 import { AUTOBAHN_IMAGE } from "./docker-args.ts";
+import { exceedsInboundLimit } from "./expected-cases.ts";
+import { parseReportIndex, toCaseReports } from "./report-index.ts";
 import { AGENT, DEFAULT_TARGET_HOST, SUMMARY_HOST_PATH } from "./paths.ts";
 import { evaluateGate } from "./gate.ts";
 import { buildSummary, formatSummary, writeSummary } from "./summary.ts";
@@ -62,6 +65,49 @@ async function measure(
   return { ...execution, probe };
 }
 
+/// Gates an existing report instead of running the suite.
+///
+/// The generation half of the harness needs the digest-pinned fuzzing client, which is
+/// a frozen Python 2.7 image and so a Docker-capable host. The evaluation half needs
+/// nothing at all: `evaluateGate` is a pure function of a case list, and this is the
+/// whole of the rest. Treating "I have no Docker" as "I cannot check the gate" made a
+/// local limitation look like a property of the protocol work, and it is the reason a
+/// protocol fix could not ship with a regenerated baseline.
+async function executeFromReport(options: RunOptions): Promise<AutobahnSummary> {
+  const path = options.fromReport;
+  if (path === undefined) throw new Error("autobahn: --from-report needs a path");
+  let cases: ReturnType<typeof toCaseReports>;
+  try {
+    cases = toCaseReports(parseReportIndex(readFileSync(path, "utf8"), AGENT), exceedsInboundLimit);
+  } catch (error) {
+    return buildSummary({
+      ok: false,
+      mode: options.mode,
+      agent: AGENT,
+      image: AUTOBAHN_IMAGE,
+      target: null,
+      suiteRun: false,
+      gate: null,
+      cases: [],
+      failure: `autobahn: ${(error as Error).message}`,
+      shards: [],
+    });
+  }
+  const gate = evaluateGate(cases, options.mode);
+  return buildSummary({
+    ok: gate.ok,
+    mode: options.mode,
+    agent: AGENT,
+    image: AUTOBAHN_IMAGE,
+    target: null,
+    suiteRun: true,
+    gate,
+    cases,
+    failure: null,
+    shards: [],
+  });
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   let options: RunOptions;
   try {
@@ -73,6 +119,14 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (options.help) {
     process.stdout.write(`${USAGE}\n`);
     return 0;
+  }
+  // Gating a recorded report touches no container and no target, so it takes the other
+  // branch: the signal handlers belong to modules that are not even loaded here.
+  if (options.fromReport !== undefined) {
+    const summary = await executeFromReport(options);
+    writeSummary(SUMMARY_HOST_PATH, summary);
+    process.stdout.write(`${formatSummary(summary)}\n`);
+    return summary.ok ? 0 : 1;
   }
   // The target and container modules own the signal handlers, so an interrupted
   // run reaps every child and removes every container before this exits.

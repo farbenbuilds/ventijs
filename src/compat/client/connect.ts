@@ -3,10 +3,9 @@ import type { NormalizedClientOptions } from "../../types/options";
 import type { SocketState } from "../../types/socket";
 import type { ClientOptions, WebSocket } from "../../types/ws";
 import { normalizeClientOptions } from "../options/client";
-import { finishConnection } from "../socket/lifecycle";
+import { failConnection } from "../socket/lifecycle";
 import { buildSocketRecord } from "../socket/record";
 import { createSocketState } from "../socket/state";
-import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED } from "../ready-state";
 import { parseAddress, type ClientAddress } from "./address";
@@ -15,8 +14,6 @@ import { buildRequest, newKey, type Handshake } from "./request";
 import { respond } from "./open";
 import { connectionError, openTransport } from "./transport";
 import { readHead } from "./head";
-
-const CLOSE_ABNORMAL = 1006;
 
 /// One attempt at one address.
 ///
@@ -60,6 +57,8 @@ export function connectSocket(
   state.url = parsed.url;
   state.closeTimeout = normalized.closeTimeout;
   state.autoPong = normalized.autoPong;
+  state.allowSynchronousEvents = normalized.allowSynchronousEvents;
+  state.validateUtf8 = !normalized.skipUTF8Validation;
   const socket = buildSocketRecord(state);
   const transport = openTransport(parsed);
   const attempt: Attempt = {
@@ -117,19 +116,18 @@ export function dial(attempt: Attempt): void {
 ///
 /// The code is 1006 because no close frame was exchanged; a peer learns nothing from
 /// us, which is precisely what 1006 describes.
+///
+/// This delegates the latch to `failConnection`, which is `ws`'s `emitErrorAndClose`
+/// exactly, and the delegation is the point. Latching `CLOSED` here before dispatching
+/// was self-defeating: `finishConnection` is the only path to `CLOSED` and it returns
+/// immediately on a socket that is already there, so every one of these refusals set the
+/// state and then skipped the event. A caller waiting on `close` to learn the handshake
+/// failed — which is the usual shape, since a rejected handshake is only ever observable
+/// through the two events — hung for the life of the process, and the tests missed it
+/// because they asserted `readyState`, which was 3.
 export function abort(attempt: Attempt, error: Error): void {
   const { state, transport } = attempt;
   if (state.readyState === CLOSED) return;
   transport.destroy();
-  state.readyState = CLOSED;
-  if (state.errorEmitted) {
-    finishConnection(state, CLOSE_ABNORMAL, Buffer.alloc(0));
-    return;
-  }
-  state.errorEmitted = true;
-  try {
-    emitEvent(state, "error", error);
-  } finally {
-    finishConnection(state, CLOSE_ABNORMAL, Buffer.alloc(0));
-  }
+  failConnection(state, error);
 }

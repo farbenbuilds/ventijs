@@ -10,6 +10,7 @@ describe("run options", () => {
     expect(options.shards).toBe(1);
     expect(options.force).toBe(false);
     expect(options.help).toBe(false);
+    expect(options.fromReport).toBeUndefined();
   });
 
   it("selects the full 517 with --full", () => {
@@ -19,6 +20,22 @@ describe("run options", () => {
   it("reads a shard count from the flag", () => {
     expect(parseOptions(["--shards", "4"]).shards).toBe(4);
     expect(parseOptions(["--full", "--shards", "8"]).shards).toBe(8);
+  });
+
+  it("reads a report path from --from-report", () => {
+    // The mode still has to parse, because the gate is capacity-scoped by selection:
+    // gating a framing report as if it were the full one would report the two deflate
+    // groups as missing cases rather than as not selected.
+    expect(parseOptions(["--from-report", "/tmp/index.json"]).fromReport).toBe("/tmp/index.json");
+    expect(parseOptions(["--full", "--from-report", "/tmp/index.json"]).mode).toBe("full");
+  });
+
+  it("rejects --from-report with no path", () => {
+    // A typo that silently became "run the suite" would be a 35-minute run on a
+    // machine that was asked for a gate, and would also overwrite the recorded
+    // summary with a fresh, empty one.
+    expect(() => parseOptions(["--from-report"])).toThrow(RangeError);
+    expect(() => parseOptions(["--from-report", "--full"])).toThrow(RangeError);
   });
 
   it("rejects an unknown flag", () => {

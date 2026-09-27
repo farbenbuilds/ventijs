@@ -10,7 +10,7 @@ const zslay = @import("zslay");
 const codec = @import("../../engine/codec/state.zig");
 
 /// The capacity the decode and encode suites share.
-pub const codec_type = codec.codec(4096, 8);
+pub const codec_type = codec.codec(4096, 8, 64);
 
 /// One frame, built the way a peer would put it on the wire.
 pub const Frame = struct {
@@ -71,12 +71,14 @@ pub fn raw_frame(
     return out[0 .. written + payload.len];
 }
 
+/// A server-role codec that validates text, which is the default every parser case
+/// wants: a case that is about framing should not have to say so.
 pub fn server() codec_type {
-    return codec_type.init(.server);
+    return codec_type.init(.server, true);
 }
 
 pub fn client() codec_type {
-    return codec_type.init(.client);
+    return codec_type.init(.client, true);
 }
 
 /// The result of encoding one frame: its verdict, its bytes, and whether it was

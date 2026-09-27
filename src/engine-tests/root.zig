@@ -30,5 +30,6 @@ test {
     _ = @import("codec/fragment_test.zig");
     _ = @import("codec/backpressure_test.zig");
     _ = @import("codec/close_test.zig");
+    _ = @import("codec/fragments_test.zig");
     _ = @import("codec/handles_test.zig");
 }

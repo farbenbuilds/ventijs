@@ -1,8 +1,11 @@
 import { CODEC_KINDS, decodeOutcome, type CodecKindName, type FeedOutcome } from "./codec-status";
-import type { NativeCodecEvent, NativeEngineLimits } from "./native";
+import type { NativeCodecEvent } from "./native";
 import { callNative } from "./errors";
 import { loadAddon } from "./load";
 
+export { codecOutbound, codecOutboundMasked, encodeCodecFrame } from "./codec-encode";
+export { codecLimits } from "./codec-limits";
+export { codecFailureCode, codecRole, resetCodec } from "./codec-state";
 export {
   CODEC_ENCODE_FAILURES,
   CODEC_KINDS,
@@ -31,9 +34,14 @@ export type CodecEvent = {
 /// has the compiled one, and `codecLimits` reports it. An argument that was accepted
 /// and only partly honoured would leave a caller believing it had negotiated a
 /// `maxPayload` the codec does not enforce.
-export function createCodec(role: number): bigint {
+///
+/// `validateUtf8` is the one policy a caller chooses, and it is the whole of
+/// `skipUTF8Validation`: the codec is the validator, so an option the facade
+/// normalized and did not read left a caller who trusts their own server with a hard
+/// 1007 on a payload `ws` would have delivered mangled. The default is validation on.
+export function createCodec(role: number, validateUtf8 = true): bigint {
   const addon = loadAddon();
-  return callNative(() => addon.codecCreate(role));
+  return callNative(() => addon.codecCreate(role, validateUtf8 ? 1 : 0));
 }
 
 /// Releases a codec. A stale handle is a no-op rather than an error, because the
@@ -98,53 +106,15 @@ export function takeCodecEvent(handle: bigint): void {
   callNative(() => addon.codecTake(handle));
 }
 
-/// Formats one frame, reporting its framed length.
+/// The fragment boundaries of the selected data message, ascending, or null when it
+/// arrived whole or is not a data message.
 ///
-/// The framed length is returned so the caller can allocate before copying, which
-/// is what keeps the header arithmetic out of TypeScript: nothing here knows how
-/// many bytes a header takes for a given payload.
-export function encodeCodecFrame(
-  handle: bigint,
-  kind: number,
-  fin: boolean,
-  payload: Uint8Array,
-): number {
+/// Read between `selectedCodecEvent` and `takeCodecEvent`, which is the only window
+/// in which the codec's reassembly buffer is still this message. It exists for
+/// `binaryType: "fragments"`, which delivers the pieces a peer sent rather than the
+/// whole message: one boundary list is cheaper than a second copy of the payload, and
+/// it is the same list the compiled `maxFragments` bound is applied to.
+export function codecFragmentEnds(handle: bigint): number[] | null {
   const addon = loadAddon();
-  return callNative(() => addon.codecEncode(handle, kind, fin ? 1 : 0, payload));
-}
-
-/// The framed bytes waiting to be copied out, as a Node-owned buffer.
-export function codecOutbound(handle: bigint): Buffer {
-  const addon = loadAddon();
-  return callNative(() => addon.codecOutbound(handle));
-}
-
-/// Whether the last encoded frame was masked, so a caller can assert the role was
-/// honoured without parsing a header.
-export function codecOutboundMasked(handle: bigint): boolean {
-  const addon = loadAddon();
-  return callNative(() => addon.codecOutboundMasked(handle));
-}
-
-/// The close code a refused frame maps to, or 0 while the connection is healthy.
-export function codecFailureCode(handle: bigint): number {
-  const addon = loadAddon();
-  return callNative(() => addon.codecFailureCode(handle));
-}
-
-/// Drops every buffered byte and event, for a connection abandoned early.
-export function resetCodec(handle: bigint): void {
-  const addon = loadAddon();
-  callNative(() => addon.codecReset(handle));
-}
-
-/// The role a codec was created for, or -1 once it has been released.
-export function codecRole(handle: bigint): number {
-  const addon = loadAddon();
-  return callNative(() => addon.codecRole(handle));
-}
-
-/// The capacities a codec was compiled with, read rather than restated.
-export function codecLimits(): NativeEngineLimits {
-  return loadAddon().engineLimits();
+  return callNative(() => addon.codecFragments(handle));
 }

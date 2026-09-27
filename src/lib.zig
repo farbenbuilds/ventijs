@@ -4,6 +4,7 @@ const build_options = @import("build_options");
 const codec_lifecycle = @import("engine/ffi/codec_lifecycle.zig");
 const codec_out = @import("engine/ffi/codec_encode.zig");
 const codec_io = @import("engine/ffi/codec_io.zig");
+const codec_status = @import("engine/ffi/codec_status.zig");
 const server_io = @import("engine/ffi/server_io.zig");
 const socket_io = @import("engine/ffi/socket_io.zig");
 const socket_inbound = @import("engine/ffi/socket_inbound.zig");
@@ -35,9 +36,9 @@ pub const codec_feed = codec_io.codec_feed;
 /// Where the last `codec_feed` stopped, for a caller resuming a partial input.
 pub const codec_resume = codec_io.codec_resume;
 /// The close code a refused frame maps to, or 0 while healthy.
-pub const codec_failure_code = codec_io.codec_failure_code;
+pub const codec_failure_code = codec_status.codec_failure_code;
 /// The failure a refused frame produced, or 0 while healthy.
-pub const codec_failure = codec_io.codec_failure;
+pub const codec_failure = codec_status.codec_failure;
 /// Events waiting to be taken.
 pub const codec_pending = codec_io.codec_pending;
 /// Selects the next event.
@@ -46,6 +47,8 @@ pub const codec_select = codec_io.codec_select;
 pub const codec_event = codec_io.codec_event;
 /// Retires the selected event.
 pub const codec_take = codec_io.codec_take;
+/// The fragment boundaries of the selected data message, or null when it arrived whole.
+pub const codec_fragments = codec_io.codec_fragments;
 /// Formats one frame, reporting its framed length.
 pub const codec_encode = codec_out.codec_encode;
 /// The framed bytes waiting to be copied out.
@@ -55,7 +58,7 @@ pub const codec_outbound_masked = codec_out.codec_outbound_masked;
 /// Drops every buffered byte and event.
 pub const codec_reset = codec_io.codec_reset;
 /// The role a codec was created for.
-pub const codec_role = codec_io.codec_role;
+pub const codec_role = codec_status.codec_role;
 
 /// Validates an untrusted configuration, builds an engine server around a
 /// dispatch function, and returns a generation-checked server handle.

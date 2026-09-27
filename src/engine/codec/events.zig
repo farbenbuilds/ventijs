@@ -25,6 +25,16 @@ pub const Kind = enum(u8) {
     /// event is still queued so a caller has one place to learn why rather than
     /// having to correlate a close code with a timestamp.
     rejected = 5,
+    /// The continuation half of a fragmented outbound message, which is what a
+    /// caller produces by sending with `fin: false` and then again. Absent until a
+    /// caller could actually fragment: `ws` documents `send`'s `fin` option, a
+    /// peer that receives `text FIN=1` after `text FIN=0` reads two complete
+    /// messages rather than one, and the facade had no way to write the opcode
+    /// RFC 6455 requires here.
+    ///
+    /// Last in the enum so the ordinals above stay where they are: they are the
+    /// ABI that `src/binding/codec.ts` carries as a table.
+    continuation = 6,
 };
 
 /// Why a frame could not be accepted, kept apart from `zslay`'s error set so the
@@ -36,6 +46,14 @@ pub const Failure = enum(u8) {
     invalid_utf8,
     message_too_large,
     fragmented_message_too_large,
+    /// More pieces in one message than the compiled fragment bound allows.
+    ///
+    /// Its own member rather than `protocol_error` because the close code is
+    /// different: every frame was well formed, so this is 1008 (a policy violation)
+    /// and not 1002 (a protocol error). `ws` closes 1008 for `maxFragments` too, and
+    /// a peer that cannot tell the two apart cannot tell a misconfiguration from a
+    /// malformed stream.
+    too_many_fragments,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
@@ -49,6 +67,7 @@ pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
         .message_too_large, .fragmented_message_too_large => CLOSE_MESSAGE_TOO_BIG,
         .invalid_utf8 => CLOSE_INVALID_PAYLOAD,
+        .too_many_fragments => CLOSE_POLICY_VIOLATION,
         .protocol_error, .unexpected_opcode, .reserved_bits => CLOSE_PROTOCOL_ERROR,
     };
 }
@@ -60,6 +79,16 @@ pub fn failure_ordinal(failure: Failure) u8 {
     return @intFromEnum(failure) + 1;
 }
 
+/// The highest `Kind` ordinal, which is what the boundary checks a JavaScript ordinal
+/// against.
+///
+/// Named as the last member on purpose. The previous bound was written against
+/// `rejected`, so adding a kind after it produced a kind the boundary refused to send:
+/// the refusal was a correct `unexpected_opcode` for an ordinal it considered out of
+/// range, and the only symptom was a `send` that reported a protocol error for a frame
+/// the caller had explicitly asked for.
+pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
+
 /// The human-readable reason, for a message the caller can log or send. `ws`
 /// sends the empty string for a protocol error and the text for a size error, and
 /// the text is the only part a peer ever sees.
@@ -67,6 +96,7 @@ pub fn describe(failure: Failure) []const u8 {
     return switch (failure) {
         .invalid_utf8 => "Invalid UTF-8",
         .message_too_large, .fragmented_message_too_large => "Message too large",
+        .too_many_fragments => "Too many message fragments",
         .protocol_error, .unexpected_opcode, .reserved_bits => "Protocol error",
     };
 }
@@ -90,10 +120,12 @@ pub fn classify(err: anyerror) Failure {
         error.PayloadTooLarge => .message_too_large,
         error.InvalidUtf8 => .invalid_utf8,
         error.InvalidOpcode => .unexpected_opcode,
+        error.TooManyFragments => .too_many_fragments,
         else => .protocol_error,
     };
 }
 
 const CLOSE_MESSAGE_TOO_BIG: u16 = 1009;
 const CLOSE_INVALID_PAYLOAD: u16 = 1007;
+const CLOSE_POLICY_VIOLATION: u16 = 1008;
 const CLOSE_PROTOCOL_ERROR: u16 = 1002;

@@ -1,9 +1,5 @@
-import {
-  CODEC_KINDS,
-  codecOutbound,
-  encodeCodecFrame,
-  type CodecKindName,
-} from "../../binding/codec";
+import { CODEC_KINDS, type CodecKindName } from "../../binding/codec";
+import { codecOutbound, encodeCodecFrame } from "../../binding/codec-encode";
 import type { SocketState } from "../../types/socket";
 import { createError } from "../errors";
 import { isWritable, noTransportError } from "./codec-handle";
@@ -34,11 +30,21 @@ function ordinalOf(kind: CodecKindName): number {
 /// A server does not mask, so the role is decided by the codec rather than by the
 /// caller: a masked frame from a server is a protocol error a peer is entitled to
 /// close on, and the only way to avoid sending one is not to offer the choice.
-export function writeFrame(state: SocketState, kind: CodecKindName, payload: Buffer): FrameStatus {
+///
+/// `fin` is the caller's because a fragmented send is two calls. The first passes
+/// `false` and opens a message, the second passes `true` and appends a continuation
+/// frame. It was hardcoded, so a caller who asked for a fragment got a complete message
+/// with the `fin` bit set and no error anywhere.
+export function writeFrame(
+  state: SocketState,
+  kind: CodecKindName,
+  payload: Buffer,
+  fin = true,
+): FrameStatus {
   const handle = state.codec;
   if (handle === null) return "closed";
   if (!isWritable(state)) return state.transport?.writableEnded === true ? "closed" : "closing";
-  const length = encodeCodecFrame(handle, ordinalOf(kind), true, payload);
+  const length = encodeCodecFrame(handle, ordinalOf(kind), fin, payload);
   if (length < 0) return encodeFailure(-length);
   const framed = codecOutbound(handle);
   if (state.transport === null) return "closed";
@@ -53,15 +59,27 @@ export function writePong(state: SocketState, payload: Buffer): void {
 }
 
 /// Writes a close frame, if the socket has not sent one already.
-export function writeCloseFrame(state: SocketState, code: number, reason: Buffer): void {
+///
+/// An absent `code` writes the *empty* close payload, which is what a caller who called
+/// `close()` with no arguments asked for and what a peer reads as "no status".
+/// Substituting 1000 claimed a normal shutdown the caller never stated, and it made
+/// 1005 unobservable from a ventijs peer: the peer's own report of "no status received"
+/// is the only way a caller learns that the other end closed without saying why.
+export function writeCloseFrame(
+  state: SocketState,
+  code: number | undefined,
+  reason: Buffer,
+): void {
   if (state.closeFrameSent) return;
   const frame = closePayload(code, reason);
   if (writeFrame(state, "close", frame) !== "ok") return;
   state.closeFrameSent = true;
 }
 
-/// The two code bytes and the reason, which is what a close frame carries.
-function closePayload(code: number, reason: Buffer): Buffer {
+/// The two code bytes and the reason, which is what a close frame carries, or nothing
+/// at all for a close that carries no status.
+function closePayload(code: number | undefined, reason: Buffer): Buffer {
+  if (code === undefined) return Buffer.alloc(0);
   const payload = Buffer.alloc(2 + reason.length);
   payload.writeUInt16BE(code, 0);
   reason.copy(payload, 2);

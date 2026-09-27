@@ -16,18 +16,28 @@
     "dist"
   ],
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
-    ".": "./dist/index.mjs",
+    ".": {
+      "types": {
+        "import": "./dist/index.d.mts",
+        "require": "./dist/index.d.cts"
+      },
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "pnpm run build:binding && tsdown && pnpm run typecheck:dist",
+    "build": "pnpm run build:binding && tsdown && node scripts/finalize-exports.mjs && pnpm run typecheck:dist",
     "build:binding": "napi-zig build --optimize safe",
     "dev": "tsdown --watch",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint && node scripts/check-conventions.mjs",
+    "finalize:exports": "node scripts/finalize-exports.mjs",
     "lint:fix": "oxlint --fix",
     "test": "pnpm run build:binding && vitest run --no-file-parallelism",
     "test:watch": "pnpm run build:binding && vitest",
@@ -52,5 +62,8 @@
     "vite": "^8.3.0",
     "vitest": "^5.0.2",
     "ws": "8.21.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
