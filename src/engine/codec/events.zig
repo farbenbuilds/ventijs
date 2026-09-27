@@ -2,17 +2,17 @@
 //!
 //! The engine's own `WebSocket` resolves frames into three actions: answer a
 //! ping, note a close, or hand a message to the application. The codec needs the
-//! same three plus a few the transport does not care about, so the mapping from
-//! a completed frame to something the caller can observe is written down once
-//! here rather than inline in the state machine.
+//! same three plus a few the transport does not care about, so the mapping from a
+//! completed frame to something the caller can observe is written down once here
+//! rather than inline in the state machine.
 
 const zslay = @import("zslay");
 
 /// What a completed frame means to the caller.
 ///
 /// `text` and `binary` are the two halves of a reassembled data message, and
-/// `ping`, `pong`, and `close` are the control frames, which RFC 6455 section
-/// 5.5 permits to be interleaved between the fragments of a data message. The
+/// `ping`, `pong`, and `close` are the control frames, which RFC 6455 section 5.5
+/// permits to be interleaved between the fragments of a data message. The
 /// ordinals are the ABI: `src/binding/codec.ts` carries the matching table, so
 /// they must keep this order.
 pub const Kind = enum(u8) {
@@ -21,11 +21,21 @@ pub const Kind = enum(u8) {
     ping = 2,
     pong = 3,
     close = 4,
-    /// A frame the codec accepted on the wire but must not deliver: an opcode
-    /// reserved by the RFC, or a reserved bit set without a negotiated
-    /// extension. The connection is failed with 1002, but the event is still
-    /// queued so the caller has one place to learn why.
+    /// A frame the codec refused. The connection is finished at that point, but the
+    /// event is still queued so a caller has one place to learn why rather than
+    /// having to correlate a close code with a timestamp.
     rejected = 5,
+};
+
+/// Why a frame could not be accepted, kept apart from `zslay`'s error set so the
+/// mapping to a close code is stated in one place rather than at each call site.
+pub const Failure = enum(u8) {
+    protocol_error,
+    unexpected_opcode,
+    reserved_bits,
+    invalid_utf8,
+    message_too_large,
+    fragmented_message_too_large,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
@@ -43,20 +53,12 @@ pub fn close_code_for(failure: Failure) u16 {
     };
 }
 
-const CLOSE_MESSAGE_TOO_BIG: u16 = 1009;
-const CLOSE_INVALID_PAYLOAD: u16 = 1007;
-const CLOSE_PROTOCOL_ERROR: u16 = 1002;
-
-/// Why a frame could not be accepted, kept apart from `zslay`'s error set so the
-/// mapping to a close code is stated in one place rather than at each call site.
-pub const Failure = enum(u8) {
-    protocol_error,
-    unexpected_opcode,
-    reserved_bits,
-    invalid_utf8,
-    message_too_large,
-    fragmented_message_too_large,
-};
+/// The ordinal the FFI reports a failure as, so the boundary does not restate this
+/// enum's order and drift from it. Zero is never produced, because a caller has to
+/// be able to say "no failure".
+pub fn failure_ordinal(failure: Failure) u8 {
+    return @intFromEnum(failure) + 1;
+}
 
 /// The human-readable reason, for a message the caller can log or send. `ws`
 /// sends the empty string for a protocol error and the text for a size error, and
@@ -77,11 +79,6 @@ pub fn is_control(opcode: zslay.Opcode) bool {
 /// Maps a parse failure onto this vocabulary, so the close code is decided in one
 /// place rather than at each call site.
 ///
-/// The distinction that matters is that a length the codec will not accept is
-/// 1009 and everything else is 1002. Getting that backwards reports a size limit
-/// as a protocol fault, which is what a caller closing on 1002 for an over-large
-/// frame would do, and the Autobahn group 1 cases check exactly that.
-///
 /// The parameter is `anyerror` rather than `zslay.Error` because each step infers
 /// its own error set from the expressions it can actually reach, and Zig does not
 /// widen an inferred set to a declared one at a call. The default arm is the
@@ -96,3 +93,7 @@ pub fn classify(err: anyerror) Failure {
         else => .protocol_error,
     };
 }
+
+const CLOSE_MESSAGE_TOO_BIG: u16 = 1009;
+const CLOSE_INVALID_PAYLOAD: u16 = 1007;
+const CLOSE_PROTOCOL_ERROR: u16 = 1002;

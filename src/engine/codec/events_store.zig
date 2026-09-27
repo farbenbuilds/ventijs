@@ -18,6 +18,8 @@
 //! promptly, so delivering a large message ahead of it is the wrong order even
 //! though both orders are protocol-legal.
 
+const std = @import("std");
+
 const inbound = @import("receive.zig");
 
 const Decoded = inbound.Decoded;
@@ -28,7 +30,15 @@ pub fn event_store(comptime slots: usize) type {
     return struct {
         const Self = @This();
 
-        /// Control events, oldest first.
+        /// Each control slot owns its payload.
+        ///
+        /// The receive state machine writes a control payload into one shared
+        /// 125-byte buffer, so a `Decoded` alone would leave every queued control
+        /// event pointing at it and a peer sending two pings in one read would have
+        /// the first delivered as the second's bytes. One buffer per slot is what the
+        /// `slots * 125` in this module's own reasoning above assumes.
+        owned: [slots][inbound.control_capacity]u8 = undefined,
+        /// Control events, oldest first, each pointing into its own `owned` slot.
         controls: [slots]Decoded = undefined,
         head: usize = 0,
         count: usize = 0,
@@ -57,9 +67,27 @@ pub fn event_store(comptime slots: usize) type {
             return self.message == null;
         }
 
+        /// Queues a control event with a copy of its payload.
+        ///
+        /// The copy is a control frame's whole point: the receive buffer it came from
+        /// is reused by the next control frame, and a pong the caller has not written
+        /// yet must still be readable when it is.
         pub fn push_control(self: *Self, event: Decoded) void {
             const slot = (self.head + self.count) % slots;
-            self.controls[slot] = event;
+            const buffer = &self.owned[slot];
+            const length = @min(event.payload.len, buffer.len);
+            // RFC 6455 section 5.5 caps a control payload at 125 bytes, which is the
+            // size of every slot, so a larger one can only be a bug in whatever
+            // produced it. Asserted rather than truncated: a silently shortened
+            // payload would be delivered as a valid frame with the wrong bytes.
+            std.debug.assert(event.payload.len <= buffer.len);
+            @memcpy(buffer[0..length], event.payload[0..length]);
+            self.controls[slot] = .{
+                .kind = event.kind,
+                .code = event.code,
+                .failure = event.failure,
+                .payload = buffer[0..length],
+            };
             self.count += 1;
         }
 

@@ -79,6 +79,29 @@ pub fn client() codec_type {
     return codec_type.init(.client);
 }
 
+/// The result of encoding one frame: its verdict, its bytes, and whether it was
+/// masked, together.
+///
+/// A helper rather than three calls because every encoder assertion wants all three,
+/// and reading the length from one encode and the bytes from another is a test that
+/// passes while asserting nothing.
+pub const Framed = struct {
+    result: codec.Encoded,
+    bytes: []const u8,
+    masked: bool,
+};
+
+/// Encodes one frame and returns everything the assertion needs.
+pub fn framed(
+    peer: *codec_type,
+    kind: codec.Kind,
+    fin: bool,
+    payload: []const u8,
+) Framed {
+    const encoded = peer.tx.encode(kind, fin, payload);
+    return .{ .result = encoded, .bytes = peer.tx.bytes(), .masked = peer.tx.last_was_masked() };
+}
+
 /// Selects and retires the one event a decode produced, asserting there is
 /// exactly one.
 pub fn take_only(peer: *codec_type) !codec.Decoded {

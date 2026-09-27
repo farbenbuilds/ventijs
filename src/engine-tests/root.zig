@@ -8,6 +8,7 @@
 
 test {
     _ = @import("ffi/lib_test.zig");
+    _ = @import("ffi/codec_abi_test.zig");
     _ = @import("socket/handles_test.zig");
     _ = @import("server/options_test.zig");
     _ = @import("server/registry_test.zig");
@@ -29,4 +30,5 @@ test {
     _ = @import("codec/fragment_test.zig");
     _ = @import("codec/backpressure_test.zig");
     _ = @import("codec/close_test.zig");
+    _ = @import("codec/handles_test.zig");
 }

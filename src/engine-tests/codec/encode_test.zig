@@ -12,22 +12,22 @@ const support = @import("frame_support.zig");
 
 test "the encoder produces an unmasked frame for a server" {
     var peer = support.server();
-    try testing.expectEqual(@as(usize, 7), peer.encode(.text, true, "hello").ok);
-    try testing.expect(!peer.last_was_masked());
-    const bytes = peer.outbound_bytes();
+    const frame = support.framed(&peer, .text, true, "hello");
+    try testing.expectEqual(@as(usize, 7), frame.result.ok);
+    try testing.expect(!frame.masked);
     // FIN plus the text opcode, and no mask bit.
-    try testing.expectEqual(@as(u8, 0x81), bytes[0]);
-    try testing.expectEqual(@as(u8, 0x00), bytes[1] & 0x80);
+    try testing.expectEqual(@as(u8, 0x81), frame.bytes[0]);
+    try testing.expectEqual(@as(u8, 0x00), frame.bytes[1] & 0x80);
 }
 
 test "the encoder produces a masked frame for a client" {
     var peer = support.client();
     // Two header bytes, a four-byte key, and five payload bytes.
-    try testing.expectEqual(@as(usize, 11), peer.encode(.text, true, "hello").ok);
-    try testing.expect(peer.last_was_masked());
-    const bytes = peer.outbound_bytes();
-    try testing.expectEqual(@as(u8, 0x81), bytes[0]);
-    try testing.expectEqual(@as(u8, 0x80), bytes[1] & 0x80);
+    const frame = support.framed(&peer, .text, true, "hello");
+    try testing.expectEqual(@as(usize, 11), frame.result.ok);
+    try testing.expect(frame.masked);
+    try testing.expectEqual(@as(u8, 0x81), frame.bytes[0]);
+    try testing.expectEqual(@as(u8, 0x80), frame.bytes[1] & 0x80);
 }
 
 test "a client draws a different masking key for every frame" {
@@ -35,29 +35,34 @@ test "a client draws a different masking key for every frame" {
     // frames on one connection must not come out byte-identical, or the mask is
     // doing nothing for anyone.
     var peer = support.client();
-    const first = peer.encode(.text, true, "same");
+    const first = support.framed(&peer, .text, true, "same");
+    // Copied because the transmit state holds one frame at a time: `first.bytes` and
+    // `second.bytes` are views of the same buffer, so comparing them without a copy
+    // compares the second frame with itself and passes whatever the key does.
     var first_bytes: [64]u8 = undefined;
-    @memcpy(first_bytes[0..first.ok], peer.outbound_bytes()[0..first.ok]);
+    @memcpy(first_bytes[0..first.result.ok], first.bytes[0..first.result.ok]);
 
-    const second = peer.encode(.text, true, "same");
-    try testing.expectEqual(first.ok, second.ok);
-    try testing.expect(!std.mem.eql(u8, first_bytes[0..first.ok], peer.outbound_bytes()[0..second.ok]));
+    const second = support.framed(&peer, .text, true, "same");
+    try testing.expectEqual(first.result.ok, second.result.ok);
+    try testing.expect(!std.mem.eql(u8, first_bytes[0..first.result.ok], second.bytes[0..second.result.ok]));
 }
 
 test "every encoded control frame is a legal 125-byte frame" {
     var peer = support.client();
     // Two header bytes, a four-byte key, and no payload.
-    try testing.expectEqual(@as(usize, 6), peer.encode(.ping, true, "").ok);
-    try testing.expectEqual(@as(usize, 131), peer.encode(.pong, true, "x" ** 125).ok);
-    try testing.expectEqual(codec.Failure.protocol_error, peer.encode(.ping, true, "x" ** 126).failed);
-    try testing.expectEqual(codec.Failure.protocol_error, peer.encode(.close, false, "").failed);
+    try testing.expectEqual(@as(usize, 6), support.framed(&peer, .ping, true, "").result.ok);
+    try testing.expectEqual(@as(usize, 131), support.framed(&peer, .pong, true, "x" ** 125).result.ok);
+    try testing.expectEqual(codec.Failure.protocol_error, support.framed(&peer, .ping, true, "x" ** 126).result.failed);
+    try testing.expectEqual(codec.Failure.protocol_error, support.framed(&peer, .close, false, "").result.failed);
 }
 
 test "the encoder refuses a payload over the cap" {
+    // A different capacity, so the shared fixture's type does not apply and the
+    // transmit state is reached directly rather than through a helper.
     const Small = codec.codec(8, 2);
     var peer = Small.init(.server);
-    try testing.expectEqual(codec.Failure.message_too_large, peer.encode(.text, true, "123456789").failed);
-    try testing.expectEqual(@as(usize, 10), peer.encode(.text, true, "12345678").ok);
+    try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789").failed);
+    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678").ok);
 }
 
 test "a round trip through the encoder and the decoder preserves the message" {
@@ -67,8 +72,8 @@ test "a round trip through the encoder and the decoder preserves the message" {
     for (messages) |message| {
         var encoder = support.client();
         var decoder = support.server();
-        const framed = encoder.encode(.text, true, message);
-        try testing.expectEqual(codec.Outcome.ok, decoder.feed(encoder.outbound_bytes()[0..framed.ok]).outcome);
+        const frame = support.framed(&encoder, .text, true, message);
+        try testing.expectEqual(codec.Outcome.ok, decoder.feed(frame.bytes[0..frame.result.ok]).outcome);
         const event = try support.take_only(&decoder);
         try testing.expectEqual(codec.Kind.text, event.kind);
         try testing.expectEqualStrings(message, event.payload);
@@ -84,10 +89,11 @@ test "an encoded close frame carries the code and reason the decoder reads back"
     payload[3] = 'k';
 
     var encoder = support.client();
-    try testing.expectEqual(@as(usize, 10), encoder.encode(.close, true, &payload).ok);
+    const frame = support.framed(&encoder, .close, true, &payload);
+    try testing.expectEqual(@as(usize, 10), frame.result.ok);
 
     var decoder = support.server();
-    try testing.expectEqual(codec.Outcome.ok, decoder.feed(encoder.outbound_bytes()).outcome);
+    try testing.expectEqual(codec.Outcome.ok, decoder.feed(frame.bytes).outcome);
     const event = try support.take_only(&decoder);
     try testing.expectEqual(codec.Kind.close, event.kind);
     try testing.expectEqual(@as(u16, 1011), event.code);

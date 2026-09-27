@@ -1,54 +1,33 @@
 //! The frame codec: one instance per WebSocket connection, driven by the Node
 //! stream that owns the socket.
 //!
-//! The split this module exists for is in
-//! `docs/adr/0001-transport-and-framing-ownership.md`. Node owns the transport
-//! because a drop-in `ws` replacement has to keep Node's `http.Server` upgrade
-//! event, `noServer`, `handleUpgrade`, `shouldHandle`, and the client half, and
-//! the pinned engine cannot adopt an already-accepted socket in any case. Zig owns
-//! the framing, because header parsing, masking, UTF-8 validation, and
-//! fragmentation are where a protocol bug is a memory-safety bug.
-//!
-//! So this is a parser and a formatter and nothing else. It never sees a socket,
-//! a file descriptor, or a Node object, it never allocates on the message path,
-//! and every buffer it owns is a comptime-sized array. What it owns is all of the
-//! state a connection needs to reassemble a message across reads, validate it
-//! incrementally, and refuse the frames RFC 6455 forbids.
-//!
-//! Four parts, split by responsibility rather than by size: `receive` holds the
-//! per-connection receive state, `transmit` formats one complete frame,
-//! `events_store` is the bounded store of decoded events, and `driver` is the feed
-//! loop that sequences the three. This module is what is left: the type that holds
-//! them together, and the surface a caller touches.
-//!
-//! The header codec itself is not reimplemented. Frame parsing, header encoding,
-//! and masking come from the same `zslay` package the engine route uses, so the
-//! two routes onto the wire agree by construction rather than by two
-//! implementations agreeing by inspection.
+//! `docs/adr/0001-transport-and-framing-ownership.md` records why the framing is
+//! here and the transport is not. This is a parser and a formatter: it never sees a
+//! socket, never allocates on the message path, and owns only comptime-sized buffers.
+//! Each part documents itself — `receive`, `encode`, `events_store`, `driver`,
+//! `ingest` — and header parsing, encoding, and masking all come from the same
+//! `zslay` the engine route uses, so the two routes onto the wire agree by
+//! construction rather than by two implementations agreeing by inspection.
 
 const zslay = @import("zslay");
 const driver = @import("driver.zig");
 const events = @import("events.zig");
 const inbound = @import("receive.zig");
+const copy_in = @import("ingest.zig");
+const outbound = @import("encode.zig");
 const result = @import("feed_result.zig");
 const store = @import("events_store.zig");
-const transmit = @import("encode.zig");
 
 pub const Kind = events.Kind;
 pub const Failure = events.Failure;
 pub const Decoded = inbound.Decoded;
-pub const control_capacity = inbound.control_capacity;
-pub const header_capacity = transmit.header_capacity;
-pub const Encoded = transmit.Encoded;
+pub const Encoded = outbound.Encoded;
 pub const Outcome = result.Outcome;
 pub const FeedResult = result.FeedResult;
 
-/// A frame codec for one connection.
-///
-/// `max_message` is the largest reassembled message the codec will accept and is
-/// the only size the caller has to choose; every other buffer follows from it.
-/// `control_slots` is how many control events may wait at once, which is cheap
-/// because a control payload is capped at 125 bytes.
+/// A frame codec for one connection. `max_message` is the largest reassembled message
+/// it accepts and the only size a caller chooses; every other buffer follows from it,
+/// and `control_slots` is cheap because a control payload is capped at 125 bytes.
 pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
     if (control_slots == 0) @compileError("codec needs at least one control slot");
 
@@ -58,19 +37,24 @@ pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
         pub const max_message_bytes = max_message;
 
         rx: inbound.receive(max_message) = undefined,
-        tx: transmit.transmit(max_message) = undefined,
+        tx: outbound.transmit(max_message) = undefined,
         events: store.event_store(control_slots) = .{},
 
-        /// Set by the driver when a frame is refused. A failure is latched rather
-        /// than returned once, because the connection is finished at that point
-        /// and every later call has to report the same reason.
+        /// Set by the driver when a frame is refused, latched rather than returned
+        /// once: the connection is finished, so every later call reports the same reason.
         failure: ?Failure = null,
+
+        /// Where the last `feed` or `ingest` stopped, latched for the same reason. The
+        /// boundary reports a refusal as the sign of its return, which leaves no room
+        /// in it for the offset, and a caller that cannot resume drops the rest of a
+        /// peer's frame.
+        resume_offset: usize = 0,
 
         /// Builds a codec for one role.
         pub fn init(role: zslay.EndpointRole) Self {
             return .{
                 .rx = inbound.receive(max_message).init(role),
-                .tx = transmit.transmit(max_message).init(role),
+                .tx = outbound.transmit(max_message).init(role),
             };
         }
 
@@ -85,11 +69,23 @@ pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
         /// the first pass they are plaintext, and a second pass over a masked
         /// frame is invalid UTF-8 by construction.
         pub fn feed(self: *Self, input: []const u8) FeedResult {
-            return driver.feed(Self, self, input);
+            return self.note(driver.feed(Self, self, input));
         }
 
+        /// Folds an input the caller must not see modified.
+        pub fn ingest(self: *Self, input: []const u8) FeedResult {
+            return self.note(copy_in.ingest(Self, self, input));
+        }
+
+        /// Latches a failure and reports it as an event where there is room.
         pub fn refuse(self: *Self, failure: Failure) FeedResult {
-            return driver.refuse(Self, self, failure);
+            return self.note(driver.refuse(Self, self, failure));
+        }
+
+        /// Records where a fold stopped, so the offset outlives the call.
+        fn note(self: *Self, folded: FeedResult) FeedResult {
+            self.resume_offset = folded.consumed;
+            return folded;
         }
 
         /// Events waiting to be taken, including one already selected.
@@ -111,23 +107,7 @@ pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
             self.events.take();
         }
 
-        /// Formats one frame and returns its framed length.
-        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8) Encoded {
-            return self.tx.encode(kind, fin, payload);
-        }
-
-        /// The framed bytes waiting to be copied out.
-        pub fn outbound_bytes(self: *const Self) []const u8 {
-            return self.tx.bytes();
-        }
-
-        /// Whether the last `encode` produced a masked frame, which the caller
-        /// needs in order to assert the role was honoured.
-        pub fn last_was_masked(self: *const Self) bool {
-            return self.tx.last_was_masked();
-        }
-
-        /// The latched failure, or null while the connection is healthy.
+        /// The latched failure, or null while healthy.
         pub fn pending_failure(self: *const Self) ?Failure {
             return self.failure;
         }
@@ -138,8 +118,12 @@ pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
             return events.close_code_for(failure);
         }
 
-        /// Drops every buffered byte and event, for a connection being abandoned
-        /// without a close handshake.
+        /// Where the last fold stopped, for a caller resuming a partial input.
+        pub fn resume_at(self: *const Self) usize {
+            return self.resume_offset;
+        }
+
+        /// Drops every buffered byte and event, for a connection abandoned early.
         pub fn reset(self: *Self) void {
             self.rx.reset();
             self.events.reset();
