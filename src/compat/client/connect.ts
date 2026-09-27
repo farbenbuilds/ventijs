@@ -9,7 +9,7 @@ import { createSocketState } from "../socket/state";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED } from "../ready-state";
-import { parseAddress } from "./address";
+import { parseAddress, type ClientAddress } from "./address";
 import { normalizeProtocols, protocolSet, type ProtocolSet } from "./protocols";
 import { buildRequest, newKey, type Handshake } from "./request";
 import { respond } from "./open";
@@ -30,6 +30,15 @@ export type Attempt = {
   readonly offered: ProtocolSet;
   transport: Socket;
   handshake: Handshake;
+  /// The address this attempt is for, which is what a redirect's host and scheme are
+  /// compared against: the original one, not the previous hop. A chain that wanders
+  /// off `wss:` is refused on the first downgrade, wherever in the chain it happens.
+  address: ClientAddress;
+  /// The credentials the caller dialled with, kept while a redirect stays on the same
+  /// host and dropped the moment it does not. A `Location` names a URL and carries no
+  /// credentials, so without this a same-host redirect would silently un authenticate
+  /// a client that authenticated.
+  auth: string | undefined;
   redirects: number;
 };
 
@@ -49,33 +58,43 @@ export function connectSocket(
   const state = createSocketState();
   state.isServer = false;
   state.url = parsed.url;
+  state.closeTimeout = normalized.closeTimeout;
+  state.autoPong = normalized.autoPong;
   const socket = buildSocketRecord(state);
-  begin(state, normalized, requested, parsed.url);
-  return socket;
-}
-
-/// Opens the transport, writes the request, and reads the response.
-function begin(
-  state: SocketState,
-  options: NormalizedClientOptions,
-  requested: readonly string[],
-  url: string,
-): void {
-  const address = parseAddress(url);
-  const transport = openTransport(address);
+  const transport = openTransport(parsed);
   const attempt: Attempt = {
     state,
-    options,
+    options: normalized,
     requested,
     offered: protocolSet(requested),
     transport,
-    handshake: buildRequest(address, options, requested, newKey()),
+    handshake: buildRequest(parsed, normalized, requested, newKey()),
+    address: parsed,
+    auth: parsed.auth,
     redirects: 0,
   };
+  // Deliberately not attached yet: the socket's transport and codec are attached when
+  // the 101 arrives, because the response is not frames, and a codec that read it would
+  // refuse the connection with a 1002 before a single legitimate frame was sent. Until
+  // then the socket is `CONNECTING` with no transport, which is what makes
+  // `close()` and `terminate()` on a client that has not opened report the aborted
+  // handshake the way `ws` does.
+  dial(attempt);
+  return socket;
+}
+
+/// Wires an attempt's transport and reads its response.
+///
+/// Exported because a redirect replaces the transport and re-enters here: one dial is
+/// the unit of work, and a chain of redirects is several dials against one socket.
+export function dial(attempt: Attempt): void {
+  const { transport, options } = attempt;
   transport.on("error", (error: Error) => {
     abort(attempt, connectionError(error));
   });
   if (options.handshakeTimeout !== undefined) {
+    // Re-armed for every hop, because each dial is a fresh handshake and a caller who
+    // set a deadline meant it per handshake rather than for the whole chain.
     transport.setTimeout(options.handshakeTimeout, () => {
       abort(attempt, createError("ERR_PROTOCOL", "Opening handshake has timed out"));
     });

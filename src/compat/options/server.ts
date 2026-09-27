@@ -1,6 +1,11 @@
 import type { NormalizedServerOptions } from "../../types/options";
 import type { ServerOptions } from "../../types/ws";
-import { DEFAULT_MAX_PAYLOAD, invalidOption, normalizePerMessageDeflate } from "./shared";
+import {
+  DEFAULT_MAX_PAYLOAD,
+  closeTimeoutOf,
+  invalidOption,
+  normalizePerMessageDeflate,
+} from "./shared";
 
 export function normalizeServerOptions(options?: ServerOptions): NormalizedServerOptions {
   // ws copies own enumerable properties before reading, so inherited
@@ -27,6 +32,7 @@ export function normalizeServerOptions(options?: ServerOptions): NormalizedServe
     maxPayload: source.maxPayload ?? DEFAULT_MAX_PAYLOAD,
     skipUTF8Validation: source.skipUTF8Validation ?? false,
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, false),
+    closeTimeout: closeTimeoutOf(source),
     verifyClient: source.verifyClient ?? null,
     handleProtocols: source.handleProtocols ?? null,
     WebSocket: source.WebSocket,

@@ -3,6 +3,7 @@ import type { ClientOptions } from "../../types/ws";
 import {
   DEFAULT_MAX_PAYLOAD,
   DEFAULT_MAX_REDIRECTS,
+  closeTimeoutOf,
   invalidOption,
   normalizePerMessageDeflate,
 } from "./shared";
@@ -27,6 +28,11 @@ export function normalizeClientOptions(options?: ClientOptions): NormalizedClien
     skipUTF8Validation: source.skipUTF8Validation ?? false,
     allowSynchronousEvents: source.allowSynchronousEvents ?? true,
     autoPong: source.autoPong ?? true,
+    // `closeTimeout` is read rather than declared: `@types/ws` does not declare it
+    // either, so a caller passing it in typed code is refused by `ws` too. Accepting
+    // it here keeps the runtime behaviour identical, which is the only part a
+    // difference here would be observable in.
+    closeTimeout: closeTimeoutOf(source),
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, true),
     origin: source.origin,
     headers: source.headers === undefined ? undefined : { ...source.headers },

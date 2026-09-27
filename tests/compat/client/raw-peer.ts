@@ -27,11 +27,18 @@ export async function rawAcceptServer(
   const server: Server = createServer((socket) => {
     sockets.push(socket);
     let buffered = Buffer.alloc(0);
+    let answered = false;
     socket.on("error", () => undefined);
     socket.on("data", (chunk) => {
+      // Once, and only to the opening request. A second response would be a peer
+      // speaking HTTP in the middle of a WebSocket connection, which is a protocol
+      // error the client is right to refuse, and it would hide whatever this peer was
+      // built to test.
+      if (answered) return;
       buffered = Buffer.concat([buffered, chunk as Buffer]);
       const end = buffered.indexOf("\r\n\r\n");
       if (end === -1) return;
+      answered = true;
       const key = /sec-websocket-key: (.+)\r\n/i.exec(
         buffered.subarray(0, end).toString("latin1"),
       )?.[1];

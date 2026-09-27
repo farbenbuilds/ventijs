@@ -1,4 +1,5 @@
 import type { SocketEventMap, SocketState } from "../../types/socket";
+import { DEFAULT_CLOSE_TIMEOUT } from "../options/shared";
 import { createRegistry } from "../events/registry";
 import { CONNECTING } from "../ready-state";
 
@@ -48,6 +49,9 @@ export function createSocketState(): SocketState {
     attachment: null,
     transport: null,
     codec: null,
+    closeTimer: null,
+    closeTimeout: DEFAULT_CLOSE_TIMEOUT,
+    autoPong: true,
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,
     warned: new Set<string>(),

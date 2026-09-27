@@ -13,6 +13,7 @@ import { closeConnection } from "./lifecycle";
 import { terminateConnection } from "./transport";
 import { pauseConnection, resumeConnection } from "./gating";
 import { controlFrame } from "./control";
+import { bufferedAmountOf } from "./payload";
 import { sendData } from "./send";
 import type { SocketState } from "../../types/socket";
 import { brandSocket } from "./state";
@@ -56,7 +57,11 @@ export function buildSocketRecord(state: SocketState): WebSocket {
       state.binaryType = value as BinaryTypeValue;
     },
     get bufferedAmount(): number {
-      return state.bufferedAmount;
+      // Read live rather than returning the cached count: the number a caller polls to
+      // decide whether to stop sending changes as the queue drains, without any send
+      // happening to refresh it. Which queue depends on the route, so the choice lives
+      // in one function rather than in this getter.
+      return bufferedAmountOf(state);
     },
     get extensions(): string {
       return state.extensions;

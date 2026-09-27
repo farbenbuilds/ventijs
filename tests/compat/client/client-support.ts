@@ -7,7 +7,7 @@
 //! waiting for.
 
 import { WebSocketServer as WsServer, type WebSocket as WsSocket } from "ws";
-import { WebSocket } from "../../../src/index";
+import { WebSocket, type ClientOptions } from "../../../src/index";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
 
 export type Harness = {
@@ -65,9 +65,10 @@ export function open(
   url: string,
   setup?: (socket: WebSocket) => void,
   protocols?: string | string[],
+  options?: ClientOptions,
 ): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url, protocols);
+    const socket = new WebSocket(url, protocols, options);
     socket.on("error", reject);
     socket.on("open", () => resolve(socket));
     setup?.(socket);
@@ -80,9 +81,10 @@ export async function openWithPeer(
   onPeer: (peer: Peer) => void,
   setup?: (socket: WebSocket) => void,
   protocols?: string | string[],
+  options?: ClientOptions,
 ): Promise<{ socket: WebSocket; peer: Peer; harness: Harness }> {
   const { harness, accepted } = await wsServer(onPeer);
-  const socket = await open(harness.url, setup, protocols);
+  const socket = await open(harness.url, setup, protocols, options);
   return { socket, peer: await accepted, harness };
 }
 

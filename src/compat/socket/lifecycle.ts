@@ -5,7 +5,7 @@ import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
 import { toCloseReason } from "./close-reason";
-import { closeFramed } from "./codec-close";
+import { armCloseTimeout, closeFramed } from "./codec-close";
 import { bufferedAmountOf } from "./payload";
 import { closeFailure } from "./close-failure";
 
@@ -13,6 +13,12 @@ const EMPTY = Buffer.alloc(0);
 
 export function finishConnection(state: SocketState, code: number, reason: Buffer): void {
   if (state.readyState === CLOSED) return;
+  // Dropped here because this is the only path to `CLOSED`, and a deadline that
+  // outlived its socket would keep the process alive for no reason.
+  if (state.closeTimer !== null) {
+    clearTimeout(state.closeTimer);
+    state.closeTimer = null;
+  }
   state.readyState = CLOSED;
   state.closeCode = code;
   state.closeReason = reason;
@@ -83,6 +89,7 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   const closeReason = toCloseReason(reason);
   if (state.codec !== null) {
     closeFramed(state, closeCode, closeReason);
+    armCloseTimeout(state, state.closeTimeout);
     return;
   }
   if (state.attachment === null) {

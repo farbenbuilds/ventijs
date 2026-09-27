@@ -4,6 +4,14 @@ import { createError } from "../errors";
 
 export const DEFAULT_MAX_PAYLOAD = 100 * 1024 * 1024;
 export const DEFAULT_MAX_REDIRECTS = 10;
+
+/// How long a close handshake may stay unfinished before the socket is torn down.
+///
+/// `ws` bounds this at 30 seconds, and the bound is what makes a close a decision
+/// rather than a hope: a peer that receives a close frame and never answers one is a
+/// hung or crashed process, and without a deadline its socket sits at `CLOSING` for
+/// the life of the process, holding its transport and its codec slot.
+export const DEFAULT_CLOSE_TIMEOUT = 30_000;
 export const DEFAULT_THRESHOLD = 1024;
 export const DEFAULT_CONCURRENCY_LIMIT = 10;
 
@@ -66,4 +74,22 @@ export function normalizePerMessageDeflate(
     zlibDeflateOptions: options.zlibDeflateOptions,
     zlibInflateOptions: options.zlibInflateOptions,
   };
+}
+
+/// The close deadline, in milliseconds, or 0 for none.
+///
+/// A non-number or a negative value is refused rather than coerced: `setTimeout`
+/// would treat a string as a delay and a negative as zero, and a caller who passed
+/// nonsense would get a socket that closes instantly and a different one that never
+/// closes at all, depending on the value.
+export function closeTimeoutOf(source: unknown): number {
+  const raw = (source as { readonly closeTimeout?: unknown }).closeTimeout;
+  if (raw === undefined) return DEFAULT_CLOSE_TIMEOUT;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
+    invalidOption(
+      `The closeTimeout option must be a non-negative number (received ${String(raw)})`,
+      RangeError,
+    );
+  }
+  return raw;
 }

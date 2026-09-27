@@ -38,6 +38,9 @@ export function buildRequest(
   options: NormalizedClientOptions,
   protocols: readonly string[],
   key: string,
+  /// Credentials carried forward from an earlier hop, because a redirect's `Location`
+  /// names a URL and not the credentials a caller put in the one they dialled.
+  carriedAuth?: string,
 ): Handshake {
   const headers: Record<string, string> = {
     "Sec-WebSocket-Version": String(options.protocolVersion),
@@ -51,8 +54,9 @@ export function buildRequest(
     if (options.protocolVersion < 13) headers["Sec-WebSocket-Origin"] = options.origin;
     else headers.Origin = options.origin;
   }
-  if (address.auth !== undefined) {
-    headers.Authorization = `Basic ${Buffer.from(address.auth, "utf8").toString("base64")}`;
+  const credentials = address.auth ?? carriedAuth;
+  if (credentials !== undefined) {
+    headers.Authorization = `Basic ${Buffer.from(credentials, "utf8").toString("base64")}`;
   }
   const withCaller = { ...headers, ...lowerCased(options.headers) };
   return { key, headers: withCaller, request: render(address, withCaller) };
