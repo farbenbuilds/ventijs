@@ -65,21 +65,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Unit tests
-        # The native addon is not built in this job, so every suite that attaches
-        # to a native connection stays out: the binding lifecycle tests, the compat
-        # facade suite that adopts one, and the whole `ws` parity set, which
-        # compares a native-attached ventijs socket against `ws` and so needs a
-        # real server on both sides. The binding job in zig-test.yml runs them.
+        # The native addon is not built in this job, and every suite that builds a
+        # WebSocket needs it: the frame codec is in the addon, so a facade socket
+        # cannot even be attached without one. That is everything under
+        # `tests/compat` except option normalisation, all of `tests/conformance`, and
+        # all of `tests/binding`. The binding job in zig-test.yml runs the whole
+        # suite, addon and all.
         #
-        # The list is per file, so a new conformance suite that adopts a native
-        # connection has to be added here as well. It fails in this job on a
-        # missing addon if it is not, which reads as a broken test rather than a
-        # misplaced one; the binding job in zig-test.yml runs all of them.
-        run: >-
-          pnpm exec vitest run
-          --exclude 'tests/binding/**'
-          --exclude 'tests/compat/socket/**'
-          --exclude 'tests/compat/stream.test.ts'
-          --exclude 'tests/conformance/close.conformance.test.ts'
-          --exclude 'tests/conformance/control.conformance.test.ts'
-          --exclude 'tests/conformance/send-after-close.conformance.test.ts'
+        # The paths are named by inclusion for the same reason the old list was named
+        # by exclusion and then went stale: an exclusion list has to be edited every
+        # time a suite starts needing the addon, and a suite that is missed fails here
+        # on a missing addon, which reads as a broken test rather than a misplaced
+        # one. An inclusion list only needs editing when a suite genuinely stops
+        # needing one, and a new suite is in the binding job by default.
+        run: pnpm exec vitest run tests/protocol tests/compat/options
