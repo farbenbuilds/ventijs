@@ -2,15 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SHARD_COUNT,
   SHARD_PORT_BASE,
+  maxShardsFor,
   planShards,
-  weightTableIsConsistent,
+  resolveShardCount,
 } from "../autobahn/shard-plan.ts";
 import { shardContainerName, shardSpec } from "../autobahn/shard-spec.ts";
 import { MODE_COUNTS } from "../autobahn/suite-mode.ts";
-import { COMPRESSION_CASES, TOTAL_CASES } from "../autobahn/expected-cases.ts";
 import { HOST_GATEWAY } from "../autobahn/docker-args.ts";
-
-const ALL_GROUPS = MODE_COUNTS.full.groups;
 
 function selected(plan: ReturnType<typeof planShards>): readonly string[] {
   return plan.flatMap((shard) => [...shard.groups]).sort();
@@ -54,10 +52,23 @@ describe("shard plan", () => {
     expect(critical).toBeLessThan(unsplit.costSeconds);
   });
 
-  it("rejects a shard count outside the supported range", () => {
+  it("rejects a shard count that is not a positive integer", () => {
     expect(() => planShards(0, "full")).toThrow(RangeError);
-    expect(() => planShards(17, "full")).toThrow(RangeError);
     expect(() => planShards(2.5, "full")).toThrow(RangeError);
+    expect(() => planShards(-1, "full")).toThrow(RangeError);
+  });
+
+  it("rejects more shards than the mode has groups", () => {
+    // A shard that owns no group runs no cases, so the union is short of the
+    // mode's total and the run fails on the count check rather than on the plan.
+    // A validator that accepted this would approve a configuration that cannot
+    // pass, and the failure would land after the build.
+    const framing = MODE_COUNTS.framing.groups.length;
+    const full = MODE_COUNTS.full.groups.length;
+    expect(() => planShards(framing + 1, "framing")).toThrow(RangeError);
+    expect(() => planShards(full + 1, "full")).toThrow(RangeError);
+    expect(() => planShards(framing, "framing")).not.toThrow();
+    expect(() => planShards(full, "full")).not.toThrow();
   });
 
   it("is a pure function of the count and the mode", () => {
@@ -96,32 +107,28 @@ describe("the CI default", () => {
   it("plans one shard per runner core", () => {
     expect(planShards(DEFAULT_SHARD_COUNT, "full")).toHaveLength(DEFAULT_SHARD_COUNT);
   });
+
+  it("is inside the ceiling of both selections", () => {
+    for (const mode of ["framing", "full"] as const) {
+      expect(DEFAULT_SHARD_COUNT).toBeLessThanOrEqual(maxShardsFor(mode));
+    }
+  });
 });
 
-describe("weight table", () => {
-  it("agrees with the two totals the repository asserts independently", () => {
-    // The per-group case counts are a derivation, so they are cross-checked
-    // against `TOTAL_CASES` and the deflate case count rather than trusted.
-    expect(weightTableIsConsistent()).toBe(true);
+describe("the shared shard-count resolver", () => {
+  it("accepts a positive integer as a string or a number", () => {
+    expect(resolveShardCount("4", "full")).toBe(4);
+    expect(resolveShardCount(1, "framing")).toBe(1);
   });
 
-  it("covers every group a mode can select, and prices every one", () => {
-    const plan = planShards(4, "full");
-    for (const shard of plan) {
-      expect(shard.groups.length).toBeGreaterThan(0);
-      expect(shard.costSeconds).toBeGreaterThan(0);
-    }
-    expect([...ALL_GROUPS].sort()).toEqual(selected(plan));
+  it("applies the same ceiling the plan does", () => {
+    expect(() => resolveShardCount(String(maxShardsFor("framing") + 1), "framing")).toThrow(
+      RangeError,
+    );
   });
 
-  it("prices the deflate groups as near-free, matching the measured run", () => {
-    // 2086s for 301 framing cases and 2100s for all 517 puts the 216 deflate
-    // cases at about 14s together, so they cannot carry a share of the split.
-    const framing = planShards(1, "framing")[0];
-    const full = planShards(1, "full")[0];
-    const deflate = full.costSeconds - framing.costSeconds;
-    expect(deflate).toBeLessThan(framing.costSeconds * 0.05);
-    expect(COMPRESSION_CASES).toBe(216);
-    expect(TOTAL_CASES).toBe(517);
+  it("rejects the empty and non-numeric strings the environment can hold", () => {
+    expect(() => resolveShardCount("", "full")).toThrow(RangeError);
+    expect(() => resolveShardCount("many", "full")).toThrow(RangeError);
   });
 });

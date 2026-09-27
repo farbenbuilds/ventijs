@@ -76,8 +76,10 @@ pub fn server_dropped_messages(env: napi.Env, server: u40) !u64 {
 /// message's opcode with the next message's bytes.
 pub fn take_socket_message(env: napi.Env, server: u40, connection: u64) !?napi.Val {
     const target = instance.lookup(env, server) orelse return error.UnknownServer;
-    _ = instance.resolve_connection(target, connection) orelse return null;
-    const view = queues.take_inbound(&target.sockets) orelse return null;
+    const handle = instance.resolve_connection(target, connection) orelse return null;
+    const view = queues.take_inbound(&target.sockets, handle.index, handle.generation) orelse {
+        return null;
+    };
     defer queues.release_inbound(&target.sockets, view);
     const buffer = try env.createBuffer(view.bytes.len);
     @memcpy(buffer.data[0..view.bytes.len], view.bytes);

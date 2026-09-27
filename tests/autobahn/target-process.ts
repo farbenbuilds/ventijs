@@ -21,15 +21,28 @@ export type TargetAddress = {
 const READY_TIMEOUT_MS = 30_000;
 const DEFAULT_ADDRESS: TargetAddress = { port: DEFAULT_TARGET_PORT, host: DEFAULT_TARGET_HOST };
 
-function environment(address: TargetAddress): { readonly port: string; readonly host: string } {
-  return {
-    port: process.env["AUTOBAHN_TARGET_PORT"] ?? String(address.port),
-    host: process.env["AUTOBAHN_TARGET_HOST"] ?? address.host,
-  };
+/// Resolves the port and host a target binds.
+///
+/// The environment override applies only to the default address. A sharded run
+/// passes an explicit port per shard, and honouring one global override there
+/// would start every shard on the same port, so three of them would fail to bind
+/// and the plan would be discarded with no diagnostic.
+function environment(
+  address: TargetAddress,
+  explicit: boolean,
+): {
+  readonly port: string;
+  readonly host: string;
+} {
+  const port = explicit
+    ? address.port
+    : Number(process.env["AUTOBAHN_TARGET_PORT"] ?? address.port);
+  const host = explicit ? address.host : (process.env["AUTOBAHN_TARGET_HOST"] ?? address.host);
+  return { port: String(port), host };
 }
 
-function launch(address: TargetAddress): TargetChild {
-  const { port, host } = environment(address);
+function launch(address: TargetAddress, explicit: boolean): TargetChild {
+  const { port, host } = environment(address, explicit);
   return spawn(process.execPath, [TARGET_ENTRY_PATH], {
     env: { ...process.env, AUTOBAHN_TARGET_PORT: port, AUTOBAHN_TARGET_HOST: host },
     stdio: ["ignore", "pipe", "pipe"],
@@ -44,8 +57,9 @@ function describeExit(code: number | null, signal: NodeJS.Signals | null, detail
 /// Starts one target and resolves once it has reported its bound port. The child
 /// is reaped on every path out of the runner, so a failed probe, a failed gate,
 /// and SIGINT all leave no engine thread behind.
-export function startTarget(address: TargetAddress = DEFAULT_ADDRESS): Promise<TargetProcess> {
-  const child = launch(address);
+export function startTarget(address?: TargetAddress): Promise<TargetProcess> {
+  const explicit = address !== undefined;
+  const child = launch(address ?? DEFAULT_ADDRESS, explicit);
   trackTarget(child);
   const stderrLines = forwardStderr(child);
   return new Promise((resolve, reject) => {

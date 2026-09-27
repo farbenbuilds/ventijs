@@ -87,9 +87,10 @@ describe("the decision and the workflow filter", () => {
       }
     }
     expect(listed.length).toBeGreaterThan(0);
-    for (const path of listed) {
-      if (path === "src/**") continue;
-      expect(ENGINE_PATHS).toContain(path);
-    }
+    // No exemption list. `src/**` used to be skipped here, which is exactly the
+    // entry this test exists to catch, so a workflow that re-added it would have
+    // been silently approved.
+    expect(listed).not.toContain("src/**");
+    for (const path of listed) expect(ENGINE_PATHS).toContain(path);
   });
 });

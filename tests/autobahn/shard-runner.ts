@@ -27,7 +27,10 @@ function prepare(shard: Shard): void {
 /// shard's name and identity instead of its output.
 export async function runShards(shards: readonly Shard[]): Promise<readonly ShardResult[]> {
   for (const shard of shards) prepare(shard);
-  const settled = await Promise.all(
+  // Settled, not raced: a shard whose report will not parse must not discard the
+  // other shards' evidence. A rejected read becomes a failed shard the failure
+  // message names, and the gate still holds the union to the mode's totals.
+  const settled = await Promise.allSettled(
     shards.map(async (shard) => {
       const name = shardContainerName(shard.id);
       try {
@@ -42,5 +45,12 @@ export async function runShards(shards: readonly Shard[]): Promise<readonly Shar
       }
     }),
   );
-  return settled;
+  return settled.map((entry, index) => {
+    if (entry.status === "fulfilled") return entry.value;
+    const shard = shards[index];
+    process.stderr.write(
+      `autobahn: shard ${shard.id} report unreadable: ${String(entry.reason)}\n`,
+    );
+    return { shard, code: 127, cases: [] };
+  });
 }

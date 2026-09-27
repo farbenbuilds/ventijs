@@ -5,8 +5,7 @@ import { planShards } from "../autobahn/shard-plan.ts";
 import { duplicateCaseIds, silentShards, unionCases } from "../autobahn/shard-reports.ts";
 import type { ShardResult } from "../autobahn/shard-reports.ts";
 import type { CaseReport } from "../autobahn/report-index.ts";
-import { rollupCosts } from "../autobahn/cost-rollup.ts";
-import { formatCostRollup } from "../autobahn/cost-rollup.ts";
+import { formatCostRollup, rollupCosts } from "../autobahn/cost-rollup.ts";
 
 function caseReport(
   id: string,
@@ -90,9 +89,11 @@ describe("the gate over a union", () => {
     expect(gate.violations.map((violation) => violation.kind)).toContain("count-total");
   });
 
-  it("names the missing total rather than passing an empty union", () => {
+  it("fails an empty union on the count, naming the total it expected", () => {
     const gate = evaluateGate([], "framing");
     expect(gate.ok).toBe(false);
+    const violation = gate.violations.find((entry) => entry.kind === "count-total");
+    expect(violation?.detail).toContain(String(MODE_COUNTS.framing.total));
   });
 });
 

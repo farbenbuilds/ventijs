@@ -17,19 +17,21 @@ function present(server: object, key: string): boolean {
   return key in server;
 }
 
-test("clientTracking false leaves clients undefined, as ws does", () => {
-  // `ws` only adds the property when tracking is truthy, so an empty set is a
-  // visible difference: `server.clients.size` is 0 in ws and throws here, and
-  // `for (const c of server.clients)` iterates nothing in ws and throws here.
-  const reference = new WsServer({ clientTracking: false, noServer: true });
-  expect(read(reference, "clients")).toBeUndefined();
+test.each([true, false])(
+  "the clients property is present exactly as ws has it (%s)",
+  (tracking) => {
+    // `ws` assigns `clients` only when `clientTracking` is truthy, so with tracking
+    // off the key does not exist at all. Present-and-undefined is a third thing
+    // that matches neither: it survives `Object.keys`, a spread, and
+    // `JSON.stringify`, all of which `ws` would drop.
+    const reference = new WsServer({ clientTracking: tracking, noServer: true });
+    const ours = new WebSocketServer({ clientTracking: tracking, noServer: true });
+    expect(present(ours, "clients")).toBe(present(reference, "clients"));
+    expect(read(ours, "clients")).toEqual(read(reference, "clients"));
+  },
+);
 
-  const ours = new WebSocketServer({ clientTracking: false, noServer: true });
-  expect(read(ours, "clients")).toBeUndefined();
-  expect(present(ours, "clients")).toBe(true);
-});
-
-test("clientTracking true adds a set in both", () => {
+test("clientTracking true adds an empty set in both", () => {
   const reference = new WsServer({ noServer: true });
   expect((read(reference, "clients") as Set<unknown>).size).toBe(0);
 

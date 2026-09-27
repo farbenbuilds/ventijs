@@ -13,8 +13,18 @@ const NOT_ATTACHED =
 ///
 /// `ws` invokes the callback when one is given and emits `error` on the socket
 /// when one is not, latched once so a second failure is not a second event.
-/// Discarding the error instead left a caller with no signal at all: no callback,
-/// no `error` event, and `readyState` unchanged.
+/// Reports a failed send through whichever channel the caller has.
+///
+/// `ws` splits this in two and so does ventijs:
+///
+/// - A socket that is not `OPEN` goes to `sendAfterClose`, which accounts the
+///   bytes, reports through the callback if one was given, and does nothing else.
+///   No `error` event, no close, `readyState` untouched, so a caller that sends
+///   during a close already in progress cannot have its socket torn down from
+///   under it.
+/// - A send that failed on an *open* socket goes to `emitErrorAndClose`: latch
+///   `CLOSING`, emit `error` once, then close. That is the only path that emits,
+///   and it is the only one a caller with no callback has anything to observe.
 function reportFailure(state: SocketState, callback: unknown, error: Error): void {
   if (typeof callback === "function") {
     defer(callback, error);
@@ -33,8 +43,11 @@ export function sendData(
   const payload = toPayload(data);
   const failure = resolveCallback(options, callback);
   if (state.readyState !== OPEN) {
+    // `sendAfterClose`: the bytes are accounted and the callback is told, and
+    // nothing else happens. Routing this through `reportFailure` would close a
+    // socket that was merely mid-close.
     state.bufferedAmount += payload.bytes.length;
-    reportFailure(state, failure, notOpenError(state.readyState));
+    defer(failure, notOpenError(state.readyState));
     return;
   }
   if (state.attachment === null) {
@@ -84,8 +97,10 @@ function applySendStatus(
       return;
     case "closing":
     case "closed":
+      // The engine says the connection is gone, so this is `sendAfterClose` and
+      // not a send failure: the bytes are accounted and the caller is told.
       state.bufferedAmount += length;
-      reportFailure(state, callback, notOpenError(state.readyState));
+      defer(callback, notOpenError(state.readyState));
       return;
     case "invalid-handle":
       reportFailure(

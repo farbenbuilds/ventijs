@@ -34,8 +34,9 @@ export const SHARD_PORT_BASE = 9401;
 /// local run with the variable unset stays unsplit.
 export const DEFAULT_SHARD_COUNT = 4;
 
-const MAX_SHARD_COUNT = 16;
-
+/// More shards than groups would leave an empty shard, which runs zero cases and
+/// fails the run through the count check rather than through the plan. The
+/// effective ceiling is therefore the group's own count, applied per mode.
 type Weights = {
   /// Seconds of `wstest` time per case, per group.
   readonly groups: Readonly<Record<string, number>>;
@@ -84,13 +85,34 @@ function pack(
   return bins;
 }
 
-/// Splits a mode's groups into `shardCount` shards balanced by expected cost.
-export function planShards(shardCount: number, mode: SuiteMode): readonly Shard[] {
-  if (!Number.isInteger(shardCount) || shardCount < 1 || shardCount > MAX_SHARD_COUNT) {
+/// The largest usable shard count for a mode.
+///
+/// A shard that owns no group runs no cases, and the union is then short of the
+/// mode's total, so the ceiling is the number of groups rather than a fixed
+/// number: a validator that accepted more would approve a configuration that
+/// cannot pass.
+export function maxShardsFor(mode: SuiteMode): number {
+  return MODE_COUNTS[mode].groups.length;
+}
+
+/// Validates a shard count against a mode, from the environment or from the flag.
+///
+/// One resolver, used by the runner, by the plan self-check, and by the flag, so a
+/// value accepted in one place cannot be rejected in another.
+export function resolveShardCount(raw: string | number, mode: SuiteMode): number {
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  const max = maxShardsFor(mode);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) {
     throw new RangeError(
-      `AUTOBAHN_SHARDS must be an integer in 1..${MAX_SHARD_COUNT}, got ${shardCount}`,
+      `shard count must be an integer in 1..${max} for the ${mode} selection, got ${String(raw)}`,
     );
   }
+  return parsed;
+}
+
+/// Splits a mode's groups into `shardCount` shards balanced by expected cost.
+export function planShards(shardCount: number, mode: SuiteMode): readonly Shard[] {
+  resolveShardCount(shardCount, mode);
   const groups = MODE_COUNTS[mode].groups;
   const priced = groups.map((group) => ({ group, weight: costOf([group]) }));
   return pack(priced, shardCount).map((owned, id) => ({

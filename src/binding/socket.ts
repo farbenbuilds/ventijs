@@ -25,8 +25,8 @@ function assertPayload(data: Uint8Array): void {
   if (!(data instanceof Uint8Array)) {
     throw guardError(
       "ventijs: socket payload must be a Uint8Array",
-      TypeError,
       "ERR_INVALID_OPTION",
+      TypeError,
     );
   }
 }
@@ -38,8 +38,8 @@ function statusFromOrdinal(ordinal: number): EngineStatus {
   if (status === undefined) {
     throw guardError(
       `ventijs: unknown native socket status ${ordinal}`,
-      RangeError,
       "ERR_PROTOCOL",
+      RangeError,
     );
   }
   return ENGINE_STATUS_BY_NATIVE[status];
@@ -47,7 +47,7 @@ function statusFromOrdinal(ordinal: number): EngineStatus {
 
 function assertCloseCode(code: number): void {
   if (!Number.isInteger(code) || code < 0 || code > MAX_UINT16) {
-    throw guardError(`ventijs: close code must be a uint16, got ${code}`);
+    throw guardError(`ventijs: close code must be a uint16, got ${code}`, "ERR_INVALID_CLOSE_CODE");
   }
 }
 

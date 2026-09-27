@@ -1,4 +1,4 @@
-import { DEFAULT_SHARD_COUNT } from "./shard-plan.ts";
+import { DEFAULT_SHARD_COUNT, resolveShardCount } from "./shard-plan.ts";
 import type { SuiteMode } from "./suite-mode.ts";
 
 /// How much of the suite a run selects, how it is split, and whether a
@@ -32,18 +32,14 @@ export const USAGE = [
   "              cannot echo, so a failing run still captures suite evidence",
 ].join("\n");
 
-function shardCount(raw: string | undefined, present: boolean): number {
+function shardCount(raw: string | undefined, present: boolean, mode: SuiteMode): number {
   // A present flag with no value is an error, not a default: silently falling
   // back to one shard would turn a typo into a 35-minute run.
   if (raw === undefined || raw === "") {
     if (present) throw new RangeError("--shards expects a positive integer, got no value");
     return 1;
   }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new RangeError(`shard count must be a positive integer, got ${JSON.stringify(raw)}`);
-  }
-  return parsed;
+  return resolveShardCount(raw, mode);
 }
 
 /// Parses argv, and reads `AUTOBAHN_SHARDS` when the flag is absent.
@@ -58,11 +54,12 @@ export function parseOptions(argv: readonly string[]): RunOptions {
   }
   const index = argv.indexOf("--shards");
   const raw = index === -1 ? process.env["AUTOBAHN_SHARDS"] : argv[index + 1];
+  const mode: SuiteMode = flags.has("--full") ? "full" : "framing";
   return {
     help: flags.has("--help"),
     force: flags.has("--force"),
-    mode: flags.has("--full") ? "full" : "framing",
-    shards: shardCount(raw, index !== -1),
+    mode,
+    shards: shardCount(raw, index !== -1, mode),
   };
 }
 

@@ -46,8 +46,8 @@ export function nativeError(error: unknown): CodedError {
 /// thing the error policy exists to prevent.
 export function guardError(
   message: string,
+  code: ErrorCode,
   constructor: ErrorConstructor = RangeError,
-  code: ErrorCode = "ERR_INVALID_HANDLE",
 ): CodedError {
   return Object.assign(new constructor(message), { code });
 }

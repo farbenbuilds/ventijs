@@ -1,12 +1,24 @@
 //! Ring-facing transitions for one socket slab.
 //!
-//! Both payload rings are strictly FIFO across every connection on a server, so
-//! ownership of the head belongs to whichever connection staged it. Neither
-//! borrow function filters by connection: a consumer that skipped a head it did
-//! not own would break the ring's ordering, so the only safe primitive is
-//! "take the head, whoever owns it". Routing is the publisher's job, because a
-//! staged record already carries the index and generation it belongs to and the
-//! engine topic is derived from them.
+//! Both payload rings are strictly FIFO across every connection on a server, and
+//! a single-consumer ring cannot skip a head it does not own without breaking
+//! that ordering. The two rings therefore differ, and the difference is
+//! deliberate:
+//!
+//! - Outbound is drained whole. A staged record carries the index and generation
+//!   it belongs to, and the engine topic is derived from them, so the publisher
+//!   routes each payload to its own connection. Filtering by connection here
+//!   would mean one connection's staged payload blocks every other connection's
+//!   until it happens to be pumped, and a connection that is never pumped again
+//!   holds the ring's capacity for the whole server.
+//!
+//! - Inbound is filtered by connection. Nothing routes an inbound payload: the
+//!   consumer is told which connection to take a message from and is handed the
+//!   bytes, so an unfiltered take would deliver one peer's message on another
+//!   peer's socket. The cost is that a connection whose message sits behind
+//!   another connection's has to wait for it to be drained first, which is a
+//!   stall and not a leak. Per-connection inbound rings would remove the stall
+//!   and are not implemented.
 //!
 //! No slot lock is taken to match a view. The generation to match against comes
 //! from the handle the caller already resolved through the atomic slab word, and
@@ -37,10 +49,24 @@ pub fn stage_inbound(
     return true;
 }
 
-/// Borrows the oldest staged inbound message, or null when the ring is empty.
+/// Records one message the engine consumed but did not stage.
+///
+/// Used by the paused-connection path, where the engine has already read the
+/// frame and there is nowhere to put it. Counting it is what makes
+/// `serverDroppedMessages` mean what it says: an unpaused connection that filled
+/// the ring and a paused one that asked to be paused are the same observable
+/// event, and neither may be invisible.
+pub fn count_dropped(slab: anytype) void {
+    _ = slab.inbound.dropped.fetchAdd(1, .monotonic);
+}
+
+/// Borrows the oldest staged inbound message belonging to this connection, or
+/// null when the ring is empty or the head belongs to someone else.
 /// Node main thread only.
-pub fn take_inbound(slab: anytype) ?payload.View {
-    return slab.inbound.peek();
+pub fn take_inbound(slab: anytype, index: u32, generation: u32) ?payload.View {
+    const view = slab.inbound.peek() orelse return null;
+    if (view.index != index or view.generation != generation) return null;
+    return view;
 }
 
 /// Frees a borrowed inbound message. The caller must already hold a copy of the
@@ -52,11 +78,8 @@ pub fn release_inbound(slab: anytype, view: payload.View) void {
 /// Borrows the oldest staged outbound message, or null when the ring is empty.
 /// Node main thread only.
 ///
-/// Not filtered by connection. A single-consumer FIFO ring cannot skip a head it
-/// does not own, so filtering here would mean one connection's staged payload
-/// blocks every other connection's until it is pumped, and a connection that is
-/// never pumped again — a closed one, or one whose peer stopped reading — would
-/// hold its bytes and the whole ring's capacity indefinitely.
+/// Not filtered by connection: the publisher routes on the record's own index and
+/// generation, so the whole ring drains on any pump.
 pub fn take_outbound(slab: anytype) ?payload.View {
     return slab.ring.peek();
 }

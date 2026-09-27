@@ -1,12 +1,12 @@
 import { closeSocket, pauseSocket, resumeSocket } from "../../binding/socket";
 import { CLOSE_ABNORMAL, CLOSE_NORMAL, isValidStatusCode } from "../../protocol/close-codes";
 import type { SocketState } from "../../types/socket";
-import type { EngineStatus } from "../../types/status";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
 import { toCloseReason } from "./close-reason";
-import { bufferedAmountOf, statusError } from "./payload";
+import { bufferedAmountOf } from "./payload";
+import { closeFailure } from "./close-failure";
 
 const EMPTY = Buffer.alloc(0);
 
@@ -18,24 +18,28 @@ export function finishConnection(state: SocketState, code: number, reason: Buffe
   emitEvent(state, "close", code, reason);
 }
 
-/// Reports a failure on the socket and finishes the connection.
+/// Reports a failure and closes, matching `ws`'s `emitErrorAndClose`.
 ///
-/// The latch is once per socket, matching `ws`'s `_errorEmitted`: a send that
-/// failed once against a dead transport will fail again, and a listener that
-/// re-sends would otherwise turn one fault into an unbounded stream of identical
-/// events. The terminal transition is not latched here, only the reporting, so a
-/// refused `close` still closes.
+/// The order is the point. `ws` sets `CLOSING`, latches `_errorEmitted`, emits
+/// `error`, and only then emits `close`, so a listener reading `readyState`
+/// during `error` sees `CLOSING` and a second failure produces no second event.
+/// This is the path for a send that failed on an *open* socket, which is the only
+/// place `ws` emits at all: a send on a socket that is already closing or closed
+/// goes to its callback and touches nothing else.
 export function failConnection(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
-  // The terminal latch must run even when an unhandled `error` throws.
-  try {
-    if (!state.errorEmitted) {
-      state.errorEmitted = true;
+  if (!state.errorEmitted) {
+    state.errorEmitted = true;
+    state.readyState = CLOSING;
+    // The terminal latch must run even when an unhandled `error` throws.
+    try {
       emitEvent(state, "error", error);
+    } finally {
+      finishConnection(state, CLOSE_ABNORMAL, EMPTY);
     }
-  } finally {
-    finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+    return;
   }
+  finishConnection(state, CLOSE_ABNORMAL, EMPTY);
 }
 
 export function closeConnection(state: SocketState, code?: unknown, reason?: unknown): void {
@@ -75,28 +79,6 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
     return;
   }
   failConnection(state, closeFailure(status));
-}
-
-/// Maps a rejected native close onto a coded error instead of leaving the
-/// socket latched in CLOSING with no frame sent. Exhaustive over `EngineStatus`
-/// so a new member cannot fall through to a generic message.
-function closeFailure(status: EngineStatus): Error {
-  switch (status) {
-    case "backpressure":
-      return createError("ERR_BACKPRESSURE", "ventijs: the outbound staging ring is full");
-    case "invalid-handle":
-      return createError("ERR_INVALID_HANDLE", "ventijs: the connection handle is stale");
-    case "ok":
-    case "closing":
-    case "closed":
-      return createError("ERR_INVALID_STATE", "ventijs: the connection is already closing");
-    case "payload-too-large":
-    case "invalid-close-code":
-    case "invalid-close-reason":
-    case "protocol-error":
-    case "policy-violation":
-      return statusError(status);
-  }
 }
 
 function assertCloseCode(code: unknown): number {

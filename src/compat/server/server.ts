@@ -98,7 +98,12 @@ export function createWebSocketServer(
     ...createEmitter(state),
     options: resolved,
     path: state.path,
-    clients: state.clients,
+    // `ws` assigns `clients` only when `clientTracking` is truthy, so the key is
+    // absent rather than present-and-undefined. A caller that tests
+    // `"clients" in server`, enumerates `Object.keys`, or spreads the record sees
+    // the difference, and an empty set behaves differently again: `ws` reports
+    // `undefined` where an empty set would give a size of 0.
+    ...(state.clients === undefined ? {} : { clients: state.clients }),
     address: () => addressOf(state),
     close: (closeCallback?: (error?: Error) => void): void => {
       closeWebSocketServer(state, closeCallback);

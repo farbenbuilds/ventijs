@@ -1,4 +1,9 @@
-import { planShards, weightTableIsConsistent } from "./shard-plan.ts";
+import {
+  DEFAULT_SHARD_COUNT,
+  planShards,
+  resolveShardCount,
+  weightTableIsConsistent,
+} from "./shard-plan.ts";
 import type { SuiteMode } from "./suite-mode.ts";
 
 /// Prints the shard plan for both selections and exits non-zero if the committed
@@ -15,10 +20,13 @@ if (!weightTableIsConsistent()) {
   process.exit(1);
 }
 
-for (const mode of ["framing", "full"] as const) describe(mode as SuiteMode);
+for (const mode of ["framing", "full"] as const) describe(mode);
 
 function describe(mode: SuiteMode): void {
-  const plan = planShards(shardCount(), mode);
+  // The same resolver the runner uses, so this step approves exactly the
+  // configurations the suite can actually run and fails the rest here rather
+  // than letting the suite reject them mid-run.
+  const plan = planShards(shardCount(mode), mode);
   const critical = Math.max(...plan.map((shard) => shard.costSeconds));
   const lines = [
     `${mode}: ${plan.length} shards, critical path ${critical.toFixed(0)}s`,
@@ -31,8 +39,8 @@ function describe(mode: SuiteMode): void {
   process.stdout.write(`${lines.join("\n")}\n`);
 }
 
-function shardCount(): number {
-  const raw = process.env["AUTOBAHN_SHARDS"] ?? "4";
-  const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 4;
+function shardCount(mode: SuiteMode): number {
+  const raw = process.env["AUTOBAHN_SHARDS"];
+  if (raw === undefined || raw === "") return DEFAULT_SHARD_COUNT;
+  return resolveShardCount(raw, mode);
 }

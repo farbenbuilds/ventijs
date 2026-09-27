@@ -95,6 +95,13 @@ jobs:
       - name: Decide whether the engine moved
         id: decide
         run: |
+          # Seeded before the script runs, and never removed. A gate that fails
+          # for any reason other than a decision -- no Node, no git history, a
+          # crash -- must leave the suite running rather than skipping it, and
+          # seeding is the only way to guarantee that: a failing dependency
+          # reports as *skipped*, not as failed, which is indistinguishable from a
+          # deliberate skip in the checks UI.
+          echo "run=true" >> "$GITHUB_OUTPUT"
           mkdir -p .autobahn-out
           node tests/autobahn/diff-gate-cli.ts | tee .autobahn-out/decision
           grep '^run=' .autobahn-out/decision | cut -d= -f2 >> "$GITHUB_OUTPUT"
@@ -105,7 +112,12 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The critical path is the suite at about 748s plus roughly 160s of setup.
+    # The budget is set by the cold-build path rather than the warm one: the Zig
+    # cache key hashes `build.zig`, `build.zig.zon`, and `src/builds/**`, and a
+    # change to any of them with no prefix fallback available compiles BoringSSL,
+    # lsquic, libdeflate, and zlib from source, which is minutes on its own.
+    timeout-minutes: 45
     environment:
       name: Autobahn
       url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -174,7 +186,14 @@ jobs:
         # from a measurement rather than from a derivation.
         env:
           AUTOBAHN_SHARDS: "4"
-        run: node tests/autobahn/run.ts
+        # The scheduled and manual runs are the authoritative 517-case selection
+        # and the weekly refresh of the report, so they pass `--full`. A pull
+        # request runs the framing selection, which omits the two per-message
+        # deflate groups; they are 216 of 517 cases and every one reports
+        # UNIMPLEMENTED because deflate is never negotiated.
+        run: >-
+          node tests/autobahn/run.ts
+          ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--full' || '' }}
 
       - name: Record the tested commit
         if: success()

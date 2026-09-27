@@ -13,7 +13,10 @@ const MAX_HANDLE_BIG = 0xffff_ffff_ffff_ffffn;
 
 function assertUint32(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 0 || value > MAX_UINT32) {
-    throw guardError(`ventijs: connection handle ${label} must be a uint32, got ${value}`);
+    throw guardError(
+      `ventijs: connection handle ${label} must be a uint32, got ${value}`,
+      "ERR_INVALID_HANDLE",
+    );
   }
 }
 
@@ -25,7 +28,10 @@ export function packConnectionHandle(index: number, generation: number): Connect
 
 export function assertConnectionHandle(handle: ConnectionHandle): void {
   if (typeof handle !== "bigint" || handle < 0n || handle > MAX_HANDLE_BIG) {
-    throw guardError(`ventijs: connection handle out of range: ${String(handle)}`);
+    throw guardError(
+      `ventijs: connection handle out of range: ${String(handle)}`,
+      "ERR_INVALID_HANDLE",
+    );
   }
 }
 

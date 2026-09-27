@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseOptions } from "../autobahn/run-options.ts";
 import { planShards } from "../autobahn/shard-plan.ts";
 import { weightTableIsConsistent } from "../autobahn/shard-plan.ts";
@@ -35,6 +35,43 @@ describe("run options", () => {
     const options = parseOptions(["--help"]);
     expect(options.help).toBe(true);
     expect(options.mode).toBe("framing");
+  });
+});
+
+describe("the shard count from the environment", () => {
+  const key = "AUTOBAHN_SHARDS";
+  const saved = process.env[key];
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env[key];
+    else process.env[key] = saved;
+  });
+
+  it("defaults to one so a local run stays unsplit", () => {
+    delete process.env[key];
+    expect(parseOptions([]).shards).toBe(1);
+  });
+
+  it("reads the count the workflow sets", () => {
+    process.env[key] = "4";
+    expect(parseOptions([]).shards).toBe(4);
+  });
+
+  it("is overridden by the flag", () => {
+    process.env[key] = "4";
+    expect(parseOptions(["--shards", "2"]).shards).toBe(2);
+  });
+
+  it("applies the mode's ceiling to the environment too", () => {
+    // `framing` has ten groups, so eleven shards would leave one empty.
+    process.env[key] = "11";
+    expect(() => parseOptions([])).toThrow(RangeError);
+    expect(() => parseOptions(["--full"])).not.toThrow();
+  });
+
+  it("rejects a non-numeric value rather than falling back", () => {
+    process.env[key] = "four";
+    expect(() => parseOptions([])).toThrow(RangeError);
   });
 });
 

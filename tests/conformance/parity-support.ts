@@ -20,12 +20,16 @@ export type Closable = {
 /// compared on: whether it threw, with what class and text, and the state the
 /// socket was left in.
 ///
-/// The ready state is part of the comparison rather than an afterthought,
-/// because the latch is the behaviour under test: a refused `close` has to leave
-/// the same state behind, and an error-only comparison cannot see that.
-export type Outcome =
-  | { readonly threw: false; readonly readyState: number }
-  | { readonly threw: true; readonly name: string; readonly message: string };
+/// `readyState` is on both variants and is compared on both. That is deliberate:
+/// the latch is the behaviour most of these tests exist for, and an earlier
+/// version carried the state only on the non-throwing side, so a refused `close`
+/// compared the error and nothing else and passed with the latch reverted.
+export type Outcome = {
+  readonly threw: boolean;
+  readonly readyState: number;
+  readonly name: string;
+  readonly message: string;
+};
 
 /// Stands up a `ws` server and hands back the accepted server-side socket, so a
 /// scenario can be run against the reference implementation.
@@ -78,10 +82,22 @@ export async function parity(scenario: (socket: Closable) => void): Promise<Outc
   const measure = (socket: Closable): Outcome => {
     try {
       scenario(socket);
-      return { threw: false, readyState: socket.readyState };
+      return {
+        threw: false,
+        readyState: socket.readyState,
+        name: "",
+        message: "",
+      };
     } catch (error) {
       const failure = error as Error;
-      return { threw: true, name: failure.constructor.name, message: failure.message };
+      return {
+        threw: true,
+        // Read after the throw: a refused `close` still has to have latched, and
+        // that is the half of the behaviour an error comparison misses.
+        readyState: socket.readyState,
+        name: failure.constructor.name,
+        message: failure.message,
+      };
     }
   };
   const reference = await wsAccepted();
@@ -99,12 +115,12 @@ export async function parity(scenario: (socket: Closable) => void): Promise<Outc
     terminateClient(ours.client);
     await ours.server.dispose();
   }
-  if (!expected.threw) {
-    expect(actual).toEqual(expected);
-    return actual;
+  expect(actual.threw).toBe(expected.threw);
+  if (expected.threw && !actual.threw) {
+    throw new Error(`expected a throw like ws: ${expected.message}`);
   }
-  if (!actual.threw) throw new Error(`expected a throw like ws: ${expected.message}`);
   expect(actual.name).toBe(expected.name);
   expect(actual.message).toBe(expected.message);
+  expect(actual.readyState).toBe(expected.readyState);
   return actual;
 }

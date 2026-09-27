@@ -19,4 +19,5 @@ test {
     _ = @import("socket/payload_test.zig");
     _ = @import("socket/socket_test.zig");
     _ = @import("socket/socket_ops_test.zig");
+    _ = @import("socket/connections_test.zig");
 }

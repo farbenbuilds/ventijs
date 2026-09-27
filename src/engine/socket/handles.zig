@@ -38,14 +38,19 @@ const Slot = struct {
     }
 
     /// Reconstructs the state from the low byte rather than with
-    /// `@enumFromInt`. Only `pack` ever writes that byte, so the switch is
-    /// total by construction; the cast would panic in a safe mode and be
-    /// undefined in a fast one if a second writer ever appeared.
+    /// `@enumFromInt`.
+    ///
+    /// `pack` is the only writer of that byte and it writes one of these two, so
+    /// the default arm is unreachable by construction rather than a fallback. It
+    /// is `unreachable` and not a third value because a defaulting state would
+    /// turn a second writer into a silently free slot, and every transition here
+    /// would then report a stale handle as `invalid_handle` instead of failing
+    /// where the bug is.
     fn state_of(word: u64) State {
         return switch (@as(u8, @truncate(word))) {
             0 => .free,
             1 => .active,
-            else => .free,
+            else => unreachable,
         };
     }
 
