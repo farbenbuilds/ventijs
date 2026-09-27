@@ -76,8 +76,8 @@ test "a frame longer than the cap is refused rather than truncated" {
     // `zslay` ends an over-long frame at `max_frame_len` and reports what it took as
     // a complete frame, so a decoder that only checks the accumulated message would
     // deliver a silently short message instead of refusing the frame.
-    const Small = codec.codec(16, 2);
-    var peer = Small.init(.server);
+    const Small = codec.codec(16, 2, 8);
+    var peer = Small.init(.server, true);
     var buffer: [64]u8 = undefined;
     const frame = support.raw_frame(&buffer, true, 0x1, 40, true, .{ 1, 2, 3, 4 }, "0123456789abcdefghijklmnopqrstuvwxyz1234");
     const result = peer.feed(frame);

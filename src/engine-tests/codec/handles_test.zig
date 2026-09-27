@@ -11,7 +11,7 @@ const capacities = @import("../../engine/codec/capacities.zig");
 const handles = @import("../../engine/codec/handles.zig");
 
 test "a created codec resolves through its handle" {
-    const handle = try handles.create(.server);
+    const handle = try handles.create(.server, true);
     defer handles.destroy(handle.to_int());
     try testing.expectEqual(@as(usize, 1), handles.live_count());
     try testing.expect(handles.resolve(handle.to_int()) != null);
@@ -19,7 +19,7 @@ test "a created codec resolves through its handle" {
 }
 
 test "a destroyed codec stops resolving immediately" {
-    const handle = try handles.create(.server);
+    const handle = try handles.create(.server, true);
     const raw = handle.to_int();
     try testing.expect(handles.resolve(raw) != null);
     handles.destroy(raw);
@@ -28,11 +28,11 @@ test "a destroyed codec stops resolving immediately" {
 }
 
 test "a reused slot hands out a fresh generation" {
-    const first = try handles.create(.server);
+    const first = try handles.create(.server, true);
     const stale = first.to_int();
     handles.destroy(stale);
 
-    const second = try handles.create(.client);
+    const second = try handles.create(.client, true);
     defer handles.destroy(second.to_int());
     try testing.expectEqual(first.index, second.index);
     try testing.expect(second.generation != first.generation);
@@ -43,7 +43,7 @@ test "a reused slot hands out a fresh generation" {
 }
 
 test "a double destroy is a no-op rather than a double free" {
-    const handle = try handles.create(.server);
+    const handle = try handles.create(.server, true);
     const raw = handle.to_int();
     handles.destroy(raw);
     handles.destroy(raw);
@@ -68,7 +68,7 @@ test "the table is bounded" {
     var created: [8]u64 = undefined;
     var filled: usize = 0;
     while (filled < created.len) : (filled += 1) {
-        const handle = handles.create(.server) catch break;
+        const handle = handles.create(.server, true) catch break;
         created[filled] = handle.to_int();
     }
     try testing.expectEqual(created.len, filled);

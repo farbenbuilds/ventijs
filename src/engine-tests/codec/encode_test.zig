@@ -59,8 +59,8 @@ test "every encoded control frame is a legal 125-byte frame" {
 test "the encoder refuses a payload over the cap" {
     // A different capacity, so the shared fixture's type does not apply and the
     // transmit state is reached directly rather than through a helper.
-    const Small = codec.codec(8, 2);
-    var peer = Small.init(.server);
+    const Small = codec.codec(8, 2, 8);
+    var peer = Small.init(.server, true);
     try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789").failed);
     try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678").ok);
 }

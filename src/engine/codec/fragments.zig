@@ -15,9 +15,13 @@
 /// The fragment boundaries of one message in progress.
 ///
 /// Offsets are *end* positions and ascend, so `ends()[n]` is where the `n`th piece
-/// stops. Recording ends rather than starts means a caller can slice the message
-/// without knowing the first piece's length separately, and it means the last end is
-/// the message length, which is a check the caller can make for free.
+/// stops.
+///
+/// **Interior boundaries only.** A message of N pieces records N-1 of them, because the
+/// last piece runs to the end of the reassembly buffer and the caller already has that
+/// length. Recording it as well would make the list one longer than the number of cuts
+/// in the message, and a caller slicing on it would produce an empty final piece.
+pub const ends_are = "interior";
 pub fn fragments(comptime max_fragments: usize) type {
     if (max_fragments == 0) @compileError("fragments need room for at least one piece");
 

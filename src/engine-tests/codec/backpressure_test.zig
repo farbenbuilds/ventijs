@@ -16,8 +16,8 @@ test "a backpressured frame resumes from the byte it stopped at" {
     // A full queue is not a protocol fault and must not be reported as one. The
     // header is taken, the payload is not, and the caller re-feeds the remainder
     // after draining, so nothing is lost and nothing is delivered twice.
-    const One = codec.codec(256, 1);
-    var peer = One.init(.server);
+    const One = codec.codec(256, 1, 8);
+    var peer = One.init(.server, true);
     var buffers: [2][64]u8 = undefined;
     const first = (Frame{ .opcode = .text, .payload = "a", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffers[0]);
     const second = (Frame{ .opcode = .text, .payload = "b", .mask = .{ 5, 6, 7, 8 } }).bytes(&buffers[1]);

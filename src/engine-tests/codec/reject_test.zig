@@ -50,8 +50,8 @@ test "a reserved bit without a negotiated extension is a protocol error" {
 test "a message over the cap is 1009, not 1002" {
     // A size limit reported as a protocol error tells the peer the wrong thing
     // about why its connection died, which is what a conformance suite checks.
-    const Small = codec.codec(16, 4);
-    var peer = Small.init(.server);
+    const Small = codec.codec(16, 4, 8);
+    var peer = Small.init(.server, true);
     var buffer: [64]u8 = undefined;
     const encoded = (Frame{ .opcode = .text, .payload = "0123456789abcdefghij", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer);
     try testing.expectEqual(codec.Outcome.failed, peer.feed(encoded).outcome);

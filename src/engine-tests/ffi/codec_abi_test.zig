@@ -48,10 +48,17 @@ test "the two vocabularies share ordinals because no call uses both" {
     );
 }
 
-test "an ordinal past the last event kind is refused" {
-    try testing.expect(abi.event_kind(0) != null);
-    try testing.expect(abi.event_kind(@intFromEnum(events.Kind.rejected)) != null);
-    try testing.expect(abi.event_kind(@intFromEnum(events.Kind.rejected) + 1) == null);
+test "every event kind is sendable and one past the last is refused" {
+    // The check is against the *highest* kind, not a named one. It was written against
+    // `rejected`, so adding a kind after it produced a kind the boundary refused to
+    // send: the refusal was a correct `unexpected_opcode` for an ordinal it considered
+    // out of range, and the only symptom was a `send` reporting a protocol error for a
+    // frame the caller had explicitly asked for.
+    var ordinal: u32 = 0;
+    while (ordinal <= events.max_ordinal) : (ordinal += 1) {
+        try testing.expect(abi.event_kind(ordinal) != null);
+    }
+    try testing.expect(abi.event_kind(events.max_ordinal + 1) == null);
 }
 
 test "the codec's own failures map onto the boundary's" {
