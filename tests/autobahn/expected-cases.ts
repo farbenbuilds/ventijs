@@ -31,8 +31,13 @@ export const REFERENCE_CLOSURE_INFORMATIONAL_CASES = 3;
 
 /// `message_capacity` in `src/engine/server/capacities.zig` is compiled into the
 /// addon as a Zig `comptime` constant, so the cap is a property of the build
-/// and not something the harness can raise.
-export const INBOUND_LIMIT_BYTES = 32 * 1024;
+/// and not something the harness can raise. It is read out of the built addon
+/// rather than restated here, because a restated copy is how the engine's cap
+/// and this file's arithmetic drift apart: the cap was raised from 32 KiB to
+/// 64 KiB once already, and every literal kept asserting 32 KiB.
+import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
+
+export { INBOUND_LIMIT_BYTES };
 
 /// Groups 12 and 13 generate their cases from a cross product: group 12 expands
 /// five deflate parameter sets and group 13 expands seven, each over the rows of
@@ -63,10 +68,17 @@ export const COMPRESSION_OVER_LIMIT_ROWS = COMPRESSION_SIZE_ROWS.filter(
   (size) => size > INBOUND_LIMIT_BYTES,
 ).length;
 
-/// One entry of the suite's `Cases` expansion whose largest payload exceeds
-/// `INBOUND_LIMIT_BYTES`, with the byte count the suite actually puts on the
-/// wire. `prefix` matches a case id by string prefix, so "9.1" covers
-/// 9.1.1 through 9.1.6.
+/// One entry of the suite's `Cases` expansion, with the byte count the suite
+/// actually puts on the wire. `prefix` matches a case id by string prefix, so
+/// "9.1" covers 9.1.1 through 9.1.6.
+///
+/// Every case the suite generates is listed, not only the ones over the cap,
+/// because whether a case is capacity-blocked is a *function* of the compiled
+/// limit rather than a fact about the case. A list holding only the cases that
+/// happened to be over the last limit the build was compiled with is a list that
+/// is wrong the moment the constant moves, and it is wrong silently: the
+/// classifier would report a 64 KiB case as blocked when the cap is 64 KiB, and
+/// the gate would stop counting a failure.
 export type CapacityRule = {
   readonly prefix: string;
   readonly payloadBytes: number;
@@ -85,7 +97,13 @@ export const CAPACITY_RULES = [
   { prefix: "10.1.1", payloadBytes: 65_536, caseCount: 1, origin: "Case10_1_1.payload" },
 ] as const satisfies readonly CapacityRule[];
 
-export const SCALAR_CAPACITY_CASES = CAPACITY_RULES.reduce(
+/// Whether a rule's payload is above the compiled cap, which is the definition of
+/// capacity-blocked. A rule at or under the cap is evaluated like any other case.
+export function isOverInboundLimit(rule: CapacityRule): boolean {
+  return rule.payloadBytes > INBOUND_LIMIT_BYTES;
+}
+
+export const SCALAR_CAPACITY_CASES = CAPACITY_RULES.filter(isOverInboundLimit).reduce(
   (total, rule) => total + rule.caseCount,
   0,
 );
@@ -93,13 +111,16 @@ export const SCALAR_CAPACITY_CASES = CAPACITY_RULES.reduce(
 export const COMPRESSION_CAPACITY_CASES =
   (DEFLATE_PARAMETER_SETS_GROUP_12 + DEFLATE_PARAMETER_SETS_GROUP_13) * COMPRESSION_OVER_LIMIT_ROWS;
 
-/// 1 + 6 + 6 + 9 + 9 + 6 + 6 + 1 = 44, plus (5 + 7) * 7 = 84. A real report
-/// splits those 84 as 35 in group 12 and 49 in group 13.
+/// The cases the compiled build cannot reach, derived rather than recorded. At a
+/// 32 KiB cap this is 44 framing cases plus (5 + 7) * 7 = 84 compression cases,
+/// which is the 128 the previous recording held. At 64 KiB the 64 KiB framing
+/// cases and two of the compression size rows come into range, and the count
+/// falls without anyone editing it.
 export const CAPACITY_CASES = SCALAR_CAPACITY_CASES + COMPRESSION_CAPACITY_CASES;
 
-/// 517 - 128 = 389 cases the pinned engine build is expected to be able to
-/// answer. The expected count is therefore a function of the categories in
-/// play: 517 selected, 128 capacity-blocked, 389 evaluated.
+/// The cases the build is expected to be able to answer: everything selected that
+/// is not above the cap. A function of the categories in play, so raising the
+/// compiled cap moves it by exactly the cases the cap was blocking.
 export const EVALUATED_CASES = TOTAL_CASES - CAPACITY_CASES;
 
 export function capacityRuleFor(caseId: string): CapacityRule | null {
@@ -119,5 +140,7 @@ export function isCompressionCase(caseId: string): boolean {
 }
 
 export function exceedsInboundLimit(caseId: string): boolean {
-  return capacityRuleFor(caseId) !== null || isCompressionCase(caseId);
+  const rule = capacityRuleFor(caseId);
+  if (rule !== null) return isOverInboundLimit(rule);
+  return isCompressionCase(caseId);
 }
