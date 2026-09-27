@@ -11,10 +11,12 @@
 //! state machine, never computes a frame size, and never learns which buffer a
 //! payload came from. It feeds bytes, takes bytes, and is told a status.
 //!
-//! The bytes are the one place the boundary is not a copy. `napi-zig` reads a
-//! `Uint8Array` as a view over the application's own memory, and the codec unmasks
-//! in place, so `codec_feed` consumes its argument: the caller must feed each byte
-//! once and cannot read the argument afterwards.
+//! The bytes go through `ingest`, not `feed`, and that is the boundary's one
+//! deliberate copy. The codec unmasks a frame in place -- which saves a copy of
+//! every byte a client sends, and is what the engine's own `WebSocket.on_data` does
+//! over the same `zslay` primitives -- and Node-API cannot hand Zig a mutable slice,
+//! so a `Buffer` the application may still be holding must not be unmasked underneath
+//! it. `ingest` copies each piece into a stack scratch and the codec unmasks *that*.
 
 const napi = @import("napi-zig");
 const abi = @import("codec_abi.zig");
@@ -27,10 +29,16 @@ const handles = @import("../codec/handles.zig");
 /// returned offset onward have to be fed again after draining, which is what lets a
 /// peer control the read boundary without the codec buffering a second copy of
 /// anything.
+///
+/// The argument is not consumed. It is read and left alone, so a caller may feed the
+/// same bytes to a second codec -- which is what a conformance comparison needs, and
+/// what the old in-place contract made impossible.
 pub fn codec_feed(env: napi.Env, handle: u64, bytes: []const u8) !abi.Count {
     _ = env;
     const peer = handles.resolve(handle) orelse return abi.feed_refusal(.stale_handle);
-    const result = peer.feed(bytes);
+    // `ingest`, not `feed`: one memcpy per `ingest_scratch` piece rather than per
+    // frame, and the caller's buffer comes back unchanged.
+    const result = peer.ingest(bytes);
     return switch (result.outcome) {
         .ok => @intCast(result.consumed),
         .backpressure => abi.feed_refusal(.backpressure),
@@ -48,21 +56,6 @@ pub fn codec_resume(env: napi.Env, handle: u64) !abi.Count {
     _ = env;
     const peer = handles.resolve(handle) orelse return abi.feed_refusal(.stale_handle);
     return @intCast(peer.resume_at());
-}
-
-/// The close code a refused frame maps to, or 0 while the connection is healthy.
-pub fn codec_failure_code(env: napi.Env, handle: u64) !abi.Count {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return 0;
-    return peer.failure_code();
-}
-
-/// The failure ordinal a refused frame produced, or 0 while healthy.
-pub fn codec_failure(env: napi.Env, handle: u64) !abi.Count {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return 0;
-    const failure = peer.pending_failure() orelse return 0;
-    return @intFromEnum(failure) + 1;
 }
 
 /// Events waiting to be taken, so a caller can loop without calling `select` to
@@ -84,8 +77,8 @@ pub fn codec_select(env: napi.Env, handle: u64) !bool {
 /// JavaScript-owned buffer.
 ///
 /// The copy is the whole point: the payload borrows a buffer inside the codec that
-/// the next frame overwrites, so a `Buffer` handed to JavaScript has to be the
-/// only copy or a listener that retains it would read the next message's bytes.
+/// the next frame overwrites, so a `Buffer` handed out has to be the only copy or a
+/// listener that retains it would read the next message's bytes.
 pub fn codec_event(env: napi.Env, handle: u64) !?napi.Val {
     const peer = handles.resolve(handle) orelse return null;
     const event = peer.selected_event() orelse return null;
@@ -136,15 +129,4 @@ pub fn codec_reset(env: napi.Env, handle: u64) !void {
     _ = env;
     const peer = handles.resolve(handle) orelse return;
     peer.reset();
-}
-
-/// The role a codec was created for, so a caller can assert the masking discipline
-/// without parsing a header. -1 once the handle is stale.
-pub fn codec_role(env: napi.Env, handle: u64) !abi.Count {
-    _ = env;
-    const role = handles.role_of(handle) orelse return -1;
-    return switch (role) {
-        .client => 0,
-        .server => 1,
-    };
 }

@@ -81,6 +81,11 @@ function render(address: ClientAddress, headers: Readonly<Record<string, string>
 }
 
 function hostHeader(address: ClientAddress): string {
+  // A domain socket has no authority to name, and `http.request` over `socketPath`
+  // sends the path as the `Host` header. Inventing `localhost` would put a name in the
+  // handshake that the peer never asked for, and a name a server routes on is a name
+  // a caller did not configure.
+  if (address.socketPath !== undefined) return address.socketPath;
   const bracketed = address.host.includes(":") ? `[${address.host}]` : address.host;
   return `${bracketed}:${address.port}`;
 }

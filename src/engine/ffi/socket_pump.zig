@@ -66,20 +66,22 @@ pub fn server_undelivered_messages(env: napi.Env, server: u40) !u64 {
 
 /// Publishes every staged payload, oldest first.
 ///
-/// A payload the engine inbox refuses stays at the head of the ring rather than
-/// being freed, so a refused send is still owed to the peer and a later pump
-/// retries it. Freeing it would turn a transient engine-inbox backlog into a
-/// silently dropped message the application had already been told was accepted.
-///
-/// A refusal is counted rather than merely reported. `Cluster.publish` returns
-/// the number of worker inboxes it queued, not the number of sockets written, and
-/// the far end discards a send error outright, so a full connection write queue
-/// used to end with the record freed, the slot debited, and `ok` returned: the
-/// bytes were gone and the application had been told they were sent. The counter
-/// is the only place that loss is observable.
+/// A payload the engine inbox refuses is released rather than left at the head, and
+/// counted. Leaving it was the intent -- a refused send is still owed to the peer and
+/// a later pump retries it -- but the retry could not happen: `take_outbound` is a
+/// peek, so the same record stayed at the head, its slot was never debited, and every
+/// later pump re-read it and refused it again. One control record, which a `close` on
+/// any connection can stage, stopped outbound traffic for *every* connection on that
+/// server for the life of the process. Freeing a record the engine cannot carry is the
+/// only honest outcome, and the counter is where the loss becomes observable rather
+/// than silent.
 fn flush(target: *instance.Instance) status.Status {
     while (queues.take_outbound(&target.sockets)) |view| {
-        if (!can_publish(view.kind)) return .policy_violation;
+        if (!can_publish(view.kind)) {
+            queues.release_outbound(&target.sockets, view);
+            _ = target.undelivered.fetchAdd(1, .monotonic);
+            return .policy_violation;
+        }
         if (queue(target, view) == 0) {
             _ = target.undelivered.fetchAdd(1, .monotonic);
             return .backpressure;
@@ -110,10 +112,11 @@ fn queue(target: *instance.Instance, view: anytype) usize {
 /// because no file under `src/compat/` reached the pump, which is exactly the
 /// condition the frame codec removes, so the filter has to land first.
 ///
-/// The records are refused rather than dropped so the ring slot is not freed: the
-/// payload stays owed to its connection and a later drain can route it through a
-/// path that carries a real opcode. That is why this returns a status instead of
-/// consuming the view.
+/// Refusing rather than publishing is the point: a staged close frame published
+/// through this topic becomes a binary message carrying the close code and reason
+/// as payload, so the peer receives `[0x03, 0xE8]` as application data and never
+/// sees a close frame at all. `flush` releases the record and counts the loss,
+/// because there is no later path that carries a real opcode.
 fn can_publish(kind: payload.Kind) bool {
     return switch (kind) {
         .text, .binary => true,

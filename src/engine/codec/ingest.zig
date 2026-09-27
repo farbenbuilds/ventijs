@@ -12,9 +12,10 @@
 //! saving actually is.
 
 const capacities = @import("capacities.zig");
+const result = @import("feed_result.zig");
 
 /// Folds an input the caller must not see modified.
-pub fn ingest(comptime Codec: type, peer: *Codec, input: []const u8) Codec.FeedResult {
+pub fn ingest(comptime Codec: type, peer: *Codec, input: []const u8) result.FeedResult {
     // On the stack rather than in the codec: the buffer is live only for this call,
     // and a per-codec one would cost its whole size on every live connection to
     // hold it for a few microseconds at a time.
