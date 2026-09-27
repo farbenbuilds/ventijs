@@ -10,13 +10,24 @@ test "events default the connection fields to zero" {
     try std.testing.expectEqual(@as(u32, 0), event.code);
 }
 
-test "kind ordinals stay pinned to the binding vocabulary" {
-    // Reordering these silently changes the ABI; see ENGINE_EVENT_KINDS in
-    // src/binding/native.ts.
-    try std.testing.expectEqual(@as(u8, 0), @intFromEnum(events.Kind.listening));
-    try std.testing.expectEqual(@as(u8, 1), @intFromEnum(events.Kind.connection_open));
-    try std.testing.expectEqual(@as(u8, 2), @intFromEnum(events.Kind.connection_close));
-    try std.testing.expectEqual(@as(u8, 3), @intFromEnum(events.Kind.engine_error));
-    try std.testing.expectEqual(@as(u8, 4), @intFromEnum(events.Kind.server_closed));
-    try std.testing.expectEqual(@as(usize, 5), @typeInfo(events.Kind).@"enum".fields.len);
+test "event kind tag names stay pinned to the binding vocabulary" {
+    // The bridge serializes a kind as `snakeToCamel(@tagName(tag))`, so the name
+    // crossing into JavaScript is the camelCase form of the tag below. Zig owns
+    // the tag and `napi-zig` owns the transform, so pinning the tag is what
+    // catches a rename that would break `EngineEventKind` in
+    // `src/binding/native.ts`. Pinning ordinals instead would have asserted
+    // something the wire never carries.
+    const expected = [_][]const u8{
+        "listening",
+        "connection_open",
+        "connection_message",
+        "connection_close",
+        "engine_error",
+        "server_closed",
+    };
+    const fields = @typeInfo(events.Kind).@"enum".fields;
+    try std.testing.expectEqual(expected.len, fields.len);
+    inline for (expected, fields) |name, field| {
+        try std.testing.expectEqualStrings(name, field.name);
+    }
 }

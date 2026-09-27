@@ -84,7 +84,5 @@ pub fn socket_buffered_amount(env: napi.Env, server: u40, connection: u64) !u32 
 /// exact generation. The generation travels with the call so the socket record
 /// can re-check it under its lock.
 fn resolve_connection(target: *instance.Instance, raw: u64) ?handles.Handle {
-    const handle = handles.Handle.from_int(raw);
-    _ = target.slab.resolve(handle) orelse return null;
-    return handle;
+    return instance.resolve_connection(target, raw);
 }

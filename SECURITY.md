@@ -50,12 +50,22 @@ produce a clear error rather than undefined engine behavior.
 
 ## Security boundaries
 
-The Zig engine parses and frames all untrusted bytes. It never exposes engine
-slabs, pointers, or offsets to JavaScript. Inbound payloads are copied into
-Node-owned `Buffer` instances before a handler runs; outbound buffers are
-borrowed only for the duration of the native call and copied into the bounded
-outbound queue before it returns. These two rules are the core memory-safety
-contract at the FFI boundary, and tests assert them.
+The Zig engine parses and frames all untrusted bytes, and never exposes engine
+slabs, pointers, or offsets to JavaScript. The two lifetime rules below are the
+memory-safety contract at the FFI boundary.
+
+Outbound buffers are borrowed only for the duration of the native call and
+copied into the bounded outbound queue before it returns.
+`tests/binding/socket.test.ts` asserts that copy.
+
+Inbound payloads are copied into Node-owned `Buffer` instances inside
+`takeSocketMessage`, and the engine's own message buffer is reused for the next
+frame, so the copy is the only copy and the returned buffer is safe to retain
+past the handler. `tests/binding/socket-echo.test.ts` exercises it end to end
+against a real client. The residual risk is the reverse direction: a caller that
+mutates the returned `Buffer` cannot affect the engine, because the ring slot is
+already freed.
+[COMPATIBILITY.md](COMPATIBILITY.md) records the state of both.
 
 Every native handle carries a generation counter. A handle used after close, or
 after its slot is reused, resolves to a typed error. Completion callbacks latch
@@ -75,19 +85,24 @@ surface without a compatibility requirement:
 
 Deployments must size the engine for their traffic and apply normal operating
 system limits such as file descriptors and memory caps. The compatibility layer
-maps `ws` options onto engine capacities:
+records the `ws` options that describe limits, and the engine enforces the
+capacities it was compiled with:
 
-- `maxPayload` bounds a single message. Oversized input closes the connection
-  with code `1009`; it does not allocate a fallback buffer.
+- `maxPayload` is validated and recorded but not yet read, so it is not a limit
+  today. The limit that applies is the engine's compiled
+  `message_capacity = 32 * 1024` in `src/engine/server/options.zig`, a
+  `comptime` constant baked into the addon. An oversized frame is closed by the
+  engine with code `1009` and no fallback buffer is allocated.
 - Outbound queues are bounded. When a queue reaches its high-water mark, the
   engine reports backpressure and `bufferedAmount` reflects the queued bytes;
   `send` returns no value, matching `ws`. Producers that ignore backpressure
   cannot grow memory without bound.
 - Planned: idle connections swept by a configurable timeout. Until that option
   lands, deployments must rely on their own liveness checks.
-- Per-message deflate is opt-in. Negotiation requires no-context-takeover, and
-  decompression is capped by the negotiated `maxPayload`, so a compressed
-  expansion bomb cannot exceed the configured message capacity.
+- Per-message deflate is normalised and never negotiated, so no compressed
+  payload is accepted today. When negotiation lands it requires
+  no-context-takeover, and decompression has to be capped by the negotiated
+  message capacity so a compressed expansion bomb cannot exceed it.
 
 ## Dependency policy
 
@@ -104,12 +119,18 @@ from the published tarball.
 
 ## Verification
 
-CI builds and executes the addon on Linux, macOS, and Windows runners. The
-compatibility suite runs the same scenarios against `ws` and ventijs and
-compares observable behavior, and the Autobahn suite validates RFC 6455 framing
-with no exclusions. These controls reduce risk; they do not guarantee the
-absence of defects. Consumers should pin an exact version, review the shipped
-licenses, and load-test under their own workload before production deployment.
+CI builds and executes the addon on `ubuntu-24.04` only. The matrix in
+[CI_CD_PIPELINE.md](CI_CD_PIPELINE.md), covering Linux, musl, macOS, and
+Windows, is the target and no other runner executes the artifact today, so no
+claim of platform coverage is made here. The compatibility suite runs the same
+scenarios against `ws` and ventijs and compares observable behaviour. The
+Autobahn harness exists in the tree and is not a CI job yet; it probes the
+target before it runs, and it is capacity-scoped, because 128 of the 517
+selected cases exceed the engine's 32 KiB message limit and are reported as
+`skipped-capacity` rather than as passes. These controls reduce risk; they do
+not guarantee the absence of defects. Consumers should pin an exact version,
+review the shipped licences, and load-test under their own workload before
+production deployment.
 
 ## Disclosure
 

@@ -105,6 +105,17 @@ pub fn connection_slab(comptime capacity: u32) type {
             return handle.index;
         }
 
+        /// The generation currently occupying a slot, or null when the slot is
+        /// free or out of range. The engine thread needs it to stamp an inbound
+        /// payload with the generation it belongs to: only the main thread holds
+        /// a handle, so there is no handle to resolve against here.
+        pub fn generation_at(slab: *const Self, index: u32) ?u32 {
+            if (index >= capacity) return null;
+            const word = slab.slots[index].word.load(.acquire);
+            if (Slot.state_of(word) != .active) return null;
+            return Slot.generation_of(word);
+        }
+
         pub fn count_active(slab: *const Self) u32 {
             return slab.active;
         }

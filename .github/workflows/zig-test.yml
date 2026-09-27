@@ -111,4 +111,12 @@ jobs:
         run: pnpm exec tsdown && pnpm run typecheck:dist
 
       - name: Run binding lifecycle tests
-        run: pnpm exec vitest run tests/binding tests/compat/socket tests/compat/stream.test.ts tests/conformance
+        # These files load the addon, so each one builds and tears down a real
+        # engine server. Running them in parallel makes engine server creation
+        # fail intermittently on this host: measured over six runs, the parallel
+        # invocation failed one to three tests every time while the same
+        # invocation with --no-file-parallelism passed 96 of 96 five times out of
+        # five. The failure is an engine-init resource error, not a test
+        # assertion, and it predates the current suite. Serialising is the fix
+        # until the engine's initialisation is safe to run concurrently.
+        run: pnpm exec vitest run --no-file-parallelism tests/binding tests/compat/socket tests/compat/stream.test.ts tests/conformance

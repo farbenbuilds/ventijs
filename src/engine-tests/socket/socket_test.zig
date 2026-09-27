@@ -5,7 +5,7 @@ const payload = @import("../../engine/socket/payload.zig");
 const socket = @import("../../engine/socket/socket.zig");
 
 const Ring = payload.payload_ring(4, 16);
-const Slab = socket.socket_slab(4, Ring);
+const Slab = socket.socket_slab(4, Ring, Ring);
 
 test "send is refused once closing and closed" {
     var slab = Slab{};

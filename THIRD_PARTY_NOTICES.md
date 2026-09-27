@@ -47,6 +47,21 @@ incorporated.
 | ------------------------------------------------------------------------------------ | ------- |
 | [@types/ws](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ws) | MIT     |
 
+## Vendored upstream documentation
+
+| Component                             | Version or revision | License |
+| ------------------------------------- | ------------------- | ------- |
+| [`ws` API reference](docs/ventijs.md) | `ws` 8.21.3         | MIT     |
+
+`docs/ventijs.md` is a copy of the upstream `ws` API reference document,
+`doc/ws.md`, credited to the `ws` authors and the
+[`websockets/ws`](https://github.com/websockets/ws) repository. The credit is at
+the top of the file as well as here. Its body is the upstream document byte for
+byte apart from the title, which is retitled for a ventijs reader. It is vendored
+because it is the compatibility contract: it is what ventijs is compared
+against. It is not ventijs documentation, it is not kept in sync by hand, and it
+is replaced wholesale when the pinned `ws` version changes.
+
 ## Development-only tooling
 
 The following are development dependencies. They are not shipped in the
@@ -63,10 +78,41 @@ published package and require no runtime attribution.
 | TypeScript  | Apache-2.0 |
 | bumpp       | MIT        |
 | @types/node | MIT        |
+| @types/ws   | MIT        |
+| ws          | MIT        |
 | Node.js     | MIT        |
 | pnpm        | MIT        |
 | Zig         | MIT        |
 | Nix         | LGPL-2.1   |
+
+## CI-only conformance tooling
+
+The RFC 6455 conformance suite is run in CI by pulling a container image. It is
+never shipped in the package, and nothing from it is vendored into this
+repository.
+
+| Component                                                                         | Version or revision         | License    |
+| --------------------------------------------------------------------------------- | --------------------------- | ---------- |
+| [crossbario/autobahn-testsuite](https://github.com/crossbario/autobahn-testsuite) | `25.10.1`, pinned by digest | Apache-2.0 |
+
+The Autobahn testsuite is copyright typedef int GmbH and is distributed under
+the Apache License 2.0. The reference is by digest rather than by tag because
+the repository publishes only `latest` and `25.10.1`, and both resolve to the
+same manifest, `sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074`;
+a tag would let a rebuilt image change the case set under the gate. Copyright
+typedef int GmbH also holds the `autobahntestsuite` distribution this image is
+built from.
+
+## Benchmark provenance
+
+The benchmark harness in `bench/` runs `ws` 8.21.3, a devDependency, alongside
+the candidate build and writes a JSON report. It vendors no third-party code. A
+report records its own provenance, so a number can be traced to the run that
+produced it: the schema version, the commit and whether the tree was dirty, the
+Node.js, pnpm, and Zig versions, the `pnpm-lock.yaml` hash, the resolved `ws`
+version, and the CPU model, count, and memory of the host. No benchmark number is
+recorded in this file; the retained reports are the evidence, as described in
+[CI_CD_PIPELINE.md](CI_CD_PIPELINE.md).
 
 ## Maintenance
 

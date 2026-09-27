@@ -1,0 +1,118 @@
+name: Performance
+
+on:
+  push:
+    branches:
+      - main
+    # The benchmark drives the native engine, so only a Zig source, the build
+    # manifest, the harness, or the toolchain can change its result.
+    #
+    # `src/**` was here for the same reason it was in `autobahn.yml`, and was
+    # wrong for the same reason: it matched every TypeScript file, including the
+    # `ws`-shaped facade, which the benchmark does not exercise. `**.zig` already
+    # covers `src/**/*.zig`; `build.zig.zon` does not match `**.zig` and is listed
+    # because it pins the engine and its vendored dependencies.
+    paths:
+      - "**.zig"
+      - "build.zig.zon"
+      - "bench/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - ".github/workflows/perf.yml"
+  pull_request:
+    branches:
+      - main
+    # The benchmark drives the native engine, so only a Zig source, the build
+    # manifest, the harness, or the toolchain can change its result.
+    #
+    # `src/**` was here for the same reason it was in `autobahn.yml`, and was
+    # wrong for the same reason: it matched every TypeScript file, including the
+    # `ws`-shaped facade, which the benchmark does not exercise. `**.zig` already
+    # covers `src/**/*.zig`; `build.zig.zon` does not match `**.zig` and is listed
+    # because it pins the engine and its vendored dependencies.
+    paths:
+      - "**.zig"
+      - "build.zig.zon"
+      - "bench/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - ".github/workflows/perf.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  echo-throughput:
+    name: Echo throughput against ws
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment:
+      name: Performance
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/setup@v2
+        with:
+          version: 12.4.2
+          runtime: node@24
+          cache: true
+          install: false
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: false
+
+      - name: Restore Zig caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .zig-cache
+            zig-pkg
+          key: zig-0.16.0-${{ runner.os }}-${{ github.repository }}-${{ hashFiles('build.zig', 'build.zig.zon', 'src/builds/**') }}
+          restore-keys: |
+            zig-0.16.0-${{ runner.os }}-${{ github.repository }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the native addon and the bundle
+        # The benchmark imports the built bundle, not src/, so the bundle has to
+        # exist before the measurement starts.
+        run: pnpm build
+
+      - name: Measure
+        # Deliberately runs without `--gate`.
+        #
+        # The gate fails when ventijs's median falls more than ten percent behind
+        # `ws` on the same host, and ventijs is not there yet: the first
+        # measurement with a working engine drain came out between 0.51 and 0.65
+        # of `ws` across 64 B to 16 KiB payloads. Failing every pull request on
+        # that would be reporting the project's honest starting point as a
+        # regression against itself, and would train contributors to ignore the
+        # job.
+        #
+        # So this job reports: the raw samples and the `ws` baseline are uploaded
+        # as an artifact on every run, including failures, and the comparison is
+        # read from the run rather than from a status. `--gate` stays available
+        # locally through `pnpm bench -- --gate` for a developer who wants the
+        # verdict. The gate becomes blocking when the engine reaches parity, and
+        # the switch is one flag on this step.
+        run: pnpm run bench
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: echo-throughput
+          path: bench/results
+          if-no-files-found: warn
+          retention-days: 30

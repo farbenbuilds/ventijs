@@ -69,23 +69,27 @@ mapping, event dispatch ordering, boundary lifetime rules, and capacity
 exhaustion. The build job uploads `dist/` and the generated `.d.ts` bundle so
 reviewers can inspect the published type surface without building locally.
 
-`ts-test.yml` runs the pure suites (`tests/protocol`, `tests/compat`,
-`tests/conformance`, `tests/tooling`) without the native toolchain, skipping
-only the suites that adopt a native connection: `tests/binding/**`,
-`tests/compat/socket/**`, `tests/compat/stream.test.ts`, and
-`tests/conformance/close.conformance.test.ts`, which needs a live server to
-close on. A new suite that loads the addon must be added to that exclusion
-list or it will fail this job; `zig-test.yml` runs all four.
+`ts-test.yml` runs a bare `vitest run` without the native toolchain, so it
+discovers new suites instead of enumerating directories, and excludes the four
+globs that need the addon: `tests/binding/**`, `tests/compat/socket/**`,
+`tests/compat/stream.test.ts`, and `tests/conformance/close.conformance.test.ts`,
+the last because it needs a live server to close on. A new suite that loads the
+addon must be added to that exclusion list or it will fail this job.
 
 `zig-test.yml` runs two jobs with the same toolchain and cache: units
 (`zig build test`, compiling `src/engine_tests.zig` and the per-module suites
 under `src/engine-tests/`, mirroring the `src/engine/` planes) and the
-addon-backed lifecycle suite
-(`pnpm build:binding` then
-`vitest tests/binding tests/compat/socket tests/compat/stream.test.ts`). Both
-cache `.zig-cache` and `zig-pkg` between runs. Neither installs a vendor C
-toolchain: the engine compiles BoringSSL, lsquic, libdeflate, and zlib itself
-from pinned package sources.
+addon-backed lifecycle suite, which runs `pnpm build:binding`, checks the built
+declarations with `pnpm exec tsdown && pnpm run typecheck:dist`, and then runs:
+
+```sh
+vitest run tests/binding tests/compat/socket tests/compat/stream.test.ts tests/conformance
+```
+
+so every suite `ts-test.yml` excludes is covered here, and the conformance
+suites run against the real addon. Both jobs cache `.zig-cache` and `zig-pkg`
+between runs. Neither installs a vendor C toolchain: the engine compiles
+BoringSSL, lsquic, libdeflate, and zlib itself from pinned package sources.
 
 ## Native addon matrix
 
@@ -128,39 +132,219 @@ linked issue and cannot be merged silently.
 
 ## Autobahn RFC 6455 compliance
 
-The compatibility job builds the server example in release mode, waits for the
-listener, and runs the digest-pinned
-`crossbario/autobahn-testsuite:0.8.2@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074`
-container as the fuzzing client. The runner terminates the server on every
-exit path and writes reports as the invoking POSIX user so repeated local runs
-can replace them safely.
+The harness is `node tests/autobahn/run.ts`, or `pnpm test:autobahn`. It
+deliberately does not run on Deno, which is worth recording because the idea is
+reasonable and was measured.
 
-The configuration selects groups 1-7 and 9-13 with no exclusions. The report
-gate requires all 517 cases with 514 `OK` and 3 `INFORMATIONAL` results. Any
-failed, `NON-STRICT`, missing, additional, or reclassified case fails the job.
-RFC 7692 groups 12 and 13 pass through negotiated no-context-takeover
-per-message deflate. HTML/JSON reports are uploaded even when the gate fails.
+Deno is the better fit in principle: this harness spawns a WebSocket server,
+spawns Docker, reads and writes a report directory, and reads two environment
+variables, so it would run under exactly
+`--allow-run --allow-read --allow-write --allow-env` instead of with the whole
+filesystem, and `denoland/setup-deno` would install it in the workflow without
+taxing the dev shell, which has never had Docker either.
+
+The engine does not run under Deno. Measured in `autobahn.yml`:
+
+- the addon loads: a preflight that only `require`s it and prints the engine
+  version succeeds under Deno 2.x, so `dlopen` and the N-API surface are fine;
+- the threadsafe function works: the `listening` event arrives in JavaScript, so
+  the engine thread started, bound the listener, and the cross-thread callback
+  path is intact;
+- the connection then never completes. The probe records `handshake: false` and
+  a 1006 close, meaning the listener socket existed but nothing ever served the
+  connection, and even the over-limit probe that the engine answers with 1009 on
+  Node gets 1006.
+
+So the bridge works and the engine's event loop does not. Deno publishes no musl
+build, which also means this cannot be diagnosed on a musl host at all, since a
+locally built addon is musl and the only available Deno is glibc. The port was
+reverted and the harness stays on Node, which keeps it on the same addon-loading
+path `tests/binding/**` already exercises.
+
+A preflight step runs first: `tests/autobahn/preflight.ts` loads the addon and
+prints the engine version. It costs about five seconds and it is the only
+pre-suite failure mode that would otherwise be discovered after 21 minutes of
+suite time.
+
+The reference is digest-only. The `crossbario/autobahn-testsuite` repository
+publishes exactly two tags, `latest` and `25.10.1`, and both resolve to that
+digest; there is no `0.8.2` tag, so a tag-and-digest reference is unpullable and
+the job would fail at `docker run` rather than at a protocol assertion. Dropping
+the tag loses no information, because the two published tags are the same
+manifest.
+
+The configuration selects groups 1-7 and 9-13 with no case exclusions, which is
+517 cases. The gate holds the run to that total, to the capacity-blocked count, to
+the evaluated count, and to a recognised `behaviorClose` vocabulary, so a
+truncated or foreign report fails rather than passing quietly. Any failed,
+missing, additional, or reclassified case outside `tests/autobahn/baseline.json`
+fails the job. `NON-STRICT` is tolerated, and that is the rule the reference
+implementation forces: the 517-case `ws` report classifies 6.4.1 through 6.4.4 as
+`NON-STRICT`, because the specification is genuinely ambiguous for a UTF-8
+handling edge there. A gate that fails on `NON-STRICT` therefore fails `ws`
+itself, which cannot be the contract.
+
+### What the job costs, and what was cut
+
+Measured step timings from a full run: setup 7s, Zig cache restore 10s, addon
+build 126s, image pull 16s, **suite 2100s**. The suite is 92 per cent of the job,
+and it is not this project's cost. The target answers a connect, echo, and close
+in **0.42 ms**, so all 517 cases together are 0.2 seconds of target time against
+35 minutes of suite time. The four seconds per case is inside `wstest`, which is
+Python, and nothing on the Node or Zig side can make it faster. The only lever
+is selecting fewer cases.
+
+Three things changed, in descending order of effect:
+
+1. **The path filter no longer matches `src/**`.** It previously did, which
+   subsumed `**.zig` and additionally matched every TypeScript file, so a change
+   to the `ws`-shaped facade, which this suite never exercises, still started the
+   job. Now only a Zig source, `build.zig.zon`, the harness, the lockfile, or the
+   workflow itself does. The same defect was in `perf.yml` and is fixed the same
+   way, since the benchmark drives the native engine and is equally indifferent to
+   the facade.
+
+   What this does and does not save needs stating, because the first version of
+   this section overstated it. For a `pull_request` event GitHub evaluates
+   `paths` against the **whole pull request diff**, not the incremental push, so a
+   branch that already contains a Zig or harness change re-runs this job on every
+   later push however unrelated that push is. Measured on this pull request: a
+   commit touching only `README.md` and `docs/*.md`, neither of which appears in
+   the filter, still started the job. So the filter saves a run for a pull
+   request whose cumulative diff never touches those paths, and for pushes to
+   `main`. It does not help a long-lived engine branch, which is the case this
+   pull request is.
+
+   What actually bounds the waste on a busy branch is the `concurrency` block
+   above, with `cancel-in-progress` on a pull request: two of the runs on this
+   branch show `cancelled` rather than competing. Gating the job on the
+   _incremental_ diff instead would need `github.event.before` compared against
+   the changed-files API, with a decision about what to do when that call fails.
+   It is not done here.
+
+2. **A pull request runs the `framing` selection, which omits the two
+   per-message-deflate groups.** Those are 216 of 517 cases and every one reports
+   `UNIMPLEMENTED`, because `permessage-deflate` is normalised and never
+   negotiated, so they cannot change until deflate is implemented.
+
+   This is not a speedup, which was the assumption when it was added, and the
+   measurement is why. Two runs of the same job: the full selection took 2100s of
+   suite time for 517 cases, and the framing selection took 2086s for 301. Dropping
+   42 per cent of the cases saved fourteen seconds, because the cost is not per
+   case. A deflate case whose extension is never negotiated fails almost
+   immediately, while the framing and UTF-8 groups are where the client actually
+   waits. The cost is concentrated in the groups that were kept.
+
+   The selection is kept because it is the same signal for marginally less work,
+   it makes the report state what it covered, and it will start costing real time
+   the moment deflate is implemented, at which point the groups have to come back.
+
+3. **The preflight above** turns an unloadable addon from a 21-minute failure
+   into a 5-second one.
+
+The gate holds a run to the count its mode selects, so a config and an
+expectation that disagree fail rather than pass quietly: 517 / 128 / 389 in
+`full`, 301 / 44 / 257 in `framing`. A deflate case that appears in a `framing`
+report trips `count-total` and `count-evaluated`.
+
+A case-group matrix would cut wall-clock roughly fourfold, at the cost of paying
+the addon build once per job, which increases total runner minutes. Since the
+concern is runner time, it was not done.
+
+There is no further reduction available on this side. The addon build is about
+two to four minutes against a warm cache, the image pull is sixteen seconds, and
+the per-case cost is not uniform enough for a subset to help. The honest summary
+is that the path filter is the only large win here, and the suite is expensive
+because the Autobahn fuzzing client is, not because of anything in this
+repository.
+
+### The known-failure baseline
+
+The first full run, on commit `47bfc68`, produced: **517 cases, 128
+capacity-blocked, 160 of 389 evaluated cases passed, 229 failed.** Those 229 are
+committed to `tests/autobahn/baseline.json`, grouped by cause:
+
+| Group | Cases | Cause                                                              |
+| ----- | ----- | ------------------------------------------------------------------ |
+| 13    | 77    | `permessage-deflate` is normalised but never negotiated            |
+| 12    | 55    | `permessage-deflate` is normalised but never negotiated            |
+| 6     | 70    | UTF-8 handling across the incremental decoder                      |
+| 9     | 12    | Frame and payload limits are not enforced as the suite expects     |
+| 5     | 8     | Fragmented messages are not reassembled                            |
+| 1     | 6     | Invalid or partial UTF-8 in a text frame is not rejected with 1007 |
+| 7     | 1     | A close-handshake edge is not conformant                           |
+
+This is a regression gate, not an exclusion list, and the distinction matters. A
+failure outside the baseline fails the run, so nothing can regress into silence.
+A baseline entry that starts passing is reported and fails the run until it is
+removed, so the list can only shrink. Every case is still classified, counted, and
+written to the report; nothing is hidden from the arithmetic. What the baseline
+records is "the engine does not do this yet", with a reason per group, in a file
+that a reviewer can read and a contributor can shrink.
+
+The alternative was either a job that is red on arrival and stays red, which
+teaches contributors to ignore it, or a narrowed case selection that would hide
+exactly the gaps this suite exists to find.
+
+`CLOSURE_OK_CASES` and `CLOSURE_INFORMATIONAL_CASES` were removed as gate
+conditions for the same reason. Those 514 and 3 are the `behaviorClose` split of
+the fully conformant `ws` reference; holding ventijs to them asserts that all 389
+evaluated cases pass, which is the per-case gate's job rather than a property of
+the report's shape. The reference numbers are still printed in the run summary as
+context.
+
+Of the 517 cases, 128 are capacity-blocked and 389 are evaluated. The engine is
+compiled with a 32 KiB `message_capacity` in `src/engine/server/capacities.zig`, a
+`comptime` constant no harness can raise, so the blocked set is 7.1.6, 9.1
+through 9.6, 10.1.1, and the seven oversized payload rows of each of groups 12
+and 13. Each blocked case is reported as a distinct `skipped-capacity` outcome
+with its byte size, not as a pass and not as a failure. Groups 5 and 6 use small
+fragments and are not capacity-blocked. HTML and JSON reports are uploaded even
+when the gate fails.
 
 ## Benchmark
 
-The benchmark job checks the pull request and its `main` base into separate
-directories, builds both from their own working directory on the same runner,
-and runs the versioned `ventijs-ws-compare` contract:
+The harness is `pnpm bench`, which runs `node bench/index.ts`. It drives `ws` and
+the ventijs native engine through one shared echo path, so the server is the only
+variable between the two rows of the report. The ventijs leg is the native
+engine rather than the `ws`-shaped facade, because the facade's HTTP upgrade path
+does no RFC 6455 framing yet and would measure a handshake that never becomes a
+message. The `ws` client drives both legs, because ventijs client construction
+still throws `ERR_INVALID_STATE`.
 
 1. Start a `ws` echo server and the equivalent ventijs echo server.
-2. Run the same bounded client workload against each: fixed connections,
-   fixed message size, fixed duration, measured with a pinned tool.
-3. Repeat three times, discard the warm-up, and compare medians.
+2. Run the same bounded client workload against each: one connection, fixed
+   message size, fixed round-trip count, measured with `node:perf_hooks`.
+3. Repeat three times by default, discard the warm-up, and compare medians.
+4. Write a JSON report carrying commit, Node.js, pnpm, Zig, lockfile, CPU and
+   memory provenance, plus the raw samples behind every median.
 
-The regression gate fails when the candidate falls below 90 percent of the
-`main` baseline. The `ws` comparison is recorded as evidence, not as a
-pass/fail threshold, because absolute numbers vary across runners. Raw reports
-are uploaded as workflow artifacts; scheduled mainline runs append canonical
-JSON plus raw evidence to the `benchmark-data` branch. Records include runner,
-Node.js, pnpm, Zig, and lockfile provenance.
+`--gate` fails the run when ventijs's median falls below 90 percent of the `ws`
+median, and also when a configuration could not be measured, so an unverified row
+cannot read as a pass. The ten percent tolerance accounts for shared-runner
+variance.
 
-The tolerance accounts for shared-runner variance. Claims in documentation may
-cite only retained runs and must state the runner and toolchain.
+**The CI job does not pass `--gate` yet.** The first measurement with a working
+engine drain put ventijs between 0.14 and 0.38 of `ws` on a shared
+`ubuntu-24.04` runner, and between 0.57 and 0.66 of `ws` on an idle workstation.
+The shared runner is several times slower for both legs, which is why the ratio
+is the comparable figure and the absolute round-trip counts are not. Gating on that would report the project's
+honest starting point as a regression against itself on every pull request, and
+would train contributors to ignore the job. The job therefore uploads the raw
+report as an artifact on every run, including failures, and the comparison is read
+from the run rather than from a status. Enabling the gate is one flag on the
+`Measure` step in `.github/workflows/perf.yml`, and it belongs there when the
+engine reaches parity.
+
+The payload matrix is capped at 32 KiB by the engine's compiled
+`message_capacity`, and the harness rejects a larger `--sizes` entry rather than
+comparing a missing capability against a speed. `ws` accepts far more, so a row
+above the ceiling would not be a slower ventijs but an absent one.
+
+Raw reports are uploaded as workflow artifacts; scheduled mainline runs append
+canonical JSON plus raw evidence to the `benchmark-data` branch. Claims in
+documentation may cite only retained runs and must state the runner and
+toolchain.
 
 ## Publishing
 

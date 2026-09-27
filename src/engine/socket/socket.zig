@@ -20,7 +20,11 @@ pub const valid_close_code = status.valid_close_code;
 
 /// Fixed-capacity connection records. `PayloadRing` is the bounded staging
 /// ring every record shares; its slot capacity is the payload cap.
-pub fn socket_slab(comptime capacity: u32, comptime PayloadRing: type) type {
+pub fn socket_slab(
+    comptime capacity: u32,
+    comptime PayloadRing: type,
+    comptime InboundRing: type,
+) type {
     if (capacity == 0) @compileError("socket slab capacity must be greater than zero");
 
     return struct {
@@ -28,7 +32,13 @@ pub fn socket_slab(comptime capacity: u32, comptime PayloadRing: type) type {
 
         pub const Slot = ops.Slot;
 
+        /// Staged outbound payloads, consumed by the engine thread through
+        /// `queues.take_outbound`.
         ring: PayloadRing = .{},
+        /// Parsed inbound messages waiting for the Node main thread, filled by
+        /// the engine thread through `queues.stage_inbound`. See
+        /// `instance.inbound_slots` for why this is deeper than `ring`.
+        inbound: InboundRing = .{},
         slots: [capacity]Slot = [_]Slot{.{}} ** capacity,
 
         /// Resets a record for a freshly acquired connection generation.

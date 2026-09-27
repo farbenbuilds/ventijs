@@ -1,7 +1,7 @@
 {
   "name": "ventijs",
   "version": "0.0.0",
-  "description": "A high-performance, drop-in replacement for ws, built on the first-party µWebZockets Zig engine via napi-zig.",
+  "description": "A drop-in replacement for ws for Node.js, built on the first-party µWebZockets Zig engine via napi-zig. Pre-alpha.",
   "homepage": "https://github.com/farbenbuilds/ventijs#readme",
   "bugs": {
     "url": "https://github.com/farbenbuilds/ventijs/issues"
@@ -29,8 +29,11 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint && node scripts/check-conventions.mjs",
     "lint:fix": "oxlint --fix",
-    "test": "pnpm run build:binding && vitest run",
+    "test": "pnpm run build:binding && vitest run --no-file-parallelism",
     "test:watch": "pnpm run build:binding && vitest",
+    "test:compat": "vitest run tests/conformance",
+    "test:autobahn": "node tests/autobahn/run.ts",
+    "bench": "node bench/index.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "typecheck:dist": "tsc -p tsconfig.dist-types.json",
     "release": "bumpp",

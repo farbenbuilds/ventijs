@@ -18,6 +18,10 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 
+# generated run output
+bench/results/*.json
+tests/autobahn/reports/
+
 # build artifacts
 *.o
 *.a

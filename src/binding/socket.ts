@@ -91,6 +91,37 @@ export function resumeSocket(server: ServerHandle, connection: ConnectionHandle)
   return statusFromOrdinal(callNative(() => addon.resumeSocket(server, connection)));
 }
 
+/// Hands the connection's staged payloads to the engine thread.
+///
+/// `sendSocket` only copies bytes into the staging ring, so a caller that never
+/// pumps would see `ok` and a growing `bufferedAmount` with nothing on the wire.
+/// The engine copies the bytes out before the next loop iteration, so the ring
+/// slot is free as soon as this returns and a partial flush is safe to retry.
+export function pumpSocket(server: ServerHandle, connection: ConnectionHandle): EngineStatus {
+  assertServerHandle(server);
+  assertConnectionHandle(connection);
+  const addon = loadAddon();
+  return statusFromOrdinal(callNative(() => addon.pumpSocket(server, connection)));
+}
+
+/// One parsed inbound message, copied into a Node-owned buffer.
+///
+/// The engine reuses its own message buffer for the next frame and frees the
+/// ring slot here, so the returned buffer is the only copy and is safe to retain
+/// past the handler. Null means nothing is staged, which happens when a wakeup
+/// was coalesced or the event channel dropped its notification.
+export function takeSocketMessage(
+  server: ServerHandle,
+  connection: ConnectionHandle,
+): { readonly bytes: Buffer; readonly isBinary: boolean } | null {
+  assertServerHandle(server);
+  assertConnectionHandle(connection);
+  const addon = loadAddon();
+  const taken = callNative(() => addon.takeSocketMessage(server, connection));
+  if (taken === null) return null;
+  return { bytes: taken[0], isBinary: taken[1] };
+}
+
 /// Bytes staged for the connection and not yet drained. A stale handle reads
 /// zero, matching a closed `ws` socket.
 export function socketBufferedAmount(server: ServerHandle, connection: ConnectionHandle): number {

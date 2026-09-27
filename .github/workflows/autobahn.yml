@@ -1,0 +1,129 @@
+name: Autobahn
+
+on:
+  push:
+    branches:
+      - main
+    # Only the engine can change RFC 6455 behaviour, so only a Zig source, a
+    # build manifest, the harness, or the toolchain may start this job.
+    #
+    # An earlier version also matched `src/**`, which subsumed `**.zig` and
+    # additionally matched every TypeScript file. That meant a change to the
+    # `ws`-shaped facade, which the suite never exercises, still spent 38 minutes
+    # of runner time re-measuring something it cannot observe. `**.zig` already
+    # covers `src/**/*.zig`; `build.zig.zon` does not match `**.zig` and is
+    # listed because it pins the engine and its vendored dependencies.
+    paths:
+      - "**.zig"
+      - "build.zig.zon"
+      - "tests/autobahn/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - ".github/workflows/autobahn.yml"
+  pull_request:
+    branches:
+      - main
+    # Only the engine can change RFC 6455 behaviour, so only a Zig source, a
+    # build manifest, the harness, or the toolchain may start this job.
+    #
+    # An earlier version also matched `src/**`, which subsumed `**.zig` and
+    # additionally matched every TypeScript file. That meant a change to the
+    # `ws`-shaped facade, which the suite never exercises, still spent 38 minutes
+    # of runner time re-measuring something it cannot observe. `**.zig` already
+    # covers `src/**/*.zig`; `build.zig.zon` does not match `**.zig` and is
+    # listed because it pins the engine and its vendored dependencies.
+    paths:
+      - "**.zig"
+      - "build.zig.zon"
+      - "tests/autobahn/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - ".github/workflows/autobahn.yml"
+  schedule:
+    # Weekly, off the hour, so the RFC 6455 report is refreshed even when no
+    # pull request touches the engine.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autobahn-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fuzzing-client:
+    name: RFC 6455 conformance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: Autobahn
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/setup@v2
+        with:
+          version: 12.4.2
+          runtime: node@24
+          cache: true
+          install: false
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: false
+
+      - name: Restore Zig caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .zig-cache
+            zig-pkg
+          key: zig-0.16.0-${{ runner.os }}-${{ github.repository }}-${{ hashFiles('build.zig', 'build.zig.zon', 'src/builds/**') }}
+          restore-keys: |
+            zig-0.16.0-${{ runner.os }}-${{ github.repository }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the native addon
+        run: pnpm build:binding
+
+      - name: Check the addon loads
+        # Cheap and first, because a runtime that cannot load the addon is the
+        # only pre-suite failure mode that would otherwise be discovered after
+        # 21 minutes of suite time. See tests/autobahn/preflight.ts.
+        run: node tests/autobahn/preflight.ts
+
+      - name: Pull the digest-pinned fuzzing client
+        # Pulled before the gate so an unpullable reference fails here with a
+        # clear message rather than surfacing as a protocol failure.
+        run: docker pull crossbario/autobahn-testsuite@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074
+
+      - name: Run the suite
+        # The harness writes its report and a JSON summary on every exit path,
+        # so the artifacts below exist even when the gate fails.
+        #
+        #
+        # A pull request or a push runs the default `framing` selection, which
+        # omits the two per-message-deflate groups. They are 216 of 517 cases,
+        # about 42 per cent of the runtime, and every one is UNIMPLEMENTED
+        # because `permessage-deflate` is normalised and never negotiated, so
+        # they cannot change until deflate is implemented. A schedule and a
+        # manual run use `--full`, which is the authoritative 517.
+        run: >-
+          node tests/autobahn/run.ts
+          ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--full' || '' }}
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autobahn-report
+          path: tests/autobahn/reports
+          if-no-files-found: warn
+          retention-days: 30

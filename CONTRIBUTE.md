@@ -37,21 +37,37 @@ another architecture is `zig build -Dtarget=<triple>`.
 
 Run every command through pnpm; do not invoke package binaries directly.
 
-| Command               | Tool       | Purpose                                     | State on this branch |
-| --------------------- | ---------- | ------------------------------------------- | -------------------- |
-| `pnpm install`        | pnpm       | Install development dependencies            | Wired                |
-| `pnpm dev`            | tsdown     | Rebuild the TypeScript bundle in watch mode | Wired                |
-| `pnpm build`          | napi-zig   | Build the native addon and bundle `dist/`   | Wired                |
-| `pnpm build:binding`  | napi-zig   | Build the native addon only                 | Wired                |
-| `pnpm test`           | vitest     | Unit, integration, and boundary tests       | Wired                |
-| `pnpm test:watch`     | vitest     | Rerun tests on change                       | Wired                |
-| `pnpm typecheck`      | tsc / tsgo | Strict type check with no emit              | Wired                |
-| `pnpm typecheck:dist` | tsc        | Check built declarations through `exports`  | Wired                |
-| `pnpm lint`           | oxlint     | Lint the TypeScript sources                 | Wired                |
-| `pnpm format`         | oxfmt      | Format TypeScript, JSON, and Markdown       | Wired                |
-| `pnpm format:check`   | oxfmt      | Verify formatting without writing files     | Wired                |
-| `pnpm test:compat`    | vitest     | Run the `ws` behavioral conformance suite   | Planned              |
-| `pnpm bench`          | node       | Benchmark against `ws` on the same host     | Planned              |
+| Command               | Tool     | Purpose                                                             | State on this branch |
+| --------------------- | -------- | ------------------------------------------------------------------- | -------------------- |
+| `pnpm install`        | pnpm     | Install development dependencies                                    | Wired                |
+| `pnpm dev`            | tsdown   | Rebuild the TypeScript bundle in watch mode                         | Wired                |
+| `pnpm build`          | napi-zig | Build the native addon, bundle `dist/`, check declarations          | Wired                |
+| `pnpm build:binding`  | napi-zig | Build the native addon only                                         | Wired                |
+| `pnpm test`           | vitest   | Unit, integration, and boundary tests                               | Wired                |
+| `pnpm test:watch`     | vitest   | Rerun tests on change                                               | Wired                |
+| `pnpm test:compat`    | vitest   | Run the `ws` behavioral conformance suite                           | Wired                |
+| `pnpm test:autobahn`  | node     | Run the Autobahn suite; add `-- --full` for all 517 cases           | Wired                |
+| `pnpm bench`          | node     | Compare against `ws` on the same host: `node bench/index.ts --gate` | Wired                |
+| `pnpm typecheck`      | tsc      | Strict check of `src` and `tests`, no emit                          | Wired                |
+| `pnpm typecheck:dist` | tsc      | `tsc -p tsconfig.dist-types.json`; needs `tsdown` output first      | Wired                |
+| `pnpm lint`           | oxlint   | Lint, then the convention checks in `scripts/`                      | Wired                |
+| `pnpm lint:fix`       | oxlint   | Apply the safe lint fixes                                           | Wired                |
+| `pnpm format`         | oxfmt    | Format TypeScript, JSON, and Markdown                               | Wired                |
+| `pnpm format:check`   | oxfmt    | Verify formatting without writing files                             | Wired                |
+| `pnpm release`        | bumpp    | Bump the version across the versioned surfaces                      | Wired                |
+| `pnpm prepublishOnly` | pnpm     | Build before publish                                                | Wired                |
+
+`pnpm typecheck:dist` resolves the built declarations through the package
+`exports` map, so `tsdown` has to have run first. `pnpm build` does both in
+order; `zig-test.yml` runs them as `pnpm exec tsdown && pnpm run typecheck:dist`
+after `pnpm build:binding`.
+
+The two harnesses are entry points rather than part of the vitest suite, and
+they run under plain `node` on `.ts` files through Node's native type stripping,
+with no loader shim. That is why `tsconfig.json` sets
+`allowImportingTsExtensions`: the harness imports sibling modules with `.ts`
+specifiers, which `tsc` otherwise rejects. The Autobahn runner needs Docker, and
+the benchmark needs `pnpm build` first because it loads the bundle from `dist/`.
 
 `pnpm install` also installs the `lefthook` Git hooks. Run every hook against
 the whole tree with `pnpm exec lefthook run pre-commit --all-files`; a normal
@@ -63,9 +79,10 @@ Before every commit, run `pnpm lint`, `pnpm format:check`, and
 
 `pnpm build` and `pnpm test` rebuild the native binding first, so a clean
 checkout needs nothing beyond `nix develop` and `pnpm install`. `src/index.ts`
-re-exports the vendored `ws` type surface and gains value exports as the
-compatibility layer lands; `tests/binding/addon.test.ts` only proves the native
-pipeline, so replace it as the `ws` surface lands, do not extend it.
+re-exports the vendored `ws` type surface and the runtime `WebSocket`,
+`WebSocketServer`, and `createWebSocketStream` values;
+`tests/binding/addon.test.ts` only proves the native pipeline, so replace it as
+the `ws` surface lands, do not extend it.
 
 ## Engineering requirements
 
@@ -119,8 +136,12 @@ pipeline, so replace it as the `ws` surface lands, do not extend it.
 - `ws` compatibility tests run the same scenario against both libraries and
   compare observable behavior. Import the real `ws` package as a dev
   dependency only; never ship it.
-- Protocol changes must run the RFC 6455 Autobahn suite through the CI target
-  described in [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md).
+- Protocol changes must pass the RFC 6455 Autobahn suite, which is the
+  `autobahn.yml` job. The contract is in
+  [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md). The job only starts for a change to a
+  Zig source, `build.zig.zon`, the harness, the lockfile, or the workflow, so an
+  engine change gets it automatically. To run it by hand needs Docker;
+  `pnpm test:autobahn` is the alias.
 - Zig unit tests live in `src/engine-tests/`, one `<module>_test.zig` per
   testable source module, aggregated by `root.zig` and entered through
   `src/engine_tests.zig`. Run them with `zig build test`; `zig-test.yml` runs

@@ -6,33 +6,19 @@
 //! bounds work.
 
 const std = @import("std");
+const capacities = @import("capacities.zig");
 
-/// Capacities compiled into the engine application type. The engine's
-/// per-connection footprint is dominated by HTTP/2 session state, so the
-/// connection count is the main memory knob; keep it deliberately modest.
-pub const connection_capacity: u32 = 128;
-pub const message_capacity: u32 = 32 * 1024;
-pub const frame_capacity: u32 = message_capacity;
-pub const write_queue_capacity: u32 = 32 * 1024;
-/// Largest request body the engine accepts, on HTTP/1.1 and per HTTP/2 stream
-/// alike. A WebSocket upgrade never carries one, so this only sizes the
-/// engine's per-connection request buffer and the narrowed HTTP/2 stream.
-pub const body_capacity: u32 = 4 * 1024;
-/// Inactivity timeout the engine application type is compiled with. Zero
-/// leaves the engine's connection sweeper unstarted, so a connection lives
-/// until the peer or the application ends it. `ws` has no idle timeout, so
-/// there is no engine-side default to match either.
-pub const idle_timeout_ms: u64 = 0;
-
-/// Fixed storage limits for host and route path. The extra byte holds the
-/// NUL sentinel the engine's `[]const u8` listeners expect.
-pub const host_capacity = 254;
-pub const path_capacity = 256;
-/// RFC 6455 section 5.5 caps every control frame at 125 bytes, so a close
-/// frame must always fit inside the configured frame cap.
-pub const min_frame_bytes: u32 = 125;
-pub const max_port: u32 = 65_535;
-pub const max_backlog: u32 = 65_535;
+pub const connection_capacity = capacities.connection_capacity;
+pub const message_capacity = capacities.message_capacity;
+pub const frame_capacity = capacities.frame_capacity;
+pub const write_queue_capacity = capacities.write_queue_capacity;
+pub const body_capacity = capacities.body_capacity;
+pub const idle_timeout_ms = capacities.idle_timeout_ms;
+pub const host_capacity = capacities.host_capacity;
+pub const path_capacity = capacities.path_capacity;
+pub const min_frame_bytes = capacities.min_frame_bytes;
+pub const max_port = capacities.max_port;
+pub const max_backlog = capacities.max_backlog;
 
 pub const Error = error{
     InvalidHost,

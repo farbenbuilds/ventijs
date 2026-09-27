@@ -5,7 +5,7 @@ const payload = @import("../../engine/socket/payload.zig");
 const socket = @import("../../engine/socket/socket.zig");
 
 const Ring = payload.payload_ring(4, 16);
-const Slab = socket.socket_slab(4, Ring);
+const Slab = socket.socket_slab(4, Ring, Ring);
 
 test "send stages a record and accounts the buffered amount" {
     var slab = Slab{};
@@ -57,7 +57,7 @@ test "close validates the code and reason" {
 
 test "close accepts the exact reason boundary and accounts its bytes" {
     const BigRing = payload.payload_ring(4, 256);
-    const BigSlab = socket.socket_slab(4, BigRing);
+    const BigSlab = socket.socket_slab(4, BigRing, BigRing);
     var slab = BigSlab{};
     slab.open(0, 1);
     const reason = "x" ** 123;

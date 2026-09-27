@@ -3,6 +3,7 @@ const uwz = @import("uWebZockets");
 const build_options = @import("build_options");
 const server_io = @import("engine/ffi/server_io.zig");
 const socket_io = @import("engine/ffi/socket_io.zig");
+const socket_pump = @import("engine/ffi/socket_pump.zig");
 
 comptime {
     napi.module(@This());
@@ -38,5 +39,11 @@ pub const close_socket = socket_io.close_socket;
 pub const pause_socket = socket_io.pause_socket;
 /// Resumes inbound message dispatch behind a connection handle.
 pub const resume_socket = socket_io.resume_socket;
+/// Hands one connection's staged payloads to the engine thread.
+pub const pump_socket = socket_pump.pump_socket;
+/// Takes the oldest parsed message for a connection as a JavaScript-owned buffer.
+pub const take_socket_message = socket_pump.take_socket_message;
 /// Bytes staged behind a connection handle and not yet drained.
 pub const socket_buffered_amount = socket_io.socket_buffered_amount;
+/// Inbound messages the inbound ring refused because JavaScript fell behind.
+pub const server_dropped_messages = socket_pump.server_dropped_messages;

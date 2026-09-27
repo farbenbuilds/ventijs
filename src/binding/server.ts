@@ -73,3 +73,19 @@ export function serverDroppedEvents(handle: ServerHandle): bigint {
   const addon = loadAddon();
   return callNative(() => addon.serverDroppedEvents(handle));
 }
+
+/// Inbound messages the engine parsed and then discarded because JavaScript had
+/// not drained the inbound ring yet.
+///
+/// This is a loss, not a backpressure signal: the peer delivered the frame and
+/// the engine framed it correctly, but there was nowhere to put the bytes. The
+/// engine's WebSocket behavior exposes no way to stop reading once a consumer
+/// falls behind, so the inbound ring is the only place a burst can be absorbed
+/// and its depth is the budget. A non-zero count means a peer outran the main
+/// thread and the application should be told rather than left to assume every
+/// frame arrived.
+export function serverDroppedMessages(handle: ServerHandle): bigint {
+  assertServerHandle(handle);
+  const addon = loadAddon();
+  return callNative(() => addon.serverDroppedMessages(handle));
+}

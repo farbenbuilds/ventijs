@@ -1,10 +1,13 @@
 export type EngineEventKind =
   | "listening"
   | "connectionOpen"
+  | "connectionMessage"
   | "connectionClose"
   | "engineError"
   | "serverClosed";
 
+/// One engine event. `code` is the bound port for `listening` and the staged
+/// payload length for `connectionMessage`; it is 0 elsewhere.
 export type EngineEvent = {
   readonly kind: EngineEventKind;
   readonly server: number;
@@ -56,9 +59,18 @@ export type VentiAddon = {
   closeSocket(server: number, connection: bigint, code: number, reason: Uint8Array): number;
   pauseSocket(server: number, connection: bigint): number;
   resumeSocket(server: number, connection: bigint): number;
+  /// Hands one connection's staged payloads to the engine thread. Staging only
+  /// copies bytes into a ring; this is what moves them onto the wire.
+  pumpSocket(server: number, connection: bigint): number;
+  /// Takes the oldest parsed message for a connection as
+  /// `[buffer, isBinary]`, or null when nothing is staged.
+  takeSocketMessage(server: number, connection: bigint): [Buffer, boolean] | null;
   socketBufferedAmount(server: number, connection: bigint): number;
   /// Events the channel could not reserve or queue, including threadsafe
   /// function failures. The terminal reserve keeps close and shutdown events
   /// out of the regular drop set.
   serverDroppedEvents(server: number): bigint;
+  /// Inbound messages the engine parsed and then had to discard because the
+  /// Node main thread had not drained the inbound ring yet.
+  serverDroppedMessages(server: number): bigint;
 };

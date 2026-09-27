@@ -140,6 +140,7 @@ ventijs/
 │           ├── default.zig    # default build target query
 │           └── native.zig     # position-independent vendor archives
 ├── tests/
+│   ├── autobahn/              # RFC 6455 harness: target, gate, and report
 │   ├── binding/
 │   │   ├── addon.test.ts      # native pipeline smoke test
 │   │   ├── server*.test.ts    # server lifecycle and limits
@@ -157,6 +158,10 @@ ventijs/
 │   ├── tooling/               # lint plugin rule tests
 │   ├── types/                 # fixtures checked by pnpm typecheck
 │   └── declarations/          # fixtures checked by pnpm typecheck:dist
+├── bench/                     # same-host harness comparing ventijs with ws
+│   ├── index.ts               # entry point, sizing, and report path
+│   ├── echo/                  # one echo server and client per implementation
+│   └── support/               # plan, sampling, statistics, provenance, report
 └── .github/                   # community templates, issue forms, CI workflows
 ```
 
@@ -217,7 +222,8 @@ Test and tooling directories:
 
 ```text
 tests/          # vitest unit, integration, and boundary tests
-bench/          # planned: benchmark harness that runs ventijs and ws side by side
+tests/autobahn/ # RFC 6455 conformance harness, run by node, not by vitest
+bench/          # benchmark harness that runs ventijs and ws through one path
 ```
 
 ## Language boundary and ownership
@@ -336,11 +342,21 @@ engine/ffi/socket_io.zig: resolve server and connection handles
 engine/socket/socket.zig: state transition ----> engine/socket/payload.zig: copy into the
                                                    bounded staging ring
                                                           |
-                                                  (engine-thread drain lands
-                                                   with the message pump)
+                                       engine/ffi/socket_pump.zig: cluster inbox,
+                                       which wakes the engine thread
+                                                          |
+                                       engine pokes the topic subscriber, which
+                                       calls WebSocket.send
                                                           |
                                                    libxev non-blocking write
 ```
+
+The inbound direction is the mirror image. The engine's `message` callback hands
+the parsed payload to `engine/socket/queues.zig`, which copies it into the
+server's inbound ring and emits a `connection_message` wakeup.
+`src/binding/socket.ts` then pulls the bytes with `takeSocketMessage`, which
+copies them into a Node-owned `Buffer` and frees the ring slot, because the
+engine reuses its own buffer for the next frame.
 
 Backpressure flows the other way: when the outbound ring exceeds its
 high-water mark, the native call reports it, queue growth stays visible through
@@ -471,9 +487,11 @@ keep the rules enforced:
 - `src/engine-tests/socket/{payload,socket}_test.zig` cover copy semantics, capacity
   limits, close validation, dispatch pause, buffered accounting, and the
   concurrent terminal latch; `tests/binding/socket*.test.ts` drive the ops
-  through the addon against a live connection. The engine-thread drain that
-  turns staged records into frames is the next milestone: the ring and the
-  per-connection accounting are in place, but nothing consumes them yet.
+  through the addon against a live connection. The engine-thread drain that turns
+  staged records into frames landed with `src/engine/ffi/socket_pump.zig`, and
+  `tests/binding/socket-echo.test.ts` drives a real `ws` client through a text
+  round trip, a binary round trip with the opcode preserved, a burst inside the
+  inbound budget, and the drop accounting beyond it.
 - `src/engine/socket/handles.zig` packs state and generation into one atomic word, so
   `resolve` answers both checks with a single acquire load and can never pair a
   fresh generation with a stale state. `src/engine/socket/socket.zig` gives every
@@ -537,7 +555,9 @@ remain current:
 - `tests/binding/addon.test.ts` proves the Zig build, addon load, and version
   round-trip.
 
-The `compat/` factories and the engine-thread drain that flushes the staging
-ring are the next implementation milestones. The addon exposes the engine
-version, the server lifecycle, and the per-connection socket operations; the
-`ws` runtime surface sits on top of them, with the drain and receiver pending.
+The next milestone is adoption: the engine carries a full RFC 6455 message round
+trip over its own listener, but the `ws`-shaped facade's HTTP upgrade path still
+adopts a raw Node stream and does no framing, and client construction is still
+absent. The addon exposes the engine version, the server lifecycle, and the
+per-connection socket operations including the drain and the receiver; the
+`ws`-shaped upgrade path is what sits on top of them without them yet.

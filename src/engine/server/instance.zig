@@ -39,8 +39,24 @@ pub const Handle = registry.Handle;
 /// Outbound payload slots staged per server. Slot bytes equal the trusted
 /// message cap, so every accepted message fits exactly one record.
 pub const payload_slots: usize = 8;
+
+/// Inbound slots, deliberately deeper than the outbound ring.
+///
+/// The two directions drain under different conditions. An outbound payload is
+/// taken by the `pump` that staged it, in the same call, so eight slots is
+/// ample. An inbound payload waits for the Node main thread to reach the next
+/// threadsafe-function callback, and the engine thread keeps reading its socket
+/// in the meantime, so the depth is the burst budget: a peer that delivers more
+/// messages than this before the main thread turns has the excess counted as
+/// dropped by `serverDroppedMessages`.
+///
+/// The engine's WebSocket behavior exposes no way to stop reading once a
+/// consumer falls behind, so the buffer is the only place to absorb a burst.
+/// At the configured 32 KiB message cap this is 2 MiB per live server.
+pub const inbound_slots: usize = 64;
 pub const PayloadRing = payload.payload_ring(payload_slots, @as(usize, options.message_capacity));
-pub const Sockets = socket.socket_slab(options.connection_capacity, PayloadRing);
+pub const InboundRing = payload.payload_ring(inbound_slots, @as(usize, options.message_capacity));
+pub const Sockets = socket.socket_slab(options.connection_capacity, PayloadRing, InboundRing);
 
 /// Mutable process-wide binding table. This is the one module-level variable
 /// in the addon: the engine callback ABI carries no user context, so the
@@ -78,4 +94,14 @@ pub fn lookup(env: napi.Env, raw: u40) ?*Instance {
 /// Engine-thread lookup for a comptime trampoline slot.
 pub fn lookup_slot(slot: u32) ?*Instance {
     return servers.lookup_slot(slot);
+}
+
+/// Resolves a packed connection handle and returns it only when the slab still
+/// holds that exact generation. Every FFI entry point goes through here, so a
+/// call against a closed connection returns a typed status instead of
+/// dereferencing a stale slot.
+pub fn resolve_connection(target: *Instance, raw: u64) ?handles.Handle {
+    const handle = handles.Handle.from_int(raw);
+    _ = target.slab.resolve(handle) orelse return null;
+    return handle;
 }
