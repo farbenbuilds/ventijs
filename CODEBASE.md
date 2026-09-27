@@ -192,6 +192,8 @@ src/
 │   ├── events/                # listener registry, emitter, and DOM handlers
 │   ├── options/               # shared, server, and client normalization
 │   ├── socket/                # socket factory, state, send, and lifecycle
+│   ├── client/                # the http.ClientRequest handshake and its events
+│   ├── extensions/            # RFC 7692 header grammar and negotiation
 │   └── server/                # server factory, upgrade, and handshake policy
 ├── protocol/                  # pure TypeScript helpers
 │   ├── close-codes.ts         # RFC 6455 close code constants and predicates
@@ -557,7 +559,14 @@ remain current:
 
 The next milestone is adoption: the engine carries a full RFC 6455 message round
 trip over its own listener, but the `ws`-shaped facade's HTTP upgrade path still
-adopts a raw Node stream and does no framing, and client construction is still
-absent. The addon exposes the engine version, the server lifecycle, and the
-per-connection socket operations including the drain and the receiver; the
-`ws`-shaped upgrade path is what sits on top of them without them yet.
+adopts a raw Node stream and does no framing, so the engine's own route is not yet
+reachable through the public surface. The addon exposes the engine version, the
+server lifecycle, and the per-connection socket operations including the drain and
+the receiver; the `ws`-shaped upgrade path is what sits on top of them without them
+yet.
+
+The framing the public surface does use is the Zig frame codec under
+`src/engine/codec/`, reached through `http.ClientRequest` on the client route and
+`http.Server`'s `upgrade` event on the server route. It speaks RFC 7692
+`permessage-deflate` using the pinned engine's own `compression_stream`, so a
+message compressed through the facade is one the engine route can read.

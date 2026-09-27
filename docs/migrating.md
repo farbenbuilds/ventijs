@@ -34,36 +34,47 @@ Both `import` and `require` conditions are published, with `types` under each, a
 `tests/declarations/consumer.cts` compiles against the `require` path with
 `moduleResolution: node16` and `skipLibCheck: false` so the condition cannot rot.
 
-## Two limits worth knowing before you start
+## Two things worth knowing before you start
 
-### Messages are capped at 32 KiB
+### The engine route is capped at 64 KiB
 
-`ws` defaults `maxPayload` to 100 MiB. ventijs's message buffer is `comptime`-sized at
-32 KiB, so the compiled cap is what applies and `maxPayload` is reported at its `ws`
-value without being enforced. A peer that sends more gets close code 1009.
+`ws` defaults `maxPayload` to 100 MiB, and the codec route honours it: the option is
+enforced per connection, up to 100 MiB, and a peer that sends more gets close code 1009. Buffers grow into that ceiling on demand rather than being allocated at open, so
+a connection costs what it sends rather than what it is allowed to send.
 
-`engineLimits().messageBytes` reports the compiled number rather than a copy of it, so
-a caller can read the cap instead of guessing:
+The engine route is separate and still compiled: `message_capacity` is a `comptime`
+constant of 64 KiB in `src/engine/server/capacities.zig`, the Autobahn suite's largest
+group-1 payload, and a larger frame is refused with 1009. `maxPayload` does not raise
+it. It is reported rather than restated, so a caller can read the number:
 
 ```ts
 import { engineLimits } from "ventijs";
 
-console.log(engineLimits().messageBytes); // 32768
+console.log(engineLimits().messageBytes); // 65536
 ```
 
-This is the one difference most likely to affect a working application, and it is a
-cap rather than a behaviour change. Raising it is a one-line change to a `comptime`
-constant in `src/engine/codec/capacities.zig`, at a cost of roughly 20 MiB per live
-connection for the reassembly buffer and its transmit mirror.
+Raising it is a one-line change, at roughly 20 MiB per live server, because the
+message slab, the write queue, the RFC 7692 scratch, the cluster inbox, and both
+staging rings all scale with it.
 
-### `perMessageDeflate` is not offered
+### `perMessageDeflate` is on, with one deliberate difference
 
-The option is normalized and reported on `server.options` exactly as `ws` reports it,
-and then ignored: a client offering the extension connects uncompressed. The engine
-route negotiates it; the codec route has no compressor yet.
+Compression works on both routes, negotiated with `ws`'s own rules, over the pinned
+engine's libdeflate. Two things differ, and both are about the compressor being
+one-shot rather than a streaming zlib:
 
-If your deployment depends on compression, this is a blocker, and the honest answer is
-that it is not implemented rather than the fact that a header round-trips.
+- Both directions always answer `server_no_context_takeover; client_no_context_takeover`.
+  Carrying a deflate window between messages needs a streaming compressor. Declining is
+  always legal and costs compression ratio, not correctness, and it means a message
+  never depends on the one before it.
+- A `*_max_window_bits` below 15 is **declined during negotiation**, which for a client
+  means the handshake is refused. `ws` accepts one because its zlib can produce it;
+  accepting it here would mean compressing with a different window than the one agreed,
+  and the peer's inflater would reject the stream mid-message.
+
+A message you send in fragments goes out uncompressed, for the same reason: RFC 7692
+needs a sync flush at each fragment boundary. Messages you _receive_ fragmented and
+compressed are read correctly, so interoperability is unaffected in both directions.
 
 ## What is deliberately different
 

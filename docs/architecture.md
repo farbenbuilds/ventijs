@@ -43,10 +43,11 @@ handler sees is already a copy.
 
 ## The two things to know before reading the code
 
-The engine is compiled with fixed capacities, most importantly a 32 KiB message
-size and a 64-message inbound burst. They are `comptime` constants, so no
-JavaScript option raises them, and they are the reason several Autobahn cases
-and several benchmark payload sizes do not apply.
+The engine route is compiled with fixed capacities, most importantly a 64 KiB
+message size and a 64-message inbound burst. They are `comptime` constants, so no
+JavaScript option raises them, and they are the reason some Autobahn cases and
+some benchmark payload sizes do not apply. The codec route is not bound by them:
+its buffers grow into each connection's own `maxPayload` and `maxFragments`.
 [COMPATIBILITY.md](../COMPATIBILITY.md) has the table.
 
 The engine has no hook for stopping a read when its consumer falls behind, so a

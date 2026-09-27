@@ -24,9 +24,12 @@ will own parsing, buffers, and backpressure.
   by surface: `events/{registry,emitter,dom-events,dom-listeners}.ts` own the
   listener registry and DOM handlers, `options/{shared,server,client}.ts`
   normalize options, `socket/{socket,state,attach,send,payload,close-reason,lifecycle}.ts`
-  own the socket facade, `server/{server,close,listeners,upgrade,handshake,clients}.ts`
-  own the server and Node HTTP upgrade path, and `constructors.ts`, `errors.ts`,
-  `ready-state.ts`, `stream.ts` sit at the root. `src/protocol/` holds the pure
+  own the socket facade, `server/{server,close,listeners,upgrade,handshake,negotiate,clients}.ts`
+  own the server and Node HTTP upgrade path, `client/{address,protocols,request,dial,open,redirect,unexpected,extension}.ts`
+  own the `http.ClientRequest` handshake and the three payload events,
+  `extensions/{grammar,scan,format,params,deflate,offer,negotiated,window,threshold}.ts`
+  own RFC 7692 negotiation, and `constructors.ts`, `errors.ts`, `ready-state.ts`,
+  `stream.ts` sit at the root. `src/protocol/` holds the pure
   close code, framing, and backpressure helpers.
   `src/engine/` holds the native foundation grouped by plane: `channel/`
   (threadsafe transport, event vocabulary, ring), `ffi/` (the N-API entry

@@ -30,34 +30,39 @@ server, sends text and binary, and receives the replies. The framing is a pure Z
 codec behind a Node-API handle, and the transport is Node's, which is the shape
 `docs/adr/0001-transport-and-framing-ownership.md` records as the decision.
 
-| Area                                         | State                                                                 |
-| -------------------------------------------- | --------------------------------------------------------------------- |
-| Native addon build, load, and engine version | Works. Reports engine 1.7.0 and its HTTP/3 capability                 |
-| `WebSocketServer` shape and handshake policy | Works. Construction, options, events, `handleUpgrade`, `verifyClient` |
-| Server-side `WebSocket` record               | Works. Properties, DOM handlers, ready states, exactly-once `close`   |
-| `WebSocket` client, `new WebSocket(url)`     | Works. `net` and `tls`, redirects, `ws+unix:`, and a real `ws` peer   |
-| `message` and `send`, both directions        | Works on both routes, including fragmentation and `binaryType`        |
-| `ping`, `pong`, `autoPong`, control events   | Works. The pong goes out before the application sees the ping         |
-| `close` codes, reasons, exactly-once `close` | Works, including 1005 for a code-less close and `closeTimeout`        |
-| `binaryType`, `skipUTF8Validation`           | Works. All four values, and the validator is switchable               |
-| `allowSynchronousEvents`, `maxFragments`     | Works. The pause stops the parse loop, as `ws` does                   |
-| `createWebSocketStream`                      | Works, compared against `ws`                                          |
-| `clientTracking`, `server.options` shape     | Works, property for property against `ws`                             |
-| Per-message deflate                          | **Not offered on the codec route.** See below                         |
-| Maximum message size                         | **32 KiB**, compiled into the codec rather than configured            |
+| Area                                         | State                                                                      |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| Native addon build, load, and engine version | Works. Reports engine 1.7.0 and its HTTP/3 capability                      |
+| `WebSocketServer` shape and handshake policy | Works. Construction, options, events, `handleUpgrade`, `verifyClient`      |
+| Server-side `WebSocket` record               | Works. Properties, DOM handlers, ready states, exactly-once `close`        |
+| `WebSocket` client, `new WebSocket(url)`     | Works. `net` and `tls`, redirects, `ws+unix:`, and a real `ws` peer        |
+| `message` and `send`, both directions        | Works on both routes, including fragmentation and `binaryType`             |
+| `ping`, `pong`, `autoPong`, control events   | Works. The pong goes out before the application sees the ping              |
+| `close` codes, reasons, exactly-once `close` | Works, including 1005 for a code-less close and `closeTimeout`             |
+| `binaryType`, `skipUTF8Validation`           | Works. All four values, and the validator is switchable                    |
+| `allowSynchronousEvents`, `maxFragments`     | Works. The pause stops the parse loop, as `ws` does                        |
+| `createWebSocketStream`                      | Works, compared against `ws`                                               |
+| `clientTracking`, `server.options` shape     | Works, property for property against `ws`                                  |
+| Per-message deflate                          | Works, on both routes, with `ws`'s negotiation and its 1024-byte threshold |
+| Maximum message size                         | `ws`'s 100 MiB default, per connection, honoured                           |
+| `maxPayload`, `maxFragments`                 | Enforced per connection, at the option's value, on both routes             |
 
-The one option in that table a caller is most likely to want is the one that is
-not there. `perMessageDeflate` is normalized, reported on `server.options`, and
-then ignored: a client offering the extension still connects, uncompressed. The
-engine route negotiates it and the codec route has no compressor, and a caller
-cannot tell the two apart from the option. It is recorded rather than faked
-because a `perMessageDeflate: true` that does not compress is a peer that believes
-it negotiated something it did not.
+`perMessageDeflate` uses the pinned engine's own libdeflate, so a message
+compressed here is a message the engine's WebSocket route can read, and there is
+one DEFLATE in the binary. Both directions always answer
+`server_no_context_takeover; client_no_context_takeover`: carrying a deflate window
+between messages needs a streaming compressor, the engine's is one-shot, and
+declining is always legal and costs compression ratio rather than correctness. A
+`*_max_window_bits` below 15 is therefore declined during negotiation rather than
+accepted and quietly ignored — `ws` accepts one because its zlib is streaming.
 
-The second limit is compiled into the build rather than configured: a message is
-capped at 32 KiB, where `ws` defaults to 100 MiB, so `maxPayload` is reported at
-its `ws` value and the compiled cap is what applies. See
-[The 32 KiB message ceiling](#the-32-kib-message-ceiling).
+`maxPayload` grows into its ceiling on demand rather than allocating it at open.
+A server holding the 100 MiB default for 128 connections would need 12.5 GiB, and a
+peer that never sends a message must not cost anything.
+
+The compiled ceiling that remains is the engine route's, 64 KiB, and it is a
+property of the build rather than a setting. See
+[The 64 KiB message ceiling](#the-64-kib-message-ceiling).
 
 The itemised matrix, with the module and the evidence test behind every row, is
 [COMPATIBILITY.md](COMPATIBILITY.md). The mapping from the upstream API
@@ -156,29 +161,30 @@ Status vocabulary, shared with [COMPATIBILITY.md](COMPATIBILITY.md):
 | `todo`     | Planned, not implemented                                     |
 | `deferred` | Deliberately out of scope until the named prerequisite lands |
 
-| Surface                                              | Status    | Note                                                              |
-| ---------------------------------------------------- | --------- | ----------------------------------------------------------------- |
-| Package exports, ESM and CJS bundles, declarations   | `done`    | `import` and `require` conditions, `types` under both             |
-| Native addon build, load, engine version, HTTP/3     | `done`    | ReleaseSafe, Zig 0.16.0                                           |
-| `WebSocketServer` construction, options, events      | `done`    | Including the `WebSocket` class option                            |
-| `handleUpgrade`, `shouldHandle`, `address`, `close`  | `done`    | Node HTTP upgrade path                                            |
-| `verifyClient`, `handleProtocols`, `wsClientError`   | `done`    | Hardened beyond `ws`, divergence documented                       |
-| `createWebSocketStream`                              | `done`    | Duplex adapter, compared against `ws`                             |
-| Server-side `WebSocket` properties and DOM handlers  | `done`    | Ready states, `binaryType`, `addEventListener`, `on*`             |
-| `WebSocket` client construction                      | `done`    | `net` and `tls`, redirects, `unexpected-response`, `ws+unix:`     |
-| Inbound text and binary messages                     | `done`    | Both routes, with a real `ws` peer on each                        |
-| Fragmented messages                                  | `done`    | `send`'s `fin` reads, and continuations carry opcode 0            |
-| Outbound `send` and `bufferedAmount`                 | `done`    | `binary` and `fin` both reach the wire                            |
-| `ping`, `pong`, and their events                     | `done`    | Automatic pong precedes the application event                     |
-| Close codes, reasons, exactly-once `close`           | `done`    | 1005 for a code-less close, `closeTimeout` bounds the handshake   |
-| `binaryType`, `skipUTF8Validation`                   | `done`    | All four values; the validator is switchable                      |
-| `allowSynchronousEvents`, `maxFragments`             | `done`    | The pause stops the parse loop; excess fragments close 1008       |
-| `maxPayload` and `1009`                              | `partial` | Reported at its `ws` value; the compiled 32 KiB cap applies       |
-| `perMessageDeflate`                                  | `partial` | Normalised and reported; not negotiated on the codec route        |
-| Client `upgrade` event, `finishRequest`              | `partial` | Not emitted; the client owns a `net.Socket`, not an HTTP request  |
-| Client `redirect` and `unexpected-response` payloads | `partial` | Fire, carrying the URL and status rather than the request objects |
-| RFC 6455 Autobahn suite                              | `done`    | `autobahn.yml`, capacity-scoped at 128 of 517 cases               |
-| `ws` side-by-side conformance suite                  | `partial` | Every surface above has a compared case; see the matrix           |
+| Surface                                              | Status    | Note                                                                                   |
+| ---------------------------------------------------- | --------- | -------------------------------------------------------------------------------------- |
+| Package exports, ESM and CJS bundles, declarations   | `done`    | `import` and `require` conditions, `types` under both                                  |
+| Native addon build, load, engine version, HTTP/3     | `done`    | ReleaseSafe, Zig 0.16.0                                                                |
+| `WebSocketServer` construction, options, events      | `done`    | Including the `WebSocket` class option                                                 |
+| `handleUpgrade`, `shouldHandle`, `address`, `close`  | `done`    | Node HTTP upgrade path                                                                 |
+| `verifyClient`, `handleProtocols`, `wsClientError`   | `done`    | Hardened beyond `ws`, divergence documented                                            |
+| `createWebSocketStream`                              | `done`    | Duplex adapter, compared against `ws`                                                  |
+| Server-side `WebSocket` properties and DOM handlers  | `done`    | Ready states, `binaryType`, `addEventListener`, `on*`                                  |
+| `WebSocket` client construction                      | `done`    | `net` and `tls`, redirects, `unexpected-response`, `ws+unix:`                          |
+| Inbound text and binary messages                     | `done`    | Both routes, with a real `ws` peer on each                                             |
+| Fragmented messages                                  | `done`    | `send`'s `fin` reads, and continuations carry opcode 0                                 |
+| Outbound `send` and `bufferedAmount`                 | `done`    | `binary` and `fin` both reach the wire                                                 |
+| `ping`, `pong`, and their events                     | `done`    | Automatic pong precedes the application event                                          |
+| Close codes, reasons, exactly-once `close`           | `done`    | 1005 for a code-less close, `closeTimeout` bounds the handshake                        |
+| `binaryType`, `skipUTF8Validation`                   | `done`    | All four values; the validator is switchable                                           |
+| `allowSynchronousEvents`, `maxFragments`             | `done`    | The pause stops the parse loop; excess fragments close 1008                            |
+| `maxPayload`, `maxFragments`, and `1009`             | `done`    | Enforced per connection, at the option's value                                         |
+| `perMessageDeflate`                                  | `done`    | RFC 7692 on both routes; a window below 15 is declined                                 |
+| Client `upgrade` event                               | `done`    | `ws`'s payload and order, before the 101 is validated                                  |
+| Client `redirect` and `unexpected-response` payloads | `done`    | `ws`'s payloads: the next hop's request, and the request and response                  |
+| `finishRequest`                                      | `partial` | Typed and reachable, not on the published surface: `@types/ws` declares no such member |
+| RFC 6455 Autobahn suite                              | `done`    | `autobahn.yml`, capacity-scoped at 128 of 517 cases                                    |
+| `ws` side-by-side conformance suite                  | `partial` | Every surface above has a compared case; see the matrix                                |
 
 ## Protocol conformance, honestly
 
@@ -187,13 +193,19 @@ engine is known to fail are listed in `tests/autobahn/baseline.json`, anything
 failing outside that list fails the run, and a listed case that starts passing also
 fails the run until the list is shortened.
 
-The latest run, `36287763043`, over the 301-case framing selection:
+The latest recorded run, `36287763043`, over the 301-case framing selection. These
+numbers are from that run and are not recomputed on every build: the selection is
+derived from `engineLimits().messageBytes`, which has since moved from 32 KiB to
+64 KiB, and three entries in `tests/autobahn/baseline.json` are expected to pass now
+and are only removed by a run against the digest-pinned client. That run needs
+Docker, so the expected-passing entries are marked rather than deleted, and the
+gate's own report of a now-passing entry is what flags them.
 
 | Outcome                | Cases | Meaning                                             |
 | ---------------------- | ----- | --------------------------------------------------- |
 | Passed                 | 248   | Conformant                                          |
 | Failed                 | 9     | Tracked in `tests/autobahn/baseline.json`, by cause |
-| Skipped, over capacity | 44    | Above the 32 KiB message ceiling below              |
+| Skipped, over capacity | 44    | Above the 64 KiB message ceiling below              |
 
 The first run of the suite, on commit `47bfc68`, had 160 passing and 229 failing.
 The nine that remain are six in group 1 closed with 1009 where an echo is expected,
@@ -222,19 +234,27 @@ remaining cost is the 175s addon build. The per-group breakdown is in
 [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md) and in the baseline file itself, so the
 next person to pick this up does not have to re-derive it from a CI log.
 
-## The 32 KiB message ceiling
+## The 64 KiB message ceiling
 
-The engine is compiled with `message_capacity = 32 * 1024` in
+The engine route is compiled with `message_capacity = 64 * 1024` in
 `src/engine/server/capacities.zig`. It is a `comptime` constant baked into the
-addon, so it is a property of the build rather than a runtime setting, and
-`maxPayload` does not change it. The same constant sizes the cluster inbox
-payload slot, so it caps a single message on both sides.
+addon, so it is a property of the build rather than a runtime setting. The same
+constant sizes the cluster inbox payload slot, so it caps a single message on
+both sides of the engine route.
 
-A 64 KiB frame is closed by the engine with code `1009` and the reason
-`Message too large`. The probe in the Autobahn harness measures exactly that
-close and records it in `tests/autobahn/reports/summary.json`. `ws` accepts
-104857600 bytes by default, 3200 times the engine's cap, so this is a real
-divergence rather than a tuning difference.
+64 KiB is the Autobahn suite's largest group-1 payload, so nothing the suite asks
+for is above it. A larger frame is closed by the engine with code `1009` and the
+reason `Message too large`, and the probe in the Autobahn harness measures
+exactly that close and records it in `tests/autobahn/reports/summary.json`. The
+harness reads the number out of `engineLimits().messageBytes` rather than
+restating it, which is why raising the constant moved the derived capacity model
+with it instead of invalidating it.
+
+The codec route is not bound by this constant. A per-connection `maxPayload` is
+honoured up to 100 MiB, growing into its ceiling on demand. `ws` accepts
+104857600 bytes by default, so on that route there is no divergence left to
+report; what remains is the memory cost of a caller who asks for it, which is
+proportional to what the connection actually sends.
 
 There is a second limit, and it is a count rather than a size. The engine has no
 hook for stopping a read when its consumer falls behind, so the inbound ring is
@@ -252,7 +272,7 @@ Two harnesses account for it rather than working around it:
 
 - the Autobahn gate reports 128 of the 517 selected cases as
   `skipped-capacity`, with the byte size and this limit, leaving 389 evaluated;
-- the benchmark payload matrix stops at 64 B, 1 KiB, 16 KiB, and 32 KiB, and
+- the benchmark payload matrix stops at 64 B, 1 KiB, 16 KiB, and 64 KiB, and
   refuses a larger size with an error naming the source of the ceiling.
 
 Raising it is an engine change with a memory cost, and it is on the list of work
