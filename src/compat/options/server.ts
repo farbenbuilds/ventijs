@@ -1,13 +1,8 @@
 import type { NormalizedServerOptions } from "../../types/options";
 import type { ServerOptions } from "../../types/ws";
+import { maxFragmentsOf, maxPayloadOf } from "./bounded";
 import { codecLimits } from "../../binding/codec";
-import {
-  closeTimeoutOf,
-  invalidOption,
-  maxFragmentsOf,
-  maxPayloadOf,
-  normalizePerMessageDeflate,
-} from "./shared";
+import { closeTimeoutOf, invalidOption, normalizePerMessageDeflate } from "./shared";
 
 export function normalizeServerOptions(options?: ServerOptions): NormalizedServerOptions {
   // ws copies own enumerable properties before reading, so inherited
@@ -38,9 +33,10 @@ export function normalizeServerOptions(options?: ServerOptions): NormalizedServe
     autoPong: source.autoPong ?? true,
     // Read against the addon's compiled ceilings, so an option above what the build
     // supports is refused here by name rather than becoming a native ordinal at the
-    // first connection.
-    maxPayload: maxPayloadOf(source, codecLimits().maxPayloadBytes),
-    maxFragments: maxFragmentsOf(source, codecLimits().maxFragments),
+    // first connection. The thunks are lazy: an option that was not set never loads the
+    // addon, so `new WebSocketServer({ port })` touches no native code here.
+    maxPayload: maxPayloadOf(source, () => codecLimits().maxPayloadBytes),
+    maxFragments: maxFragmentsOf(source, () => codecLimits().maxFragments),
     skipUTF8Validation: source.skipUTF8Validation ?? false,
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, false),
     closeTimeout: closeTimeoutOf(source),

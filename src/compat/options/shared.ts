@@ -87,40 +87,6 @@ export function normalizePerMessageDeflate(
 /// representation of "no limit" is the largest value it can enforce, so zero is
 /// translated to the ceiling here; `engineLimits().maxPayloadBytes` reports what that
 /// number is, which makes the translation checkable rather than implicit.
-///
-/// Everything else is refused rather than coerced, and the reason is that this
-/// number is now the *actual* limit: a codec's buffers are runtime-sized and bounded
-/// by it, so `maxPayload: 1.5` would mean a ceiling nothing can be compared against
-/// and a negative one would mean a server that closes every connection with 1009 on
-/// the first byte. `ws` coerces both and closes the connection later, which is the
-/// harder failure to diagnose.
-///
-/// The ceiling is the addon's, read from the compiled artifact rather than restated,
-/// so a caller that asks for more than the build supports is refused by name here
-/// instead of arriving as a native enum ordinal.
-export function maxPayloadOf(source: unknown, ceiling: number): number {
-  return boundedOption("maxPayload", source, DEFAULT_MAX_PAYLOAD, ceiling);
-}
-
-/// The `maxFragments` a codec will enforce. Same shape and the same zero-means-no-limit
-/// rule as `maxPayloadOf`; `ws` guards it with `_maxFragments > 0` for the same reason.
-export function maxFragmentsOf(source: unknown, ceiling: number): number {
-  return boundedOption("maxFragments", source, DEFAULT_MAX_FRAGMENTS, ceiling);
-}
-
-function boundedOption(name: string, source: unknown, fallback: number, ceiling: number): number {
-  const raw = (source as { readonly [key: string]: unknown })[name];
-  if (raw === undefined) return fallback;
-  if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 0 || raw > ceiling) {
-    invalidOption(
-      `The ${name} option must be an integer in [0, ${ceiling}] (received ${String(raw)})`,
-      RangeError,
-    );
-  }
-  if (raw === 0) return ceiling;
-  return raw;
-}
-
 /// The close deadline, in milliseconds, or 0 for "tear down on the next tick".
 ///
 /// A non-number or a negative value is refused rather than coerced: `setTimeout`
