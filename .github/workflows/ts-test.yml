@@ -65,14 +65,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Unit tests
-        # The native addon is not built in this job, so the suites that attach
-        # to it stay out exactly like tests/binding/**: the binding lifecycle
-        # tests, the compat facade suite that adopts a native connection, and
-        # the close conformance suite, which needs a real server to close on.
-        # The binding job in zig-test.yml runs all four.
+        # The native addon is not built in this job, so every suite that attaches
+        # to a native connection stays out: the binding lifecycle tests, the compat
+        # facade suite that adopts one, and the whole `ws` parity set, which
+        # compares a native-attached ventijs socket against `ws` and so needs a
+        # real server on both sides. The binding job in zig-test.yml runs them.
+        #
+        # The list is per file, so a new conformance suite that adopts a native
+        # connection has to be added here as well. It fails in this job on a
+        # missing addon if it is not, which reads as a broken test rather than a
+        # misplaced one; the binding job in zig-test.yml runs all of them.
         run: >-
           pnpm exec vitest run
           --exclude 'tests/binding/**'
           --exclude 'tests/compat/socket/**'
           --exclude 'tests/compat/stream.test.ts'
           --exclude 'tests/conformance/close.conformance.test.ts'
+          --exclude 'tests/conformance/control.conformance.test.ts'
+          --exclude 'tests/conformance/send-after-close.conformance.test.ts'

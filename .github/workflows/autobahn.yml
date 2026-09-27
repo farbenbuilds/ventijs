@@ -103,7 +103,10 @@ jobs:
         run: |
           mkdir -p .autobahn-out
           node tests/autobahn/diff-gate-cli.ts | tee .autobahn-out/decision
-          grep '^run=' .autobahn-out/decision | cut -d= -f2 >> "$GITHUB_OUTPUT"
+          # The whole `run=<value>` line goes to the output file, not the value
+          # alone: a bare `true` there is rejected as an invalid format, and it
+          # reads as a green step until the suite is silently skipped.
+          grep '^run=' .autobahn-out/decision >> "$GITHUB_OUTPUT"
           grep '^reason=' .autobahn-out/decision | cut -d= -f2- >> "$GITHUB_STEP_SUMMARY"
 
   fuzzing-client:
