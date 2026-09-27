@@ -2,46 +2,10 @@ import { sendSocket } from "../../binding/socket";
 import type { SocketState } from "../../types/socket";
 import type { EngineStatus } from "../../types/status";
 import { createError } from "../errors";
-import { reportWithoutClosing } from "./lifecycle";
 import { CONNECTING, OPEN } from "../ready-state";
+import { reportWithoutClosing } from "./lifecycle";
+import { notAttachedError, reportFailure } from "./send-failure";
 import { bufferedAmountOf, defer, notOpenError, statusError, toPayload } from "./payload";
-
-const NOT_ATTACHED =
-  "ventijs: the socket has no native transport attached; engine socket adoption is not implemented yet";
-
-function notAttachedError(): Error {
-  return createError("ERR_INVALID_STATE", NOT_ATTACHED);
-}
-
-/// Reports a failed send, and decides whether it also tears the socket down.
-///
-/// `ws` splits this three ways and only two of them are reachable from a public
-/// ventijs socket:
-///
-/// - CONNECTING throws out of `send`, before anything else.
-/// - Not `OPEN` goes to `sendAfterClose`: the bytes are accounted, the callback
-///   is told, and nothing else happens. No `error`, no close, `readyState`
-///   untouched, so a caller sending during a close already in progress does not
-///   have its socket taken away from it.
-/// - `OPEN` goes to the sender. A write failure reaches the caller's callback,
-///   and the socket's own `error` listener (`socketOnError`) latches `CLOSING`
-///   and destroys the transport. `ws` emits **nothing** on the `WebSocket` for a
-///   send failure, so the honest position is that ventijs is stricter here, and
-///   that the two places it can be stricter are the two below.
-///
-/// On an open socket with no callback there is nothing to observe, and silence
-/// was the previous behaviour: the caller had no channel at all. So `error` is
-/// emitted, latched once, and deliberately **without** closing. The socket is
-/// not at fault, the implementation is incomplete, and tearing it down would
-/// turn "this build cannot send" into "your connection died" for every caller
-/// that writes before the native transport exists.
-function reportFailure(state: SocketState, callback: unknown, error: Error): void {
-  if (typeof callback === "function") {
-    defer(callback, error);
-    return;
-  }
-  reportWithoutClosing(state, error);
-}
 
 export function sendData(
   state: SocketState,
@@ -56,7 +20,7 @@ export function sendData(
     // `sendAfterClose`: the bytes are accounted and the callback is told, and
     // nothing else happens. Routing this through `reportFailure` would close a
     // socket that was merely mid-close.
-    state.bufferedAmount += payload.bytes.length;
+    accountUnsentBytes(state, payload.bytes.length);
     defer(failure, notOpenError(state.readyState));
     return;
   }
@@ -91,6 +55,21 @@ function sendBinary(options: unknown, fallback: boolean): boolean {
   return typeof binary === "boolean" ? binary : fallback;
 }
 
+/// Accumulates bytes that were accepted but will never reach the network.
+///
+/// `ws` splits this on whether a sender exists, and the split matters here. With
+/// a sender the bytes are accounted against the socket's write queue, which
+/// drains. Without one there is no queue to account against, so the counter only
+/// ever grew: a send on a closing socket from the upgrade route raised
+/// `bufferedAmount` by the payload size, nothing ever decremented it, and a
+/// caller polling the property in a close handler watched a number climb without
+/// limit. A number that only rises is indistinguishable from a leak in the
+/// caller's own accounting, so nothing is accounted when there is nothing to
+/// account against.
+function accountUnsentBytes(state: SocketState, length: number): void {
+  if (state.attachment !== null) state.bufferedAmount += length;
+}
+
 function applySendStatus(
   state: SocketState,
   status: EngineStatus,
@@ -113,7 +92,7 @@ function applySendStatus(
     case "closed":
       // The engine says the connection is gone, so this is `sendAfterClose` and
       // not a send failure: the bytes are accounted and the caller is told.
-      state.bufferedAmount += length;
+      accountUnsentBytes(state, length);
       defer(callback, notOpenError(state.readyState));
       return;
     case "invalid-handle":
@@ -129,5 +108,20 @@ function applySendStatus(
     case "protocol-error":
     case "policy-violation":
       reportFailure(state, callback, statusError(status));
+      return;
   }
+  // Every case above returns, so reaching here means a new `EngineStatus` member
+  // has no branch. `unhandledStatus` takes `never`, which is the compile-time
+  // proof: adding a member to the union turns this call into a type error rather
+  // than a silent no-op on a status the send path has never seen. A `void` return
+  // type gives no exhaustiveness checking of its own, which is why
+  // `close-failure.ts` earns the same guarantee by returning an `Error`.
+  throw unhandledStatus(status);
+}
+
+function unhandledStatus(status: never): Error {
+  return createError(
+    "ERR_INVALID_STATE",
+    `ventijs: the engine reported an unknown socket status "${String(status)}"`,
+  );
 }

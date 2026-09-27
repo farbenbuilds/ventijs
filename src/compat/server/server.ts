@@ -72,6 +72,7 @@ export function createWebSocketServer(
     removeListeners: null,
     listeners: createRegistry<ServerEventMap>(),
     maxListeners: 10,
+    warned: new Set<string>(),
     target: undefined,
   };
 

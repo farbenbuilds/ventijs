@@ -82,6 +82,7 @@ export const socketState: SocketState = {
   transport: null,
   listeners: createRegistry<SocketEventMap>(),
   maxListeners: 10,
+  warned: new Set<string>(),
   target: undefined,
 };
 
@@ -100,6 +101,7 @@ export const serverState: ServerState = {
   removeListeners: null,
   listeners: createRegistry<ServerEventMap>(),
   maxListeners: 10,
+  warned: new Set<string>(),
   target: undefined,
 };
 

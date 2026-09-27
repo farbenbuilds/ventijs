@@ -15,10 +15,24 @@ test("registration methods return the emitter for chaining", () => {
   expect(emitter.setMaxListeners(4)).toBe(self);
 });
 
-test("setMaxListeners accepts undefined as Infinity", () => {
+/// `ws` delegates to `EventEmitter`, whose `setMaxListeners` runs Node's
+/// `validateNumber(n, 'n', 0)`. An absent argument is a `TypeError` upstream, so
+/// accepting it as `Infinity` here would be a silent divergence on a documented
+/// rejection.
+test("setMaxListeners refuses a non-number the way Node does", () => {
   const { emitter } = target();
-  emitter.setMaxListeners(undefined as never);
-  expect(emitter.getMaxListeners()).toBe(Infinity);
+  expect(() => emitter.setMaxListeners(undefined as never)).toThrow(TypeError);
+  expect(() => emitter.setMaxListeners("4" as never)).toThrow(TypeError);
+});
+
+/// Node accepts a fractional limit; only a non-number, a negative, and `NaN` are
+/// refused.
+test("setMaxListeners accepts a fractional limit and refuses out-of-range ones", () => {
+  const { emitter } = target();
+  emitter.setMaxListeners(1.5);
+  expect(emitter.getMaxListeners()).toBe(1.5);
+  expect(() => emitter.setMaxListeners(-1)).toThrow(RangeError);
+  expect(() => emitter.setMaxListeners(Number.NaN)).toThrow(RangeError);
 });
 
 test("unhandled non-Error values are wrapped like Node", () => {
