@@ -79,6 +79,13 @@ export function completeUpgrade(
     // hard 1007 on a payload `ws` would have delivered.
     acceptedState.allowSynchronousEvents = state.normalizedOptions.allowSynchronousEvents;
     acceptedState.validateUtf8 = !state.normalizedOptions.skipUTF8Validation;
+    // `maxPayload` and `maxFragments` are the two options that were normalized,
+    // reported on `server.options`, and then never read, so the compiled cap decided
+    // the real answer. They reach the codec here, before `attachSocket` opens it,
+    // because a codec's limits are fixed at creation and there is no call after that
+    // which could change them.
+    acceptedState.maxPayload = state.normalizedOptions.maxPayload;
+    acceptedState.maxFragments = state.normalizedOptions.maxFragments;
   }
   attachSocket(accepted, socket);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);

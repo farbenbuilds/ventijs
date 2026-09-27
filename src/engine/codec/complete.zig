@@ -58,8 +58,8 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
         return error.InvalidUtf8;
     }
     const kind: Kind = if (message_opcode == .text) .text else .binary;
-    const payload = peer.message[0..peer.message_len];
-    peer.message_len = 0;
+    const payload = peer.message.written();
+    peer.message.clear();
     peer.message_opcode = null;
     peer.utf8_state = .{};
     peer.conn.complete_frame();

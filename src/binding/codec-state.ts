@@ -25,3 +25,18 @@ export function codecRole(handle: bigint): number {
   const addon = loadAddon();
   return callNative(() => addon.codecRole(handle));
 }
+
+/// The per-connection ceilings a codec enforces, as `[maxPayload, maxFragments]`, or
+/// null once the handle is released.
+///
+/// Read back rather than echoed from the option, because the only way to know the
+/// limit in force is to ask the thing enforcing it, and the two can differ: a
+/// `maxPayload` of 0 is `ws`'s "no limit" and is translated to the ceiling on the way
+/// in, so the option a caller set and the limit a codec enforces are not the same
+/// number whenever the caller set zero.
+export function codecCeilings(handle: bigint): { maxPayload: number; maxFragments: number } | null {
+  const addon = loadAddon();
+  const ceilings: [number, number] | null = callNative(() => addon.codecCeilings(handle));
+  if (ceilings === null) return null;
+  return { maxPayload: ceilings[0], maxFragments: ceilings[1] };
+}

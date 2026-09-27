@@ -97,6 +97,13 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// the validator is in Zig and a codec is one connection: changing it later would
   /// mean a second codec mid-connection.
   validateUtf8: boolean;
+  /// The `maxPayload` a codec opened for this socket enforces, in bytes. Carried
+  /// rather than read back from the codec because a socket outlives its codec --
+  /// one is destroyed at close and the other is not -- and a caller inspecting a
+  /// closed socket's state should still be able to see what the limit was.
+  maxPayload: number;
+  /// The `maxFragments` a codec opened for this socket enforces.
+  maxFragments: number;
   /// Whether a ping is answered automatically. On the socket because the decision is
   /// made per frame in the inbound path, where the peer is known to be a client.
   autoPong: boolean;

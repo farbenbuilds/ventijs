@@ -9,7 +9,13 @@ const std = @import("std");
 const testing = std.testing;
 const zslay = @import("zslay");
 const codec = @import("../../engine/codec/state.zig");
+const limits = @import("../../engine/codec/limits.zig");
 const support = @import("frame_support.zig");
+
+/// A trusted limits record for a suite that wants its own ceilings.
+fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
+    return limits.Limits.trust(max_message, max_fragments, true) catch unreachable;
+}
 
 const Frame = support.Frame;
 const raw_frame = support.raw_frame;
@@ -50,8 +56,9 @@ test "a reserved bit without a negotiated extension is a protocol error" {
 test "a message over the cap is 1009, not 1002" {
     // A size limit reported as a protocol error tells the peer the wrong thing
     // about why its connection died, which is what a conformance suite checks.
-    const Small = codec.codec(16, 4, 8);
-    var peer = Small.init(.server, true);
+    const Small = codec.codec(4);
+    var peer = Small.init(.server, trusted(16, 8)) catch unreachable;
+    defer peer.deinit();
     var buffer: [64]u8 = undefined;
     const encoded = (Frame{ .opcode = .text, .payload = "0123456789abcdefghij", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer);
     try testing.expectEqual(codec.Outcome.failed, peer.feed(encoded).outcome);

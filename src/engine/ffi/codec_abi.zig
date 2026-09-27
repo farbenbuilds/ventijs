@@ -11,15 +11,24 @@
 //! and `number` in `src/binding/native.ts`. Handles are `u64` because they pack an
 //! index and a generation into one 64-bit word.
 
+const capacities = @import("../codec/capacities.zig");
 const state = @import("../codec/state.zig");
 
 /// Width of every count, code, and ordinal the boundary returns as a number.
 pub const Count = i32;
 
-// A capacity is not a boundary value: a codec has the one capacity the build was
-// compiled with, so there is nothing to pass and nothing to check. A per-connection
-// `maxPayload` needs a runtime-sized buffer, which is a different codec, not a
-// different argument to this one.
+/// The largest `maxPayload` or `maxFragments` the boundary will accept.
+///
+/// It is a width and not a policy: `Arg` is 32 bits and napi-zig reads it as a
+/// JavaScript `number`, so a larger value would arrive already truncated and the codec
+/// would be built with a limit nobody asked for. Refusing it is the difference between
+/// a `RangeError` a caller can read and a connection closed with 1009 for a reason
+/// that has nothing to do with the peer.
+///
+/// It is the codec's own ceiling rather than a second number, cast down to the
+/// boundary's width. A check that the two agree would be a `comptime` assertion rather
+/// than a definition, and a definition cannot drift from the thing it names.
+pub const ceiling_arg_max: Arg = @intCast(capacities.max_message_bytes);
 
 /// Width of every argument the boundary reads as a number.
 pub const Arg = u32;

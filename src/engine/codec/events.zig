@@ -129,3 +129,18 @@ const CLOSE_MESSAGE_TOO_BIG: u16 = 1009;
 const CLOSE_INVALID_PAYLOAD: u16 = 1007;
 const CLOSE_POLICY_VIOLATION: u16 = 1008;
 const CLOSE_PROTOCOL_ERROR: u16 = 1002;
+
+/// What one completed frame meant.
+///
+/// `payload` borrows the receive state this was decoded into, so it is valid until the
+/// next payload is taken. The FFI layer copies it into a Node-owned `Buffer` within
+/// the call that reads it, which is what keeps engine memory unreachable from
+/// JavaScript.
+pub const Decoded = struct {
+    kind: Kind,
+    /// Close code for a `close` frame, 0 otherwise.
+    code: u16 = 0,
+    payload: []const u8 = &.{},
+    /// Why a `rejected` frame was refused.
+    failure: Failure = .protocol_error,
+};

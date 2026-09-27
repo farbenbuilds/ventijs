@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { codecLimits } from "../../../src/binding/codec";
 import { normalizeClientOptions } from "../../../src/compat/options/client";
 
 test("fills the ws client defaults", () => {
@@ -28,7 +29,11 @@ test("preserves explicit falsy and zero client values", () => {
   });
   expect(options.followRedirects).toBe(true);
   expect(options.maxRedirects).toBe(0);
-  expect(options.maxPayload).toBe(0);
+  // Zero is `ws`'s "no limit" rather than "refuse everything": it guards
+  // `_maxPayload > 0`, so the check is disabled. The codec's representation of that
+  // is the largest value it can enforce, so the normalized record carries the
+  // ceiling and `engineLimits().maxPayloadBytes` is what makes it checkable.
+  expect(options.maxPayload).toBe(codecLimits().maxPayloadBytes);
   expect(options.skipUTF8Validation).toBe(true);
   expect(options.allowSynchronousEvents).toBe(false);
   expect(options.autoPong).toBe(false);

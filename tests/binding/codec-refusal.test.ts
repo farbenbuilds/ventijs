@@ -13,15 +13,15 @@ import {
   destroyCodec,
   feedCodec,
 } from "../../src/binding/codec";
-import { engineLimits } from "../../src/binding/server";
 import { clientFrames, drain } from "./codec-frames";
+import { DEFAULT_MAX_PAYLOAD, defaultCodecOptions } from "./codec-support";
 
 const REJECTED = CODEC_KINDS.indexOf("rejected");
 
-/// A codec for one role. The capacity is the compiled one, so a message over it is
+/// A codec for one role, at the compiled ceilings, so a message over the cap is
 /// what a refusal case has to build.
 function codecAt(role: number): bigint {
-  return createCodec(role);
+  return createCodec(role, defaultCodecOptions());
 }
 
 test("a server refuses an unmasked frame with 1002", () => {
@@ -78,7 +78,10 @@ test("an invalid text payload is refused with 1007", () => {
 });
 
 test("a message over the capacity is refused with 1009", () => {
-  const capacity = engineLimits().messageBytes;
+  // The codec's own ceiling rather than the engine's compiled one, because the two
+  // are different numbers now: the codec's is per-connection and set by the caller,
+  // the engine's is a startup slab this route does not use.
+  const capacity = DEFAULT_MAX_PAYLOAD;
   const handle = codecAt(CODEC_ROLE.server);
   try {
     const at = clientFrames([{ opcode: 0x1, payload: Buffer.alloc(capacity) }]);

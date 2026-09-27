@@ -59,6 +59,8 @@ export function connectSocket(
   state.autoPong = normalized.autoPong;
   state.allowSynchronousEvents = normalized.allowSynchronousEvents;
   state.validateUtf8 = !normalized.skipUTF8Validation;
+  state.maxPayload = normalized.maxPayload;
+  state.maxFragments = normalized.maxFragments;
   const socket = buildSocketRecord(state);
   const transport = openTransport(parsed);
   const attempt: Attempt = {

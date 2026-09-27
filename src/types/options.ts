@@ -26,6 +26,10 @@ export type NormalizedServerOptions = {
   readonly allowSynchronousEvents: boolean;
   readonly autoPong: boolean;
   readonly maxPayload: number;
+  /// The most fragments one message may be split into. `ws` documents it and
+  /// defaults it, but `@types/ws` declares it on neither record, so it is read
+  /// rather than declared here for the same reason `closeTimeout` is.
+  readonly maxFragments: number;
   readonly skipUTF8Validation: boolean;
   readonly perMessageDeflate: false | NormalizedPerMessageDeflate;
   /// Milliseconds a close handshake may stay unfinished. Zero means no deadline,
@@ -42,6 +46,9 @@ export type NormalizedClientOptions = {
   readonly maxRedirects: number;
   readonly handshakeTimeout: number | undefined;
   readonly maxPayload: number;
+  /// See the server record: documented and defaulted by `ws`, absent from
+  /// `@types/ws`.
+  readonly maxFragments: number;
   readonly skipUTF8Validation: boolean;
   readonly allowSynchronousEvents: boolean;
   readonly autoPong: boolean;

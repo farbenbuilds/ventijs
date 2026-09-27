@@ -79,6 +79,8 @@ export const socketState: SocketState = {
   allowSynchronousEvents: true,
   pendingInput: null,
   validateUtf8: true,
+  maxPayload: 100 * 1024 * 1024,
+  maxFragments: 16 * 1024,
   closeFrameReceived: false,
   errorEmitted: false,
   attachment: null,

@@ -1,10 +1,12 @@
 import type { NormalizedClientOptions } from "../../types/options";
 import type { ClientOptions } from "../../types/ws";
+import { codecLimits } from "../../binding/codec";
 import {
-  DEFAULT_MAX_PAYLOAD,
   DEFAULT_MAX_REDIRECTS,
   closeTimeoutOf,
   invalidOption,
+  maxFragmentsOf,
+  maxPayloadOf,
   normalizePerMessageDeflate,
 } from "./shared";
 
@@ -24,7 +26,8 @@ export function normalizeClientOptions(options?: ClientOptions): NormalizedClien
     followRedirects: source.followRedirects ?? false,
     maxRedirects: source.maxRedirects ?? DEFAULT_MAX_REDIRECTS,
     handshakeTimeout: source.handshakeTimeout,
-    maxPayload: source.maxPayload ?? DEFAULT_MAX_PAYLOAD,
+    maxPayload: maxPayloadOf(source, codecLimits().maxPayloadBytes),
+    maxFragments: maxFragmentsOf(source, codecLimits().maxFragments),
     skipUTF8Validation: source.skipUTF8Validation ?? false,
     allowSynchronousEvents: source.allowSynchronousEvents ?? true,
     autoPong: source.autoPong ?? true,

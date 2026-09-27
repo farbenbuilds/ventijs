@@ -15,9 +15,10 @@ const std = @import("std");
 const testing = std.testing;
 
 const codec = @import("../../engine/codec/state.zig");
+const support = @import("frame_support.zig");
 const frames = @import("frame_support.zig");
 
-const Peer = codec.codec(4096, 8, 64);
+const Peer = codec.codec(8);
 
 /// One piece of a split message.
 const Piece = struct {
@@ -32,7 +33,8 @@ fn masked(out: []u8, fin: bool, opcode: u8, payload: []const u8) []const u8 {
 }
 
 test "a split message records one boundary per piece" {
-    var peer = Peer.init(.server, true);
+    var peer = Peer.init(.server, support.trusted()) catch unreachable;
+    defer peer.deinit();
     var buffer: [256]u8 = undefined;
     var at: usize = 0;
     const pieces = [_]Piece{
@@ -57,7 +59,8 @@ test "a split message records one boundary per piece" {
 }
 
 test "a whole message has no interior boundary" {
-    var peer = Peer.init(.server, true);
+    var peer = Peer.init(.server, support.trusted()) catch unreachable;
+    defer peer.deinit();
     var buffer: [64]u8 = undefined;
     const written = masked(buffer[0..], true, 0x2, "whole");
     _ = peer.feed(written);
@@ -67,7 +70,8 @@ test "a whole message has no interior boundary" {
 }
 
 test "a second message does not inherit the first one's boundaries" {
-    var peer = Peer.init(.server, true);
+    var peer = Peer.init(.server, support.trusted()) catch unreachable;
+    defer peer.deinit();
     var first: [128]u8 = undefined;
     var at: usize = 0;
     const a = masked(first[at..], false, 0x2, "aa");
@@ -89,7 +93,8 @@ test "a second message does not inherit the first one's boundaries" {
 }
 
 test "a close does not overtake a message already queued" {
-    var peer = Peer.init(.server, true);
+    var peer = Peer.init(.server, support.trusted()) catch unreachable;
+    defer peer.deinit();
     var buffer: [128]u8 = undefined;
     var at: usize = 0;
     const message = masked(buffer[at..], true, 0x1, "last");
@@ -120,7 +125,8 @@ test "a ping still overtakes a message" {
     // The rule the priority exists for. Only `close` is excepted, because only
     // `close` ends the socket; a ping the application has not answered has a
     // deadline in RFC 6455 section 5.5.2 and a message ahead of it would delay it.
-    var peer = Peer.init(.server, true);
+    var peer = Peer.init(.server, support.trusted()) catch unreachable;
+    defer peer.deinit();
     var buffer: [128]u8 = undefined;
     var at: usize = 0;
     const ping = masked(buffer[at..], true, 0x9, "beat");

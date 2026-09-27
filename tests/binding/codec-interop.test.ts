@@ -2,16 +2,15 @@ import { expect, test } from "vitest";
 import { WebSocketServer as WsServer } from "ws";
 import {
   CODEC_KINDS,
-  CODEC_ROLE,
   codecFeedResume,
   codecOutbound,
   codecOutboundMasked,
-  createCodec,
   destroyCodec,
   encodeCodecFrame,
   feedCodec,
 } from "../../src/binding/codec";
 import { drain } from "./codec-frames";
+import { clientCodec, serverCodec } from "./codec-support";
 import { openRawClient, TEST_TIMEOUT_MS } from "./codec-net";
 import { openClient, startRawPeer, waitFor } from "./codec-peer";
 
@@ -31,7 +30,7 @@ test(
   async () => {
     const peer = await startRawPeer();
     const client = await openClient(`ws://127.0.0.1:${peer.port}`);
-    const handle = createCodec(CODEC_ROLE.server);
+    const handle = serverCodec();
     try {
       client.send("hello");
       client.send(Buffer.from([0, 1, 2, 255]));
@@ -81,7 +80,7 @@ test(
   async () => {
     const peer = await startRawPeer();
     const client = await openClient(`ws://127.0.0.1:${peer.port}`);
-    const handle = createCodec(CODEC_ROLE.server);
+    const handle = serverCodec();
     try {
       const message = new Promise<string>((resolve, reject) => {
         client.on("message", (data) => resolve(data.toString()));
@@ -118,7 +117,7 @@ test(
     // done here and the codec's own bytes go on the wire: `ws` reads, it does not
     // write, which is the only arrangement in which it can judge the frame.
     const socket = await openRawClient(boundPort(server));
-    const handle = createCodec(CODEC_ROLE.client);
+    const handle = clientCodec();
     try {
       const length = encodeCodecFrame(
         handle,

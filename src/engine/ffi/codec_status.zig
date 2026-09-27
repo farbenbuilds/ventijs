@@ -34,3 +34,20 @@ pub fn codec_role(env: napi.Env, handle: u64) !abi.Count {
         .server => 1,
     };
 }
+
+/// The per-connection ceilings a codec enforces, as `[maxPayload, maxFragments]`, or
+/// null once the handle is stale.
+///
+/// One crossing rather than two, because a caller that set a limit and wants to confirm
+/// it is in force wants both halves of the answer together, and a pair is what the
+/// codec's `limits.Limits` record is in the first place.
+pub fn codec_ceilings(env: napi.Env, handle: u64) !?napi.Val {
+    if (handles.resolve(handle) == null) return null;
+    const ceilings = handles.ceilings_of(handle);
+    const message = try env.createUint32(@intCast(ceilings[0]));
+    const fragments = try env.createUint32(@intCast(ceilings[1]));
+    const out = try env.createArrayWithLength(2);
+    try out.setElement(env, 0, message);
+    try out.setElement(env, 1, fragments);
+    return out;
+}

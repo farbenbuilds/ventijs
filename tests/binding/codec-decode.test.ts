@@ -5,23 +5,14 @@
 //! comes from RFC 6455, not from the code under test.
 
 import { expect, test } from "vitest";
-import {
-  CODEC_KINDS,
-  CODEC_ROLE,
-  createCodec,
-  destroyCodec,
-  feedCodec,
-} from "../../src/binding/codec";
+import { CODEC_KINDS, destroyCodec, feedCodec } from "../../src/binding/codec";
 import { clientFrames, closePayload, drain } from "./codec-frames";
+import { serverCodec } from "./codec-support";
 
 const PING = CODEC_KINDS.indexOf("ping");
 const CLOSE = CODEC_KINDS.indexOf("close");
 
 /// A server-role codec on the compiled capacity, released afterwards.
-function serverCodec(): bigint {
-  return createCodec(CODEC_ROLE.server);
-}
-
 test("masked frames decode to the events a server owes a peer", () => {
   const handle = serverCodec();
   try {
