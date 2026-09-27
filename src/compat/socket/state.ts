@@ -45,6 +45,7 @@ export function createSocketState(): SocketState {
     closeReason: Buffer.alloc(0),
     closeFrameSent: false,
     closeFrameReceived: false,
+    fragmentsOpen: false,
     errorEmitted: false,
     attachment: null,
     transport: null,

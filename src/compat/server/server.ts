@@ -63,7 +63,12 @@ export function createWebSocketServer(
     options: resolved,
     normalizedOptions: normalized,
     path: resolved.path ?? "",
-    clients: resolved.clientTracking === false ? undefined : new Set<WebSocket>(),
+    // Truthiness, not `=== false`. `ws` gates tracking on `this.options.clientTracking`
+    // being truthy, so `null`, `0`, and `""` all disable it; `?? true` read those as
+    // absent and left tracking on, which put a `clients` set on the server where `ws`
+    // has none and made `close()` wait for clients in a case where `ws` emits on the
+    // next tick.
+    clients: normalized.clientTracking ? new Set<WebSocket>() : undefined,
     webSocket: (resolved.WebSocket ?? socketClass) as ServerSocketConstructor,
     server: null,
     lifecycle: "running",

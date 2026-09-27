@@ -76,12 +76,17 @@ export function normalizePerMessageDeflate(
   };
 }
 
-/// The close deadline, in milliseconds, or 0 for none.
+/// The close deadline, in milliseconds, or 0 for "tear down on the next tick".
 ///
 /// A non-number or a negative value is refused rather than coerced: `setTimeout`
 /// would treat a string as a delay and a negative as zero, and a caller who passed
 /// nonsense would get a socket that closes instantly and a different one that never
-/// closes at all, depending on the value.
+/// closes at all, depending on the value. This is a deliberate hardening over `ws`,
+/// which coerces, and it is recorded in `COMPATIBILITY.md`.
+///
+/// Zero is accepted, and it is *not* "no deadline". `ws` arms `setTimeout(fn, 0)`,
+/// which fires on the next tick and tears the socket down; reading it as "unbounded"
+/// turned that bounded teardown into a permanent hold of a transport and a codec slot.
 export function closeTimeoutOf(source: unknown): number {
   const raw = (source as { readonly closeTimeout?: unknown }).closeTimeout;
   if (raw === undefined) return DEFAULT_CLOSE_TIMEOUT;

@@ -17,7 +17,7 @@ const CLOSE_ABNORMAL = 1006;
 ///
 /// The codec is not released: it is released by whichever door finishes the socket,
 /// and releasing it here would drop the close frame still in the transport's buffer.
-export function closeFramed(state: SocketState, code: number, reason: Buffer): void {
+export function closeFramed(state: SocketState, code: number | undefined, reason: Buffer): void {
   writeCloseFrame(state, code, reason);
 }
 
@@ -62,18 +62,26 @@ export function refuseFramed(state: SocketState, code: number, reason: string): 
 /// codec slot. `ws` bounds the same wait with `closeTimeout`; the default here is the
 /// same thirty seconds.
 ///
+/// Zero is "tear down on the next tick", which is what `setTimeout(fn, 0)` does in
+/// `ws` and what a caller who wrote `closeTimeout: 0` asked for. Treating it as "no
+/// deadline" turned a bounded teardown into a permanent hold: the socket sat at
+/// `CLOSING` forever, with its transport and its codec slot still checked out, and a
+/// `ws` caller running the same configuration saw a clean 1006 milliseconds later.
+///
 /// The expiry path is a `terminate` rather than a bare `close`: the peer is not
 /// answering, so the frame will never be read, and holding the descriptor open for
 /// another thirty seconds would be trading one leak for a slower one.
 export function armCloseTimeout(state: SocketState, milliseconds: number): void {
-  if (milliseconds <= 0) return;
   clearCloseTimeout(state);
-  state.closeTimer = setTimeout(() => {
-    state.closeTimer = null;
-    if (state.readyState !== CLOSING) return;
-    state.transport?.destroy();
-    finishConnection(state, CLOSE_ABNORMAL, Buffer.alloc(0));
-  }, milliseconds);
+  state.closeTimer = setTimeout(
+    () => {
+      state.closeTimer = null;
+      if (state.readyState !== CLOSING) return;
+      state.transport?.destroy();
+      finishConnection(state, CLOSE_ABNORMAL, Buffer.alloc(0));
+    },
+    Math.max(milliseconds, 0),
+  );
   // A pending close timer must not be the reason a process stays up, which is what
   // `setTimeout` does by default and what a socket library has no business deciding.
   state.closeTimer.unref?.();

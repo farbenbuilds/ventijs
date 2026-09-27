@@ -27,6 +27,7 @@ pub fn wire_opcode(kind: Kind) ?zslay.Opcode {
     return switch (kind) {
         .text => .text,
         .binary => .binary,
+        .continuation => .continuation,
         .ping => .ping,
         .pong => .pong,
         .close => .close,

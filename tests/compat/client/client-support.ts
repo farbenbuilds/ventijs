@@ -100,3 +100,36 @@ export function waitFor(condition: () => boolean): Promise<void> {
     poll();
   });
 }
+
+/// Resolves on the socket's `error`, which is how a refused handshake is observed.
+///
+/// The `close` event matters as much as the `error` and is a separate promise on
+/// purpose. Asserting `readyState` after the `error` proved nothing: the ready state
+/// was `CLOSED` even on a socket whose `close` event had never been dispatched, because
+/// the abort path latched the terminal state itself and then skipped the dispatch. A
+/// caller that awaits `close` is the ordinary shape, and it hung.
+export function failed(socket: WebSocket): Promise<Error> {
+  return new Promise((resolve) => {
+    socket.on("error", resolve);
+  });
+}
+
+export function closed(socket: WebSocket): Promise<void> {
+  return new Promise((resolve) => {
+    if (socket.readyState === WebSocket.CLOSED) {
+      resolve();
+      return;
+    }
+    socket.once("close", () => resolve());
+  });
+}
+
+/// Resolves on the next `unexpected-response`, carrying the status the peer sent.
+///
+/// A promise rather than a poll because a listener takes the refusal over: there is no
+/// `error` and no `close` to await on a socket a caller has taken responsibility for.
+export function refused(socket: WebSocket): Promise<number> {
+  return new Promise((resolve) => {
+    socket.once("unexpected-response", (_url, status) => resolve(status));
+  });
+}

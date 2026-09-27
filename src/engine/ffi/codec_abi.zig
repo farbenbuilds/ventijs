@@ -40,7 +40,7 @@ pub const EncodeFailure = enum(u8) {
 /// The ordinal-to-event-kind mapping, so a JavaScript ordinal that is not a kind is
 /// a typed refusal rather than a frame with a nonsense opcode.
 pub fn event_kind(ordinal: Arg) ?state.Kind {
-    if (ordinal > @intFromEnum(state.Kind.rejected)) return null;
+    if (ordinal > state.max_ordinal) return null;
     return @enumFromInt(@as(u8, @intCast(ordinal)));
 }
 

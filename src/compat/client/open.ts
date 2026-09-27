@@ -32,7 +32,7 @@ export function respond(attempt: Attempt, bytes: Buffer): void {
   // handshake rather than as the redirect it is.
   const location = response.headers.location;
   if (isRedirect(response.status, location)) {
-    const next = decide(attempt, location ?? "", attempt.address);
+    const next = decide(attempt, location ?? "", response.status, attempt.address);
     if (next !== null) {
       // The old transport answered and has nothing more to say; the new one takes over
       // from the same attempt, so the socket, its options, and its redirect count all
@@ -47,7 +47,11 @@ export function respond(attempt: Attempt, bytes: Buffer): void {
         attempt.auth,
       );
       attempt.redirects += 1;
-      if (attempt.redirects > 1) emitEvent(attempt.state, "redirect", next.url);
+      // One event per hop actually followed, and before the request goes out, which is
+      // what `ws` does. The event used to be skipped on the first hop, because the
+      // counter was tested before it was incremented against the wrong bound, so a
+      // caller who inspected one redirect saw no event at all.
+      emitEvent(attempt.state, "redirect", next.url);
       dial(attempt);
       return;
     }

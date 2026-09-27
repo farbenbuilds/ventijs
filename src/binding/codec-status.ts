@@ -27,8 +27,17 @@ export const CODEC_OUTCOME = {
 } as const;
 
 /// What a completed frame means, mirroring `events.zig`'s `Kind`. The ordinals are
-/// the ABI and must keep that order.
-export const CODEC_KINDS = ["text", "binary", "ping", "pong", "close", "rejected"] as const;
+/// the ABI and must keep that order. `continuation` is last on both sides so the six
+/// that were there first keep their ordinals.
+export const CODEC_KINDS = [
+  "text",
+  "binary",
+  "ping",
+  "pong",
+  "close",
+  "rejected",
+  "continuation",
+] as const;
 
 export type CodecKindName = (typeof CODEC_KINDS)[number];
 

@@ -1,9 +1,10 @@
 import { closeSocket } from "../../binding/socket";
-import { CLOSE_ABNORMAL, CLOSE_NORMAL, isValidStatusCode } from "../../protocol/close-codes";
+import { CLOSE_ABNORMAL, CLOSE_NORMAL } from "../../protocol/close-codes";
 import type { SocketState } from "../../types/socket";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
+import { closeCodeOf } from "./close-code";
 import { toCloseReason } from "./close-reason";
 import { armCloseTimeout, closeFramed } from "./codec-close";
 import { bufferedAmountOf } from "./payload";
@@ -85,7 +86,12 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   // close is a no-op rather than a second attempt. Validating first left every
   // refused close on an `OPEN` socket that would accept it again.
   state.readyState = CLOSING;
-  const closeCode = code === undefined ? CLOSE_NORMAL : Math.trunc(assertCloseCode(code));
+  // An absent code stays absent all the way to the wire. `ws` writes an empty close
+  // payload for `close()` and its peer reports 1005, "no status received"; substituting
+  // 1000 here asserted a normal shutdown the caller never asked for and hid 1005 from
+  // both ends. The socket's own `closeCode` stays 1006 until a frame supplies one,
+  // because until then nothing has been received.
+  const closeCode = closeCodeOf(code);
   const closeReason = toCloseReason(reason);
   if (state.codec !== null) {
     closeFramed(state, closeCode, closeReason);
@@ -99,7 +105,10 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   const status = closeSocket(
     state.attachment.server,
     state.attachment.connection,
-    closeCode,
+    // The engine's own close always carries a code, so the codec's absent-code rule
+    // does not reach it. This route is not reachable from the public surface today;
+    // the clamp is here so a caller that does reach it gets a real code.
+    closeCode ?? CLOSE_NORMAL,
     closeReason,
   );
   if (status === "ok") {
@@ -135,15 +144,4 @@ function closeUnattached(state: SocketState): void {
     return;
   }
   state.transport.destroy();
-}
-
-function assertCloseCode(code: unknown): number {
-  if (typeof code !== "number" || !isValidStatusCode(code)) {
-    throw createError(
-      "ERR_INVALID_CLOSE_CODE",
-      "First argument must be a valid error code number",
-      TypeError,
-    );
-  }
-  return code;
 }

@@ -18,14 +18,20 @@ export type Harness = {
   close(): Promise<void>;
 };
 
-export async function upgradeHarness(): Promise<Harness> {
-  const server = new WebSocketServer({ noServer: true });
-  const harness = await serve(server);
+/// A harness over a `noServer` server the caller configured, so a test that is about
+/// one server option can set it and still be reading real frames.
+///
+/// The default is a plain `noServer` server because most cases are about the codec
+/// rather than about the options; the ones that are about an option pass their own.
+export async function upgradeHarness(server?: WebSocketServer): Promise<Harness> {
+  const owned = new WebSocketServer({ noServer: true });
+  const target = server ?? owned;
+  const harness = await serve(target);
   void (harness.httpServer.address() as AddressInfo | null);
   return {
     url: `ws://127.0.0.1:${harness.port}`,
     port: harness.port,
-    server,
+    server: target,
     close: harness.close,
   };
 }

@@ -1,4 +1,5 @@
 import type { ClientOptions, ServerOptions, WebSocket } from "../../types/ws";
+import { promoteOptions } from "../client/protocols";
 import { createSocketState } from "./state";
 import { buildSocketRecord } from "./record";
 import { connectSocket } from "../client/connect";
@@ -18,5 +19,10 @@ export function createSocket(
   options?: ClientOptions | ServerOptions | undefined,
 ): WebSocket {
   if (address === null) return buildSocketRecord(createSocketState());
-  return connectSocket(address, protocols, options);
+  const promoted = promoteOptions(protocols, options as ClientOptions | undefined);
+  return connectSocket(
+    address,
+    promoted.protocols,
+    promoted.options as ClientOptions | ServerOptions | undefined,
+  );
 }

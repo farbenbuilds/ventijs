@@ -58,6 +58,11 @@ export type SocketState = EmitterState<SocketEventMap> & {
   closeReason: Buffer;
   closeFrameSent: boolean;
   closeFrameReceived: boolean;
+  /// Whether an outbound message is open, which a send with `fin: false` starts and
+  /// the next send finishes. It is what decides the opcode of the next frame, because
+  /// RFC 6455 section 5.4 requires a continuation to carry opcode 0 and a peer reads
+  /// a second data frame with `fin` set as a second complete message.
+  fragmentsOpen: boolean;
   errorEmitted: boolean;
   attachment: SocketAttachment | null;
   /// The upgraded Node stream, retained so `terminate()` can destroy it and

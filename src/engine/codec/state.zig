@@ -20,6 +20,7 @@ const store = @import("events_store.zig");
 
 pub const Kind = events.Kind;
 pub const Failure = events.Failure;
+pub const max_ordinal = events.max_ordinal;
 pub const Decoded = inbound.Decoded;
 pub const Encoded = outbound.Encoded;
 pub const Outcome = result.Outcome;

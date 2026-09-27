@@ -64,8 +64,15 @@ export function completeUpgrade(
   // empty protocol on a connection the server had already selected one for.
   const acceptedState = socketStateOf(accepted);
   if (acceptedState !== undefined && protocol) acceptedState.protocol = protocol;
-  if (acceptedState !== undefined)
+  if (acceptedState !== undefined) {
     acceptedState.closeTimeout = state.normalizedOptions.closeTimeout;
+    // `autoPong` is a server option and this is a server socket, so the server's choice
+    // is the socket's. It was read on the client route and nowhere else, which left
+    // `autoPong: false` answered anyway: the state default is `true` and nothing
+    // overwrote it, so a caller who said "I will answer pings myself" got a pong from
+    // the library anyway and its own answer was a second one.
+    acceptedState.autoPong = state.normalizedOptions.autoPong;
+  }
   attachSocket(accepted, socket);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);
   callback(accepted, request);

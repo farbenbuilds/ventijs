@@ -25,6 +25,16 @@ pub const Kind = enum(u8) {
     /// event is still queued so a caller has one place to learn why rather than
     /// having to correlate a close code with a timestamp.
     rejected = 5,
+    /// The continuation half of a fragmented outbound message, which is what a
+    /// caller produces by sending with `fin: false` and then again. Absent until a
+    /// caller could actually fragment: `ws` documents `send`'s `fin` option, a
+    /// peer that receives `text FIN=1` after `text FIN=0` reads two complete
+    /// messages rather than one, and the facade had no way to write the opcode
+    /// RFC 6455 requires here.
+    ///
+    /// Last in the enum so the ordinals above stay where they are: they are the
+    /// ABI that `src/binding/codec.ts` carries as a table.
+    continuation = 6,
 };
 
 /// Why a frame could not be accepted, kept apart from `zslay`'s error set so the
@@ -59,6 +69,16 @@ pub fn close_code_for(failure: Failure) u16 {
 pub fn failure_ordinal(failure: Failure) u8 {
     return @intFromEnum(failure) + 1;
 }
+
+/// The highest `Kind` ordinal, which is what the boundary checks a JavaScript ordinal
+/// against.
+///
+/// Named as the last member on purpose. The previous bound was written against
+/// `rejected`, so adding a kind after it produced a kind the boundary refused to send:
+/// the refusal was a correct `unexpected_opcode` for an ordinal it considered out of
+/// range, and the only symptom was a `send` that reported a protocol error for a frame
+/// the caller had explicitly asked for.
+pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
 
 /// The human-readable reason, for a message the caller can log or send. `ws`
 /// sends the empty string for a protocol error and the text for a size error, and

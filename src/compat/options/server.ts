@@ -26,7 +26,12 @@ export function normalizeServerOptions(options?: ServerOptions): NormalizedServe
     path: source.path ?? null,
     server,
     noServer,
-    clientTracking: source.clientTracking ?? true,
+    // Truthiness once the default is applied, matching `ws`, which gates tracking on
+    // `this.options.clientTracking` being truthy. `?? true` read `null` as absent and
+    // `0` and `""` as truthy, so every falsy value other than `false` left tracking
+    // on: the server grew a `clients` set where `ws` has none, and `close()` waited
+    // for connections in a case where `ws` emits on the next tick.
+    clientTracking: source.clientTracking === undefined ? true : Boolean(source.clientTracking),
     allowSynchronousEvents: source.allowSynchronousEvents ?? true,
     autoPong: source.autoPong ?? true,
     maxPayload: source.maxPayload ?? DEFAULT_MAX_PAYLOAD,

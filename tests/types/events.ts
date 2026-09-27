@@ -75,6 +75,7 @@ export const socketState: SocketState = {
   closeCode: 1006,
   closeReason: Buffer.alloc(0),
   closeFrameSent: false,
+  fragmentsOpen: false,
   closeFrameReceived: false,
   errorEmitted: false,
   attachment: null,
