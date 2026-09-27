@@ -48,9 +48,23 @@ construction, and calling them `todo` would imply a plan that does not exist.
 Update the affected row in the same change that moves the status.
 
 `message` and `send` moved together, and they are worth naming because they are
-the pair that decides whether a ventijs socket can echo at all. They are now
+the pair that decides whether a ventijs socket can echo at all. They are
 implemented on the engine route, where `src/engine/server/connections.zig` takes
 the parsed payload and `src/engine/ffi/socket_pump.zig` moves staged replies onto
-the wire. They are still `todo` on the facade's HTTP upgrade route, which adopts
-a raw Node stream and does no framing, and the facade is what these tables
-describe. A status here is a statement about a route, not about the product.
+the wire, and they are still `todo` on the facade's HTTP upgrade route, which
+adopts a raw Node stream and does no framing.
+
+**That second `todo` is the whole of it, and the distinction is not a nuance.** No
+file under `src/compat/` calls `createServer`, `listenServer`, `pumpSocket`, or
+`takeSocketMessage`. The engine route is reachable only from `tests/binding/`,
+`tests/autobahn/`, and `bench/`, so a status that says "implemented on the engine
+route" describes the test harness and not the product. Every row in these tables
+describes the facade, so a route the facade cannot reach is a `todo`, and a row
+whose note mentions the engine route is a row whose real gap is that no public
+socket is ever attached to one.
+
+`COMPATIBILITY.md` names the two architectures that would change that, and neither
+is a patch: a TypeScript receiver over the adopted `Duplex`, which duplicates
+framing the architecture document says Zig will own, or reducing `WebSocketServer`
+to a `noServer`-shaped shim over the binding, which changes the transport model of
+every public server surface.

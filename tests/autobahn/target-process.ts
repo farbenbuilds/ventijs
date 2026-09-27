@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { forwardStderr, readLines } from "./child-io.ts";
 import type { TargetChild } from "./child-io.ts";
+import { releaseTarget, stopChild, trackTarget } from "./target-signals.ts";
 import { DEFAULT_TARGET_HOST, DEFAULT_TARGET_PORT, TARGET_ENTRY_PATH } from "./paths.ts";
 import { decodeTargetReady } from "./target-record.ts";
 import type { TargetReady } from "./target-record.ts";
@@ -10,66 +11,38 @@ export type TargetProcess = {
   stop(): Promise<void>;
 };
 
-const READY_TIMEOUT_MS = 30_000;
-const STOP_TIMEOUT_MS = 10_000;
-const SIGNAL_EXIT_CODE = 130;
-
-/// The live child, so the signal handlers below can reap it. Installing a
-/// handler is what stops Node from exiting on its own while the target still
-/// owns an engine thread and a bound listener.
-const live = {
-  child: null as TargetChild | null,
-  onInterrupt: null as (() => void) | null,
-  onTerminate: null as (() => void) | null,
+/// Explicit port and host rather than a process-global environment, because a
+/// sharded run starts one target per shard and they have to differ.
+export type TargetAddress = {
+  readonly port: number;
+  readonly host: string;
 };
 
-function stopChild(child: TargetChild): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-    }, STOP_TIMEOUT_MS);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-    child.kill("SIGTERM");
-  });
+const READY_TIMEOUT_MS = 30_000;
+const DEFAULT_ADDRESS: TargetAddress = { port: DEFAULT_TARGET_PORT, host: DEFAULT_TARGET_HOST };
+
+/// Resolves the port and host a target binds.
+///
+/// The environment override applies only to the default address. A sharded run
+/// passes an explicit port per shard, and honouring one global override there
+/// would start every shard on the same port, so three of them would fail to bind
+/// and the plan would be discarded with no diagnostic.
+function environment(
+  address: TargetAddress,
+  explicit: boolean,
+): {
+  readonly port: string;
+  readonly host: string;
+} {
+  const port = explicit
+    ? address.port
+    : Number(process.env["AUTOBAHN_TARGET_PORT"] ?? address.port);
+  const host = explicit ? address.host : (process.env["AUTOBAHN_TARGET_HOST"] ?? address.host);
+  return { port: String(port), host };
 }
 
-function clearLive(): void {
-  if (live.onInterrupt !== null) process.off("SIGINT", live.onInterrupt);
-  if (live.onTerminate !== null) process.off("SIGTERM", live.onTerminate);
-  live.child = null;
-  live.onInterrupt = null;
-  live.onTerminate = null;
-}
-
-function installSignalHandlers(): void {
-  const onSignal = (): void => {
-    const child = live.child;
-    if (child === null) return;
-    live.child = null;
-    void stopChild(child).then(() => {
-      clearLive();
-      process.exit(SIGNAL_EXIT_CODE);
-    });
-  };
-  live.onInterrupt = onSignal;
-  live.onTerminate = onSignal;
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
-}
-
-function environment(): { readonly port: string; readonly host: string } {
-  return {
-    port: process.env["AUTOBAHN_TARGET_PORT"] ?? String(DEFAULT_TARGET_PORT),
-    host: process.env["AUTOBAHN_TARGET_HOST"] ?? DEFAULT_TARGET_HOST,
-  };
-}
-
-function launch(): TargetChild {
-  const { port, host } = environment();
+function launch(address: TargetAddress, explicit: boolean): TargetChild {
+  const { port, host } = environment(address, explicit);
   return spawn(process.execPath, [TARGET_ENTRY_PATH], {
     env: { ...process.env, AUTOBAHN_TARGET_PORT: port, AUTOBAHN_TARGET_HOST: host },
     stdio: ["ignore", "pipe", "pipe"],
@@ -81,13 +54,13 @@ function describeExit(code: number | null, signal: NodeJS.Signals | null, detail
   return detail === "" ? reason : `${reason}: ${detail}`;
 }
 
-/// Starts the target and resolves once it has reported its bound port. The
-/// child is terminated on every path out of the runner, so a failed probe, a
-/// failed gate, and SIGINT all leave no engine thread behind.
-export function startTarget(): Promise<TargetProcess> {
-  const child = launch();
-  live.child = child;
-  installSignalHandlers();
+/// Starts one target and resolves once it has reported its bound port. The child
+/// is reaped on every path out of the runner, so a failed probe, a failed gate,
+/// and SIGINT all leave no engine thread behind.
+export function startTarget(address?: TargetAddress): Promise<TargetProcess> {
+  const explicit = address !== undefined;
+  const child = launch(address ?? DEFAULT_ADDRESS, explicit);
+  trackTarget(child);
   const stderrLines = forwardStderr(child);
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -97,7 +70,7 @@ export function startTarget(): Promise<TargetProcess> {
       clearTimeout(timer);
       // A child that never reported a port is still holding the listener and
       // the engine thread, so the rejection path reaps it too.
-      clearLive();
+      releaseTarget(child);
       void stopChild(child);
       reject(error);
     };
@@ -120,10 +93,33 @@ export function startTarget(): Promise<TargetProcess> {
       resolve({
         ready,
         stop: () => {
-          clearLive();
+          releaseTarget(child);
           return stopChild(child);
         },
       });
     });
   });
+}
+
+/// Starts every shard's target and resolves only when all of them are listening.
+///
+/// One round rather than a `Promise.all` per shard, so a target that cannot bind
+/// fails in seconds with a named error instead of leaving the other shards to
+/// finish a run against a peer that was never there. Targets already started are
+/// reaped before the error propagates.
+export async function startTargets(
+  addresses: readonly TargetAddress[],
+): Promise<readonly TargetProcess[]> {
+  const started: TargetProcess[] = [];
+  try {
+    for (const address of addresses) started.push(await startTarget(address));
+  } catch (error) {
+    await stopTargets(started);
+    throw error;
+  }
+  return started;
+}
+
+export async function stopTargets(targets: readonly TargetProcess[]): Promise<void> {
+  await Promise.all(targets.map((target) => target.stop()));
 }

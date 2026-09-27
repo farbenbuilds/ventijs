@@ -8,7 +8,7 @@ import { createRegistry } from "../events/registry";
 import { addressOf, closeWebSocketServer } from "./close";
 import { wireServer } from "./listeners";
 import { normalizeServerOptions } from "../options/server";
-import { handleUpgrade, shouldHandle } from "./upgrade";
+import { defaultShouldHandle, handleUpgrade } from "./upgrade";
 import type { UpgradeCallback } from "./accept";
 
 const SERVER_BRAND = Symbol("ventijs.server");
@@ -32,6 +32,13 @@ export function createWebSocketServer(
   const resolved = {
     allowSynchronousEvents: true,
     autoPong: true,
+    // `ws` defaults these three and they are observable on `server.options`, but
+    // `@types/ws` declares none of them, so a consumer cannot name them without a
+    // cast. Matching `ws` means inheriting the same gap in the type, which is
+    // better than a runtime record that is a strict subset of the contract.
+    maxBufferedChunks: 262144,
+    maxFragments: 16384,
+    closeTimeout: 30000,
     maxPayload: 100 * 1024 * 1024,
     skipUTF8Validation: false,
     perMessageDeflate: false,
@@ -47,15 +54,20 @@ export function createWebSocketServer(
     WebSocket: socketClass,
     ...options,
   } as ServerOptions;
+  // `ws` rewrites the shorthand `perMessageDeflate: true` to an options object
+  // on the public record, so `server.options.perMessageDeflate` is an object for
+  // a caller that enabled the extension and a boolean for one that did not.
+  if (resolved.perMessageDeflate === true) resolved.perMessageDeflate = {};
   const normalized = normalizeServerOptions(resolved);
   const state: ServerState = {
     options: resolved,
     normalizedOptions: normalized,
     path: resolved.path ?? "",
-    clients: new Set<WebSocket>(),
+    clients: resolved.clientTracking === false ? undefined : new Set<WebSocket>(),
     webSocket: (resolved.WebSocket ?? socketClass) as ServerSocketConstructor,
     server: null,
     lifecycle: "running",
+    record: null,
     shouldEmitClose: false,
     removeListeners: null,
     listeners: createRegistry<ServerEventMap>(),
@@ -88,7 +100,12 @@ export function createWebSocketServer(
     ...createEmitter(state),
     options: resolved,
     path: state.path,
-    clients: state.clients,
+    // `ws` assigns `clients` only when `clientTracking` is truthy, so the key is
+    // absent rather than present-and-undefined. A caller that tests
+    // `"clients" in server`, enumerates `Object.keys`, or spreads the record sees
+    // the difference, and an empty set behaves differently again: `ws` reports
+    // `undefined` where an empty set would give a size of 0.
+    ...(state.clients === undefined ? {} : { clients: state.clients }),
     address: () => addressOf(state),
     close: (closeCallback?: (error?: Error) => void): void => {
       closeWebSocketServer(state, closeCallback);
@@ -101,9 +118,12 @@ export function createWebSocketServer(
     ): void => {
       handleUpgrade(state, request, socket, head, upgradeCallback);
     },
-    shouldHandle: (request: IncomingMessage): boolean => shouldHandle(state, request),
+    shouldHandle: (request: IncomingMessage): boolean => defaultShouldHandle(state, request),
   };
   state.target = server;
+  // Resolved at call time, so a later `server.shouldHandle = ...` is the
+  // predicate the upgrade path consults, which is `ws`'s `this.shouldHandle(req)`.
+  state.record = server;
   Object.defineProperty(server, SERVER_BRAND, { value: true });
   return server as unknown as WebSocketServer;
 }

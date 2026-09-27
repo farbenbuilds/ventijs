@@ -1,5 +1,5 @@
 import type { EngineDispatch, NativeServerConfig } from "./native";
-import { callNative } from "./errors";
+import { callNative, guardError } from "./errors";
 import { loadAddon } from "./load";
 
 export type ServerHandle = number;
@@ -20,7 +20,10 @@ const INTEGER_CONFIG_FIELDS = [
 
 export function assertServerHandle(handle: ServerHandle): void {
   if (!Number.isSafeInteger(handle) || handle < 0 || handle > MAX_SERVER_HANDLE) {
-    throw new RangeError(`ventijs: server handle must be a uint40, got ${handle}`);
+    throw guardError(
+      `ventijs: server handle must be a uint40, got ${handle}`,
+      "ERR_INVALID_HANDLE",
+    );
   }
 }
 
@@ -29,8 +32,12 @@ function assertConfigIntegers(config: NativeServerConfig): void {
     const value = config[field];
     if (value === undefined) continue;
     if (!Number.isSafeInteger(value)) {
-      throw new RangeError(
+      // An option value is not a handle, so it must not borrow the handle code.
+      // A stable code that is semantically false is harder to branch on than a
+      // message alone.
+      throw guardError(
         `ventijs: server config "${field}" must be a safe integer, got ${value}`,
+        "ERR_INVALID_OPTION",
       );
     }
   }
@@ -74,16 +81,25 @@ export function serverDroppedEvents(handle: ServerHandle): bigint {
   return callNative(() => addon.serverDroppedEvents(handle));
 }
 
-/// Inbound messages the engine parsed and then discarded because JavaScript had
-/// not drained the inbound ring yet.
+/// Inbound messages the engine parsed and then discarded before JavaScript could
+/// see them, from either of two causes.
 ///
 /// This is a loss, not a backpressure signal: the peer delivered the frame and
 /// the engine framed it correctly, but there was nowhere to put the bytes. The
 /// engine's WebSocket behavior exposes no way to stop reading once a consumer
 /// falls behind, so the inbound ring is the only place a burst can be absorbed
-/// and its depth is the budget. A non-zero count means a peer outran the main
-/// thread and the application should be told rather than left to assume every
-/// frame arrived.
+/// and its depth is the budget.
+///
+/// The second cause is a connection an application has paused. `ws.pause()`
+/// pauses the socket so the bytes stay in the kernel receive buffer, and the
+/// pinned engine has no per-connection read pause to do the same, so the frame is
+/// discarded instead. A paused connection is bounded to itself; a full ring is
+/// not. Both share this one counter because both are a peer outrunning the
+/// consumer, which is what the number is for, and because neither is observable
+/// from JavaScript otherwise.
+///
+/// A non-zero count means the application should be told rather than left to
+/// assume every frame arrived.
 export function serverDroppedMessages(handle: ServerHandle): bigint {
   assertServerHandle(handle);
   const addon = loadAddon();

@@ -8,6 +8,7 @@ import type { ServerState } from "../../types/server";
 import type { WebSocket } from "../../types/ws";
 import { trackClient } from "./clients";
 import { abortHandshake, selectProtocol, socketAccept } from "./handshake";
+import { detachHandshakeError } from "./handshake-error";
 
 const UPGRADED = Symbol("ventijs.upgraded");
 
@@ -53,11 +54,17 @@ export function completeUpgrade(
   if (protocol) headers.push(`Sec-WebSocket-Protocol: ${protocol}`);
   emitEvent(state, "headers", headers, request);
   Object.defineProperty(socket, UPGRADED, { value: true });
+  detachHandshakeError(socket);
   socket.write(headers.concat("\r\n").join("\r\n"));
   void head;
-  attachSocket(accepted, socket);
+  // The negotiated values are published before the socket is adopted, because
+  // adoption is what sets `OPEN` and emits `open`, and `ws` has already assigned
+  // `_protocol` by the time that event fires. An `open` listener, including an
+  // `onopen` attribute or a custom `WebSocket` class, otherwise observed an
+  // empty protocol on a connection the server had already selected one for.
   const acceptedState = socketStateOf(accepted);
-  if (protocol && acceptedState !== undefined) acceptedState.protocol = protocol;
+  if (acceptedState !== undefined && protocol) acceptedState.protocol = protocol;
+  attachSocket(accepted, socket);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);
   callback(accepted, request);
 }

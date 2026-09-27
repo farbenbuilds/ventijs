@@ -54,7 +54,7 @@ test "open resets the record for a recycled generation" {
     try std.testing.expectEqual(@as(?socket.State, .open), slab.state_of(0));
     try std.testing.expectEqual(@as(u32, 0), slab.buffered(0, 2));
     try std.testing.expect(!slab.is_paused(0));
-    try std.testing.expect(slab.latch_terminal(0));
+    try std.testing.expect(slab.finish(0));
 }
 
 test "pause and resume dispatch are idempotent while open" {
@@ -79,13 +79,15 @@ test "the terminal latch flips exactly once per generation" {
     var slab = Slab{};
     slab.open(0, 5);
 
-    try std.testing.expect(slab.latch_terminal(0));
-    try std.testing.expect(!slab.latch_terminal(0));
+    try std.testing.expect(slab.finish(0));
     try std.testing.expect(!slab.finish(0));
+    try std.testing.expectEqual(@as(?socket.State, .closed), slab.state_of(0));
 
+    // A recycled generation latches again: the latch is per generation, not per
+    // slot, which is what stops a close race from emitting two terminal events.
     slab.open(0, 6);
     try std.testing.expect(slab.finish(0));
-    try std.testing.expect(!slab.latch_terminal(0));
+    try std.testing.expect(!slab.finish(0));
 }
 
 test "concurrent finishers observe a single terminal winner" {
@@ -111,10 +113,25 @@ test "draining saturates the buffered amount at zero" {
     slab.open(0, 1);
 
     _ = slab.send(0, 1, .binary, "abcd");
-    slab.note_drained(0, 2);
+    slab.note_drained(0, 1, 2);
     try std.testing.expectEqual(@as(u32, 2), slab.buffered(0, 1));
-    slab.note_drained(0, 9);
+    slab.note_drained(0, 1, 9);
     try std.testing.expectEqual(@as(u32, 0), slab.buffered(0, 1));
+}
+
+test "a drain from a stale generation is ignored" {
+    // A payload released after its connection recycled the slot must not debit
+    // the new occupant's bufferedAmount: that reports a connection as drained
+    // when nothing of its was ever sent.
+    var slab = Slab{};
+    slab.open(0, 1);
+    _ = slab.send(0, 1, .binary, "abcd");
+    try std.testing.expectEqual(@as(u32, 4), slab.buffered(0, 1));
+
+    _ = slab.finish(0);
+    slab.open(0, 2);
+    slab.note_drained(0, 1, 4);
+    try std.testing.expectEqual(@as(u32, 0), slab.buffered(0, 2));
 }
 
 test "valid close codes mirror the compatibility contract" {

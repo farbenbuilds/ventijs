@@ -18,6 +18,11 @@ test("fractional close codes truncate like ws", { timeout: TEST_TIMEOUT_MS }, as
 /// Pins GHSA-58qx-3vcg-4xpx. A `Float32Array` reports an element count smaller
 /// than its `byteLength`, so accepting it as a close reason would size a frame
 /// from bytes that are never written. `ws` refuses the argument since 8.20.1.
+///
+/// The socket is left `CLOSING`, not `OPEN`: `ws` latches the state before it
+/// validates, so a close it refuses still closes. Leaving it `OPEN` meant a
+/// refused close could be retried indefinitely, which a caller cannot tell apart
+/// from a close that was never attempted.
 test(
   "a typed array that is not a Uint8Array is refused as a close reason",
   { timeout: TEST_TIMEOUT_MS },
@@ -27,7 +32,7 @@ test(
       expect(() => socket.close(1000, new Float32Array(20) as never)).toThrow(
         "Second argument must be a string or a Uint8Array",
       );
-      expect(socket.readyState).toBe(socket.OPEN);
+      expect(socket.readyState).toBe(socket.CLOSING);
     } finally {
       terminateClient(client);
       await server.dispose();
@@ -62,12 +67,13 @@ test.each([
 );
 
 /// A 124-byte reason exceeds the 123-byte control-frame budget, so it must be
-/// refused before any frame is staged.
+/// refused before any frame is staged. The state still latches to `CLOSING`,
+/// because `ws` latches before it validates.
 test("an oversize close reason is refused", { timeout: TEST_TIMEOUT_MS }, async () => {
   const { server, client, socket } = await attached();
   try {
     expect(() => socket.close(1000, "a".repeat(124))).toThrow(RangeError);
-    expect(socket.readyState).toBe(socket.OPEN);
+    expect(socket.readyState).toBe(socket.CLOSING);
   } finally {
     terminateClient(client);
     await server.dispose();
@@ -75,20 +81,20 @@ test("an oversize close reason is refused", { timeout: TEST_TIMEOUT_MS }, async 
 });
 
 test(
-  "a close rejected by the ring surfaces an error and latches",
+  "sends the ring rejects surface an error and latch the socket",
   {
     timeout: TEST_TIMEOUT_MS,
   },
   async () => {
     const { server, client, socket } = await attached();
     try {
-      for (let index = 0; index < 9; index += 1) {
-        socket.send(new Uint8Array(MAX_MESSAGE_BYTES));
-      }
       const failures: Error[] = [];
       socket.on("error", (error) => {
         failures.push(error);
       });
+      for (let index = 0; index < 9; index += 1) {
+        socket.send(new Uint8Array(MAX_MESSAGE_BYTES));
+      }
       socket.close(1000);
       await new Promise((resolve) => setImmediate(resolve));
       expect(failures.map((error) => (error as { code?: string }).code)).toEqual([

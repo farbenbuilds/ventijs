@@ -1,12 +1,12 @@
 import { closeSocket, pauseSocket, resumeSocket } from "../../binding/socket";
 import { CLOSE_ABNORMAL, CLOSE_NORMAL, isValidStatusCode } from "../../protocol/close-codes";
 import type { SocketState } from "../../types/socket";
-import type { EngineStatus } from "../../types/status";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
 import { toCloseReason } from "./close-reason";
-import { bufferedAmountOf, statusError } from "./payload";
+import { bufferedAmountOf } from "./payload";
+import { closeFailure } from "./close-failure";
 
 const EMPTY = Buffer.alloc(0);
 
@@ -18,27 +18,68 @@ export function finishConnection(state: SocketState, code: number, reason: Buffe
   emitEvent(state, "close", code, reason);
 }
 
+/// Reports a failure and closes, matching `ws`'s `abortHandshake`: it latches
+/// `CLOSING`, emits `error`, and only then emits `close`, so a listener reading
+/// `readyState` during `error` sees `CLOSING` and a second failure produces no
+/// second event. Reached by a `close` or `terminate` while still `CONNECTING`.
+///
+/// A send failure does not come here. See `reportWithoutClosing`.
 export function failConnection(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
-  state.errorEmitted = true;
-  // The terminal latch must run even when an unhandled `error` throws.
-  try {
-    emitEvent(state, "error", error);
-  } finally {
-    finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+  if (!state.errorEmitted) {
+    state.errorEmitted = true;
+    state.readyState = CLOSING;
+    // The terminal latch must run even when an unhandled `error` throws.
+    try {
+      emitEvent(state, "error", error);
+    } finally {
+      finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+    }
+    return;
   }
+  finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+}
+
+/// Emits `error` once and leaves the socket exactly as it was.
+///
+/// `ws` is silent for a failed send: the write error reaches the caller's
+/// callback, and the socket's own listener destroys the transport without
+/// emitting on the `WebSocket`. A ventijs send on a socket with no callback
+/// therefore has nothing to observe at all, and silence was the previous
+/// behaviour here.
+///
+/// This is a deliberate divergence and it is narrow on purpose. It emits, because
+/// a caller that cannot pass a callback would otherwise learn nothing; and it does
+/// **not** close, because the condition it reports is a missing implementation
+/// rather than a fault of the connection, so tearing the socket down would cost
+/// the caller a live connection for a bug in the library.
+export function reportWithoutClosing(state: SocketState, error: Error): void {
+  if (state.errorEmitted) return;
+  if (state.readyState === CLOSED) return;
+  state.errorEmitted = true;
+  emitEvent(state, "error", error);
 }
 
 export function closeConnection(state: SocketState, code?: unknown, reason?: unknown): void {
   if (state.readyState === CLOSED) return;
   if (state.readyState === CONNECTING) {
-    finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+    failConnection(
+      state,
+      createError(
+        "ERR_INVALID_STATE",
+        "WebSocket was closed before the connection was established",
+      ),
+    );
     return;
   }
   if (state.readyState === CLOSING) return;
+  // The latch precedes validation because `ws` latches `CLOSING` before it
+  // validates: a close it refuses still leaves the socket closing, so a second
+  // close is a no-op rather than a second attempt. Validating first left every
+  // refused close on an `OPEN` socket that would accept it again.
+  state.readyState = CLOSING;
   const closeCode = code === undefined ? CLOSE_NORMAL : Math.trunc(assertCloseCode(code));
   const closeReason = toCloseReason(reason);
-  state.readyState = CLOSING;
   if (state.attachment === null) return;
   const status = closeSocket(
     state.attachment.server,
@@ -56,21 +97,6 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
     return;
   }
   failConnection(state, closeFailure(status));
-}
-
-/// Maps a rejected native close onto a coded error instead of leaving the
-/// socket latched in CLOSING with no frame sent.
-function closeFailure(status: EngineStatus): Error {
-  if (status === "backpressure") {
-    return createError("ERR_BACKPRESSURE", "ventijs: the outbound staging ring is full");
-  }
-  if (status === "invalid-handle") {
-    return createError("ERR_INVALID_HANDLE", "ventijs: the connection handle is stale");
-  }
-  if (status === "ok" || status === "closing" || status === "closed") {
-    return createError("ERR_INVALID_STATE", "ventijs: the connection is already closing");
-  }
-  return statusError(status);
 }
 
 function assertCloseCode(code: unknown): number {
@@ -100,6 +126,21 @@ export function resumeConnection(state: SocketState): void {
 
 export function terminateConnection(state: SocketState): void {
   if (state.readyState === CLOSED) return;
+  if (state.readyState === CONNECTING) {
+    failConnection(
+      state,
+      createError(
+        "ERR_INVALID_STATE",
+        "WebSocket was closed before the connection was established",
+      ),
+    );
+    return;
+  }
+  // The latch precedes the destroy, matching `ws`: a terminated socket is
+  // observably `CLOSING` until the transport's `close` event finishes it, and a
+  // socket left `OPEN` after `terminate()` is a second call's opportunity to send
+  // on a connection that is already gone.
+  state.readyState = CLOSING;
   if (state.transport !== null) {
     state.transport.destroy();
     return;

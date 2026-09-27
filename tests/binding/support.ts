@@ -22,13 +22,10 @@ function engineFailure(events: EngineEvent[]): Error | undefined {
   return new Error(`engineError received (code ${event.code})`);
 }
 
-function countOf(events: EngineEvent[], kind: EngineEventKind): number {
-  return events.filter((event) => event.kind === kind).length;
-}
+const countOf = (events: EngineEvent[], kind: EngineEventKind): number =>
+  events.filter((event) => event.kind === kind).length;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function waitUntil(
   events: EngineEvent[],
@@ -128,7 +125,10 @@ export function fixture(config: NativeServerConfig): ServerFixture {
           throw error;
         }
       }
-      throw new Error("server did not drain before finalize");
+      // Raised, not returned: returning here leaves the slot owned, the next
+      // `fixture()` takes it, and a test holding the old handle resolves a live
+      // server instead of the `UnknownServer` it asserts.
+      throw new Error(`server ${handle} did not drain; its slot is still owned`);
     },
   };
 }

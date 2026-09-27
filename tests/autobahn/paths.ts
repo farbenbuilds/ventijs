@@ -35,5 +35,24 @@ export const REPORTS_HOST_DIR = join(HERE, "reports");
 export const REPORT_INDEX_HOST_PATH = join(REPORTS_HOST_DIR, "servers", "index.json");
 export const SUMMARY_HOST_PATH = join(REPORTS_HOST_DIR, "summary.json");
 
+/// Per-shard paths.
+///
+/// A sharded run gives every shard its own report tree and its own generated
+/// spec, so two containers can never write into the same bind mount and
+/// `unionCases` in `shard-reports.ts` is the only place the cases are combined. A single
+/// shard keeps the unsplit layout, which is what the committed configuration and
+/// a local `--full` run still produce.
+export function shardReportsDir(id: number): string {
+  return join(REPORTS_HOST_DIR, `shard-${id}`);
+}
+
+export function shardSpecPath(id: number): string {
+  return join(shardReportsDir(id), "fuzzingclient.json");
+}
+
+export function shardReportIndexPath(id: number): string {
+  return join(shardReportsDir(id), "servers", "index.json");
+}
+
 export const PACKAGE_ROOT = resolve(HERE, "..", "..");
 export const TARGET_ENTRY_PATH = join(HERE, "target.ts");

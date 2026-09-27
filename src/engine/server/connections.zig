@@ -11,26 +11,11 @@
 //! topic. Only text and binary can travel that way, because the topic
 //! publisher maps a message onto a text or binary opcode and nothing else.
 
-const std = @import("std");
 const uwz = @import("uWebZockets");
 const instance = @import("instance.zig");
 const payload = @import("../socket/payload.zig");
 const queues = @import("../socket/queues.zig");
-
-/// Topic prefix for one connection's outbound channel. The engine's topic
-/// registry caps names at 127 bytes and rejects an empty one, so the prefix is
-/// fixed and only the index and generation follow. Twenty bytes is a generous
-/// bound for two `u32` values written in decimal plus the separator.
-pub const TOPIC_PREFIX = "ventijs:conn:";
-pub const topic_capacity = TOPIC_PREFIX.len + 20;
-
-/// Writes the topic name for one connection generation. Two generations of the
-/// same slot get different topics, so a payload staged by a closed connection
-/// can never be delivered to the connection that recycled its slot.
-pub fn write_topic(buffer: *[topic_capacity]u8, index: u32, generation: u32) []const u8 {
-    const written = std.fmt.bufPrint(buffer, TOPIC_PREFIX ++ "{d}:{d}", .{ index, generation }) catch unreachable;
-    return written;
-}
+const topic = @import("topic.zig");
 
 /// Registers the WebSocket route on the worker with the trusted limits.
 pub fn attach_route(target: *instance.Instance) !void {
@@ -80,7 +65,7 @@ fn on_open(slot: usize, ws: *uwz.WebSocket) void {
         return;
     };
     server.sockets.open(index, handle.generation);
-    subscribe(server, ws, index, handle.generation);
+    topic.subscribe(server, ws, index, handle.generation);
     _ = server.channel.emit(.{
         .kind = .connection_open,
         .server = server.handle.to_int(),
@@ -91,23 +76,39 @@ fn on_open(slot: usize, ws: *uwz.WebSocket) void {
 
 /// Copies one parsed message into the server's inbound ring and wakes the Node
 /// main thread. The bytes only borrow the engine's own message buffer for the
-/// duration of this call, so the copy is what makes the payload survive past
-/// the callback.
+/// duration of this call, so the copy is what makes the payload survive past the
+/// callback.
 ///
-/// A paused connection drops here rather than in the compatibility layer, so a
-/// `pause()` stops staging and not merely stops dispatch. A full ring also
-/// drops: the engine reads the next frame without waiting for JavaScript, so
-/// the buffer has to be bounded somewhere.
+/// A paused connection drops here, which is a real divergence from `ws` and is
+/// recorded rather than papered over. `ws.pause()` pauses the underlying socket,
+/// so the bytes stay in the kernel receive buffer and the engine never reads
+/// them. The pinned engine has no per-connection read pause, and the two
+/// alternatives were both worse: withholding only the wakeup leaves the payload
+/// in a ring shared by every connection, so one paused peer that keeps sending
+/// fills a ring of 64 slots and every other connection on the server starts
+/// losing messages, and per-connection inbound rings are not implemented. A drop
+/// is bounded to the connection that asked to be paused.
+///
+/// The drop is counted. An earlier version returned before staging without
+/// touching the counter, so `serverDroppedMessages` reported zero while data was
+/// being lost, which is the worst of both: unbounded and invisible.
+///
+/// A ring that refused the message produces no event either. Announcing one that
+/// was never staged leaves JavaScript waiting for bytes that do not exist, and
+/// the drop counter is the only honest evidence.
 fn on_message(slot: usize, ws: *uwz.WebSocket, bytes: []const u8, opcode: uwz.Opcode) void {
     const server = instance.lookup_slot(@intCast(slot)) orelse return;
     const index = connection_index(server, ws) orelse return;
-    if (server.sockets.is_paused(index)) return;
+    if (server.sockets.is_paused(index)) {
+        queues.count_dropped(&server.sockets);
+        return;
+    }
     const generation = server.slab.generation_at(index) orelse return;
     const kind: payload.Kind = switch (opcode) {
         .text => .text,
         else => .binary,
     };
-    queues.stage_inbound(&server.sockets, index, generation, kind, bytes);
+    if (!queues.stage_inbound(&server.sockets, index, generation, kind, bytes)) return;
     _ = server.channel.emit(.{
         .kind = .connection_message,
         .server = server.handle.to_int(),
@@ -115,14 +116,6 @@ fn on_message(slot: usize, ws: *uwz.WebSocket, bytes: []const u8, opcode: uwz.Op
         .generation = generation,
         .code = @intCast(bytes.len),
     });
-}
-
-/// Subscribes the engine socket to its outbound topic. Engine thread only: the
-/// subscription table is read by the topic publisher on this same thread.
-fn subscribe(server: *instance.Instance, ws: *uwz.WebSocket, index: u32, generation: u32) void {
-    const app = server.cluster.worker(0) orelse return;
-    var buffer: [topic_capacity]u8 = undefined;
-    app.pubsub.subscribe(ws, write_topic(&buffer, index, generation)) catch {};
 }
 
 fn on_close(slot: usize, ws: *uwz.WebSocket) void {

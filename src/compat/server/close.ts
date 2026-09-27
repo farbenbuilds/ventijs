@@ -1,3 +1,4 @@
+import { clientCount } from "./clients";
 import type { ServerState } from "../../types/server";
 import type { AddressInfo } from "../../types/ws";
 import { emitEvent } from "../events/emitter";
@@ -57,7 +58,7 @@ export function closeWebSocketServer(state: ServerState, callback?: (error?: Err
   const external = state.normalizedOptions.noServer || state.normalizedOptions.server !== null;
   if (external) {
     detachServer(state);
-    if (!state.normalizedOptions.clientTracking || state.clients.size === 0) {
+    if (!state.normalizedOptions.clientTracking || clientCount(state) === 0) {
       process.nextTick(() => {
         emitClose(state);
       });

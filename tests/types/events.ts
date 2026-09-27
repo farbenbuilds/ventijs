@@ -95,6 +95,7 @@ export const serverState: ServerState = {
   webSocket: socketClass,
   server: null,
   lifecycle: "running",
+  record: null,
   shouldEmitClose: false,
   removeListeners: null,
   listeners: createRegistry<ServerEventMap>(),

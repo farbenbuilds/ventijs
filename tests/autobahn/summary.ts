@@ -1,11 +1,14 @@
 import { KNOWN_FAILURES } from "./baseline.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { formatCostRollup, rollupCosts } from "./cost-rollup.ts";
+import type { CostRollup } from "./cost-rollup.ts";
 import { INBOUND_LIMIT_BYTES } from "./expected-cases.ts";
 import { MODE_COUNTS } from "./suite-mode.ts";
 import type { GateCounts, GateResult } from "./gate.ts";
 import type { CaseReport } from "./report-index.ts";
 import type { EchoProbe } from "./probe-echo.ts";
+import type { Shard } from "./shard-plan.ts";
 
 /// Everything CI needs to upload from a failed run, in one file. The suite's
 /// own HTML and JSON reports land next to it under `reports/servers`, but they
@@ -25,9 +28,15 @@ export type AutobahnSummary = {
   };
   readonly target: EchoProbe | null;
   readonly suiteRun: boolean;
+  /// The partition this run used. One entry per shard, so a report states how
+  /// it was split and the expected critical path is visible in the artifact.
+  readonly shards: readonly Shard[];
   readonly counts: GateResult["counts"] | null;
   readonly violations: GateResult["violations"];
   readonly cases: readonly CaseReport[];
+  /// Measured suite cost per group. Published on every run so the shard weight
+  /// table can be re-derived from a real report instead of a derivation.
+  readonly cost: CostRollup;
   readonly failure: string | null;
 };
 
@@ -40,6 +49,7 @@ export function buildSummary(input: {
   readonly suiteRun: boolean;
   readonly gate: GateResult | null;
   readonly cases: readonly CaseReport[];
+  readonly shards: readonly Shard[];
   readonly failure: string | null;
 }): AutobahnSummary {
   const expected = MODE_COUNTS[input.mode];
@@ -56,9 +66,11 @@ export function buildSummary(input: {
     },
     target: input.target,
     suiteRun: input.suiteRun,
+    shards: input.shards,
     counts: input.gate?.counts ?? null,
     violations: input.gate?.violations ?? [],
     cases: input.cases,
+    cost: rollupCosts(input.cases),
     failure: input.failure,
   };
 }
@@ -79,6 +91,26 @@ function describeCounts(counts: GateCounts, mode: "framing" | "full"): readonly 
   ];
 }
 
+/// The plan and what it was worth. The critical path is the largest shard, and
+/// it is the number the weight table has to keep small, so it is printed even on
+/// a run that failed before the suite.
+function describeShards(shards: readonly Shard[], cost: CostRollup): readonly string[] {
+  if (shards.length === 0) return [];
+  const critical = Math.max(...shards.map((shard) => shard.costSeconds));
+  const lines = [`shards     ${shards.length} (expected critical path ${critical.toFixed(0)}s)`];
+  for (const shard of shards) {
+    lines.push(
+      `  shard ${shard.id} port ${shard.port} ${shard.groups.join(" ").padEnd(24)} ` +
+        `${shard.costSeconds.toFixed(0).padStart(6)}s expected`,
+    );
+  }
+  if (cost.groups.length > 0) {
+    lines.push(`cost       ${cost.totalSeconds.toFixed(0)}s measured, heaviest group first`);
+    lines.push(...formatCostRollup(cost));
+  }
+  return lines;
+}
+
 export function formatSummary(summary: AutobahnSummary): string {
   const lines: string[] = ["autobahn: report gate"];
   lines.push(
@@ -92,6 +124,7 @@ export function formatSummary(summary: AutobahnSummary): string {
   if (summary.failure !== null) lines.push(`blocked    ${summary.failure}`);
   if (!summary.suiteRun) lines.push("suite      not run");
   if (summary.counts !== null) lines.push(...describeCounts(summary.counts, summary.mode));
+  lines.push(...describeShards(summary.shards, summary.cost));
   lines.push(
     `baseline   ${KNOWN_FAILURES.size} known failures across ${KNOWN_FAILURES.groups.length} groups`,
   );
