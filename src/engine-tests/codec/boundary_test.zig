@@ -15,7 +15,7 @@ const support = @import("frame_support.zig");
 
 /// A trusted limits record for a suite that wants its own ceilings.
 fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
-    return limits.Limits.trust(max_message, max_fragments, true) catch unreachable;
+    return limits.Limits.trust(max_message, max_fragments, true, false) catch unreachable;
 }
 
 const Frame = support.Frame;

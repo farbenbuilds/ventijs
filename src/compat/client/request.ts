@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { NormalizedClientOptions } from "../../types/options";
 import type { ClientAddress } from "./address";
+import { offer } from "../extensions/offer";
 
 /// RFC 6455 section 1.3: the constant the accept digest is derived from.
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -49,6 +50,11 @@ export function buildRequest(
     Upgrade: "websocket",
   };
   if (protocols.length > 0) headers["Sec-WebSocket-Protocol"] = protocols.join(",");
+  // The offer, not the negotiation. RFC 7692 section 7.1.1.1: a client asks, and a
+  // server that does not answer sends uncompressed frames, which is a normal
+  // connection rather than a degraded one.
+  const extension = offer(options.perMessageDeflate);
+  if (extension !== undefined) headers["Sec-WebSocket-Extensions"] = extension;
   if (options.origin !== undefined) {
     // Version 13 sends `Origin`; the draft version 8 sent `Sec-WebSocket-Origin`.
     if (options.protocolVersion < 13) headers["Sec-WebSocket-Origin"] = options.origin;

@@ -4,11 +4,19 @@ export type ZlibDeflateOptions = PerMessageDeflateOptions["zlibDeflateOptions"];
 
 export type ZlibInflateOptions = PerMessageDeflateOptions["zlibInflateOptions"];
 
+/// A negotiated window size, or `false` to refuse one.
+///
+/// `false` is in the type because `ws` compares against it at runtime, in both
+/// directions, and a caller reaching its options through an untyped object can set it.
+/// `@types/ws` declares only a number, so this is a wider type than the vendored
+/// declarations and a narrower one than the runtime.
+export type WindowBitsOption = number | false | undefined;
+
 export type NormalizedPerMessageDeflate = {
   readonly serverNoContextTakeover: boolean | undefined;
   readonly clientNoContextTakeover: boolean | undefined;
-  readonly serverMaxWindowBits: number | undefined;
-  readonly clientMaxWindowBits: number | undefined;
+  readonly serverMaxWindowBits: WindowBitsOption;
+  readonly clientMaxWindowBits: WindowBitsOption;
   readonly threshold: number;
   readonly concurrencyLimit: number;
   readonly zlibDeflateOptions: ZlibDeflateOptions;

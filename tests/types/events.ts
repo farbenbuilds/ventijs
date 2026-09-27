@@ -81,6 +81,8 @@ export const socketState: SocketState = {
   validateUtf8: true,
   maxPayload: 100 * 1024 * 1024,
   maxFragments: 16 * 1024,
+  compressible: false,
+  threshold: 0,
   closeFrameReceived: false,
   errorEmitted: false,
   attachment: null,

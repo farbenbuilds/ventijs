@@ -9,6 +9,8 @@ import type { WebSocket } from "../../types/ws";
 import { trackClient } from "./clients";
 import { abortHandshake, selectProtocol, socketAccept } from "./handshake";
 import { detachHandshakeError } from "./handshake-error";
+import { negotiateExtensions } from "./negotiate";
+import { thresholdOf } from "../extensions/threshold";
 
 const UPGRADED = Symbol("ventijs.upgraded");
 
@@ -48,10 +50,17 @@ export function completeUpgrade(
     "Connection: Upgrade",
     `Sec-WebSocket-Accept: ${socketAccept(key)}`,
   ];
+  const negotiation = negotiateExtensions(state, request, socket);
+  // The socket may already carry a 400, and a 101 written after it is a
+  // `ERR_STREAM_WRITE_AFTER_END` on the caller's own upgrade rather than the refusal the
+  // peer was told about.
+  if (negotiation.outcome === "refused") return;
+  const extensions = negotiation.outcome === "accepted" ? negotiation.accepted : null;
   const SocketClass = state.options.WebSocket ?? state.webSocket;
   const accepted = Reflect.construct(SocketClass, [null, undefined, state.options]) as WebSocket;
   const protocol = selectProtocol(state, protocols, request);
   if (protocol) headers.push(`Sec-WebSocket-Protocol: ${protocol}`);
+  if (extensions) headers.push(`Sec-WebSocket-Extensions: ${extensions.header}`);
   emitEvent(state, "headers", headers, request);
   Object.defineProperty(socket, UPGRADED, { value: true });
   detachHandshakeError(socket);
@@ -86,6 +95,13 @@ export function completeUpgrade(
     // which could change them.
     acceptedState.maxPayload = state.normalizedOptions.maxPayload;
     acceptedState.maxFragments = state.normalizedOptions.maxFragments;
+    // The negotiation reaches the codec, not just the header. RSV1 means nothing without
+    // it, so a codec built for an uncompressed connection would refuse a compressed
+    // frame with 1002 -- which is why this is a connection property and not a send-time
+    // option.
+    acceptedState.compressible = extensions !== null;
+    if (extensions) acceptedState.extensions = extensions.header;
+    acceptedState.threshold = thresholdOf(state.normalizedOptions.perMessageDeflate);
   }
   attachSocket(accepted, socket);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);

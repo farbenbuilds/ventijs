@@ -33,6 +33,7 @@ export function openCodec(state: SocketState, role: number): bigint {
     maxPayload: state.maxPayload,
     maxFragments: state.maxFragments,
     validateUtf8: state.validateUtf8,
+    permessageDeflate: state.compressible,
   });
   state.codec = handle;
   return handle;

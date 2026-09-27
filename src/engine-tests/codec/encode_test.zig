@@ -13,7 +13,7 @@ const support = @import("frame_support.zig");
 
 /// A trusted limits record for a suite that wants its own ceilings.
 fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
-    return limits.Limits.trust(max_message, max_fragments, true) catch unreachable;
+    return limits.Limits.trust(max_message, max_fragments, true, false) catch unreachable;
 }
 
 test "the encoder produces an unmasked frame for a server" {
@@ -68,8 +68,8 @@ test "the encoder refuses a payload over the cap" {
     const Small = codec.codec(2);
     var peer = Small.init(.server, trusted(8, 8)) catch unreachable;
     defer peer.deinit();
-    try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789").failed);
-    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678").ok);
+    try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789", false).failed);
+    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false).ok);
 }
 
 test "a round trip through the encoder and the decoder preserves the message" {

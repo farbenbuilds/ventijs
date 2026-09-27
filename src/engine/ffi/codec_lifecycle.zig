@@ -24,20 +24,28 @@ const limits = @import("../codec/limits.zig");
 /// is the one this boundary used to have by construction: a fixed capacity, reported
 /// on `server.options` as `maxPayload`, that no caller could discover was different.
 ///
-/// `validate_utf8` is the one policy flag, and it is 1 unless the caller passed
-/// `skipUTF8Validation`, so the default cannot be lost by an argument that arrives as
-/// 0 because a JavaScript boolean was `false`.
+/// `validate_utf8` and `permessage_deflate` are policy flags rather than capacities, and
+/// both are 1 unless the caller asked otherwise, so a default cannot be lost by an
+/// argument that arrives as 0 because a JavaScript boolean was `false`. The second is 0
+/// for a connection whose handshake answered no `Sec-WebSocket-Extensions`, which is the
+/// only thing that may set RSV1.
 pub fn codec_create(
     env: napi.Env,
     role: abi.Arg,
     validate_utf8: abi.Arg,
     max_message: abi.Arg,
     max_fragments: abi.Arg,
+    permessage_deflate: abi.Arg,
 ) !u64 {
     _ = env;
     if (role > @intFromEnum(handles.Role.server)) return error.InvalidRole;
     const side: handles.Role = if (role == 0) .client else .server;
-    const trusted = try limits.Limits.trust(max_message, max_fragments, validate_utf8 != 0);
+    const trusted = try limits.Limits.trust(
+        max_message,
+        max_fragments,
+        validate_utf8 != 0,
+        permessage_deflate != 0,
+    );
     return (try handles.create(side, trusted)).to_int();
 }
 

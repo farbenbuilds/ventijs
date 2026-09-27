@@ -104,6 +104,14 @@ export type SocketState = EmitterState<SocketEventMap> & {
   maxPayload: number;
   /// The `maxFragments` a codec opened for this socket enforces.
   maxFragments: number;
+  /// Whether this connection negotiated RFC 7692 `permessage-deflate`, which is the only
+  /// thing that may set RSV1. A socket that never negotiates it is the common case and
+  /// the cheap one: no compressor, no inflate scratch, no RSV1 to explain.
+  compressible: boolean;
+  /// The `permessage-deflate` threshold, in bytes, below which a message goes out
+  /// uncompressed. `ws`'s default is 1024 and a threshold of 0 compresses everything,
+  /// which is how `ws` spells "no threshold" and so it is spelled here.
+  threshold: number;
   /// Whether a ping is answered automatically. On the socket because the decision is
   /// made per frame in the inbound path, where the peer is known to be a client.
   autoPong: boolean;

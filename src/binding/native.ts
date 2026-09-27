@@ -107,7 +107,13 @@ export type VentiAddon = {
   /// `codecDestroy` is a status rather than a use-after-free.
   /// `validateUtf8` is 1 unless the caller passed `skipUTF8Validation`; the codec is
   /// the validator, so the flag is how that option reaches the parser.
-  codecCreate(role: number, validateUtf8: number, maxPayload: number, maxFragments: number): bigint;
+  codecCreate(
+    role: number,
+    validateUtf8: number,
+    maxPayload: number,
+    maxFragments: number,
+    permessageDeflate: number,
+  ): bigint;
   codecDestroy(handle: bigint): void;
   /// Returns bytes consumed, or a negative `codec.ts` outcome ordinal.
   codecFeed(handle: bigint, bytes: Uint8Array): number;
@@ -121,7 +127,16 @@ export type VentiAddon = {
   codecFragments(handle: bigint): number[] | null;
   codecTake(handle: bigint): void;
   /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
-  codecEncode(handle: bigint, kind: number, fin: number, payload: Uint8Array): number;
+  /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
+  /// `compress` asks for a compressed payload with RSV1 set and is declined for a
+  /// control frame and for a fragment, which `rsv1.may_compress` owns.
+  codecEncode(
+    handle: bigint,
+    kind: number,
+    fin: number,
+    payload: Uint8Array,
+    compress: number,
+  ): number;
   codecOutbound(handle: bigint): Buffer;
   codecOutboundMasked(handle: bigint): boolean;
   codecFailureCode(handle: bigint): number;

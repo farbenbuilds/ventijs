@@ -14,7 +14,8 @@ const events = @import("events.zig");
 const inbound = @import("receive.zig");
 const limits = @import("limits.zig");
 const copy_in = @import("ingest.zig");
-const outbound = @import("encode.zig");
+const framing = @import("encode.zig");
+const outbound = @import("outbound.zig");
 const result = @import("feed_result.zig");
 const store = @import("events_store.zig");
 
@@ -22,7 +23,6 @@ pub const Kind = events.Kind;
 pub const Failure = events.Failure;
 pub const max_ordinal = events.max_ordinal;
 pub const Decoded = inbound.Decoded;
-pub const Encoded = outbound.Encoded;
 pub const Outcome = result.Outcome;
 pub const FeedResult = result.FeedResult;
 pub const Error = error{ CodecTableFull, InvalidMessageCap, InvalidCapacity, OutOfMemory };
@@ -39,7 +39,7 @@ pub fn codec(comptime control_slots: usize) type {
         const Self = @This();
 
         rx: inbound.receive() = undefined,
-        tx: outbound.transmit() = undefined,
+        tx: framing.transmit() = undefined,
         events: store.event_store(control_slots) = .{},
 
         /// Set by the driver when a frame is refused, latched rather than returned
@@ -51,14 +51,14 @@ pub fn codec(comptime control_slots: usize) type {
         resume_offset: usize = 0,
 
         /// Builds a codec for one role from a trusted limits record, so the table
-        /// validates once and every route to a codec is checked once. A ceiling the
-        /// codec cannot enforce is a configuration error and not a 1009: a peer did
-        /// nothing wrong, and closing it for a limit the application chose looks, from
-        /// the peer's side, like a bug in the library.
+        /// validates once and every route to a codec is checked once. A ceiling the codec
+        /// cannot enforce is a configuration error and not a 1009: a peer did nothing
+        /// wrong, and closing it for a limit the application chose looks, from the
+        /// peer's side, like a bug in the library.
         pub fn init(role: zslay.EndpointRole, trusted: limits.Limits) Error!Self {
             var self: Self = .{
                 .rx = try inbound.receive().init(role, trusted, capacities.message_floor),
-                .tx = try outbound.transmit().init(role, trusted.max_message),
+                .tx = try framing.transmit().init(role, trusted.max_message),
             };
             errdefer self.rx.deinit();
             errdefer self.tx.deinit();
@@ -72,26 +72,31 @@ pub fn codec(comptime control_slots: usize) type {
             self.tx.deinit();
         }
 
-        /// The fragment boundaries of the data message just delivered, ascending.
-        /// Read between `select` and `take`, the only window in which the reassembly
-        /// buffer is still the caller's message.
+        /// The fragment boundaries of the data message just delivered, ascending. Read
+        /// between `select` and `take`, the only window in which the reassembly buffer is
+        /// the caller's message; `binaryType: 'fragments'` slices on it.
         pub fn fragment_ends(self: *const Self) []const u32 {
-            return self.rx.fragment_ends();
+            return self.rx.parts.ends();
         }
 
         /// Folds `input` into the codec, stopping when the input runs out, the queue
         /// fills, or a frame is refused.
         ///
-        /// `input` is scratch and is unmasked in place, which saves a copy of every
-        /// byte a client sends. The cost is that a caller hands over a buffer nothing
-        /// else reads and never re-feeds the same bytes: they are plaintext after.
+        /// `input` is scratch and is unmasked in place, which saves a copy of every byte
+        /// a client sends. The cost is that a caller hands over a buffer nothing else
+        /// reads and never re-feeds the same bytes: they are plaintext after.
         pub fn feed(self: *Self, input: []const u8) FeedResult {
             return self.note(driver.feed(Self, self, input));
         }
 
-        /// Folds an input the caller must not see modified.
         pub fn ingest(self: *Self, input: []const u8) FeedResult {
             return self.note(copy_in.ingest(Self, self, input));
+        }
+
+        /// Formats one outbound frame. `compress` is the caller's decision -- see
+        /// `encode.transmit`, which is where the fragmentation rule lives.
+        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool) outbound.Encoded {
+            return self.tx.encode(kind, fin, payload, compress);
         }
 
         /// Latches a failure and reports it as an event where there is room.
@@ -104,7 +109,6 @@ pub fn codec(comptime control_slots: usize) type {
             self.resume_offset = folded.consumed;
             return folded;
         }
-
         /// Events waiting to be taken, including one already selected.
         pub fn pending(self: *const Self) usize {
             return self.events.pending();
@@ -119,12 +123,10 @@ pub fn codec(comptime control_slots: usize) type {
             return self.events.selected_event();
         }
 
-        /// Retires the selected event and frees its slot.
         pub fn take(self: *Self) void {
             self.events.take();
         }
 
-        /// The latched failure, or null while healthy.
         pub fn pending_failure(self: *const Self) ?Failure {
             return self.failure;
         }
@@ -134,13 +136,11 @@ pub fn codec(comptime control_slots: usize) type {
             const failure = self.failure orelse return 0;
             return events.close_code_for(failure);
         }
-
         /// Where the last fold stopped, for a caller resuming a partial input.
         pub fn resume_at(self: *const Self) usize {
             return self.resume_offset;
         }
 
-        /// Drops every buffered byte and event, for a connection abandoned early.
         pub fn reset(self: *Self) void {
             self.rx.reset();
             self.events.reset();

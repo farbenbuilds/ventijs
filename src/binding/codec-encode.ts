@@ -18,9 +18,10 @@ export function encodeCodecFrame(
   kind: number,
   fin: boolean,
   payload: Uint8Array,
+  compress: boolean,
 ): number {
   const addon = loadAddon();
-  return callNative(() => addon.codecEncode(handle, kind, fin ? 1 : 0, payload));
+  return callNative(() => addon.codecEncode(handle, kind, fin ? 1 : 0, payload, compress ? 1 : 0));
 }
 
 /// The framed bytes waiting to be copied out, as a Node-owned buffer.

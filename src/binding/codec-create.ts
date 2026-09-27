@@ -24,10 +24,14 @@ export type CodecOptions = {
   /// 1008, which is a policy failure rather than a protocol error: the frames were well
   /// formed and the peer simply split one message into too many pieces.
   readonly maxFragments: number;
-  /// False for `skipUTF8Validation`. The codec is the validator, so an option the
-  /// facade normalized and did not read left a caller who trusts their own server with
-  /// a hard 1007 on a payload `ws` would have delivered mangled.
+  /// False for `skipUTF8Validation`. The codec is the validator, so an option the facade
+  /// normalized and did not read left a caller who trusts their own server with a hard
+  /// 1007 on a payload `ws` would have delivered mangled.
   readonly validateUtf8: boolean;
+  /// Whether the opening handshake negotiated RFC 7692 `permessage-deflate`. The only
+  /// thing that may set RSV1, so a codec built without it refuses a compressed frame
+  /// with 1002 -- which is what RFC 6455 section 5.2 requires.
+  readonly permessageDeflate: boolean;
 };
 
 /// Creates a frame codec and returns a generation-checked handle.
@@ -49,7 +53,13 @@ export function createCodec(role: number, options: CodecOptions): bigint {
   assertCeiling("maxFragments", options.maxFragments, limits.maxFragments);
   const addon = loadAddon();
   return callNative(() =>
-    addon.codecCreate(role, options.validateUtf8 ? 1 : 0, options.maxPayload, options.maxFragments),
+    addon.codecCreate(
+      role,
+      options.validateUtf8 ? 1 : 0,
+      options.maxPayload,
+      options.maxFragments,
+      options.permessageDeflate ? 1 : 0,
+    ),
   );
 }
 

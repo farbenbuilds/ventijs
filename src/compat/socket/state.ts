@@ -61,6 +61,8 @@ export function createSocketState(): SocketState {
     validateUtf8: true,
     maxPayload: DEFAULT_MAX_PAYLOAD,
     maxFragments: DEFAULT_MAX_FRAGMENTS,
+    compressible: false,
+    threshold: 0,
     autoPong: true,
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,

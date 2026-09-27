@@ -38,6 +38,7 @@ export function defaultCodecOptions(overrides: Partial<CodecOptions> = {}): Code
     maxPayload: DEFAULT_MAX_PAYLOAD,
     maxFragments: DEFAULT_MAX_FRAGMENTS,
     validateUtf8: true,
+    permessageDeflate: false,
     ...overrides,
   };
 }

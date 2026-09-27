@@ -28,6 +28,13 @@ pub const Limits = struct {
     max_fragments: usize,
     /// Whether a text payload is validated as UTF-8 as it arrives.
     validate_utf8: bool,
+    /// Whether RFC 7692 `permessage-deflate` was negotiated for this connection.
+    ///
+    /// A connection property rather than a process one, because it is decided by the
+    /// handshake and only a handshake that answered `Sec-WebSocket-Extensions` may set
+    /// RSV1. A codec that compressed without it would put a frame on the wire that
+    /// RFC 6455 section 5.2 says is malformed.
+    permessage_deflate: bool,
 
     /// The largest message a codec can be asked to accept, which is the boundary's own
     /// number width rather than a memory decision: the buffers grow to what a peer
@@ -45,7 +52,12 @@ pub const Limits = struct {
     /// `server.options`, and then a different limit quietly enforced, which a caller
     /// has no way to discover. A zero is the one value translated rather than refused,
     /// and only because `ws` defines it that way.
-    pub fn trust(max_message: usize, max_fragments: usize, validate_utf8: bool) Error!Limits {
+    pub fn trust(
+        max_message: usize,
+        max_fragments: usize,
+        validate_utf8: bool,
+        permessage_deflate: bool,
+    ) Error!Limits {
         const message = or_ceiling(max_message, message_ceiling);
         if (message > message_ceiling) return error.InvalidMessageCap;
         const fragments = or_ceiling(max_fragments, fragment_ceiling);
@@ -54,6 +66,7 @@ pub const Limits = struct {
             .max_message = message,
             .max_fragments = fragments,
             .validate_utf8 = validate_utf8,
+            .permessage_deflate = permessage_deflate,
         };
     }
 };

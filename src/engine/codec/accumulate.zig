@@ -57,14 +57,20 @@ pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !vo
         peer.parts.clear();
         peer.utf8_state = .{};
     }
-    if (peer.message.length + count > max_message) return error.PayloadTooLarge;
-    // The grow is the one allocation on the inbound path, and it happens at most
-    // logarithmically over a message's life. A 100 MiB message is about seventeen
-    // reallocations; a small one is none at all, because the floor already covers
-    // it. A peer that stays under `maxPayload` never pays for `maxPayload`.
-    peer.message.grow(count, max_message) catch return error.PayloadTooLarge;
-    @memcpy(peer.message.tail(count), chunk);
-    if (peer.message_opcode == .text and peer.validate_utf8) {
+    // The grow is the one allocation on the inbound path and it happens at most
+    // logarithmically over a message's life, so a peer that stays under `maxPayload`
+    // never pays for `maxPayload`. A compressed message is staged rather than
+    // accumulated, and the bound is the same either way.
+    peer.append(chunk) catch |err| {
+        return switch (err) {
+            error.TooLarge => error.PayloadTooLarge,
+            error.OutOfMemory, error.Overflow => error.PayloadTooLarge,
+            error.CorruptPayload => error.InvalidUtf8,
+        };
+    };
+    // A compressed message's bytes are not text until they are inflated, so the
+    // validator runs over the plaintext at the end of the message rather than here.
+    if (!peer.inflate.is_compressed() and peer.message_opcode == .text and peer.validate_utf8) {
         peer.utf8_state = utf8.feed(peer.utf8_state, chunk) orelse return error.InvalidUtf8;
     }
 }

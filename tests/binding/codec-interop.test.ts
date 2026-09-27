@@ -86,7 +86,7 @@ test(
         client.on("message", (data) => resolve(data.toString()));
         client.on("error", reject);
       });
-      const length = encodeCodecFrame(handle, TEXT_ORDINAL, true, Buffer.from("from the codec"));
+      const length = frame(handle, "from the codec");
       // A server must not mask, and `ws` refuses a masked frame from a server.
       expect(codecOutboundMasked(handle)).toBe(false);
       await peer.send(codecOutbound(handle).subarray(0, length));
@@ -119,12 +119,7 @@ test(
     const socket = await openRawClient(boundPort(server));
     const handle = clientCodec();
     try {
-      const length = encodeCodecFrame(
-        handle,
-        TEXT_ORDINAL,
-        true,
-        Buffer.from("masked by the codec"),
-      );
+      const length = frame(handle, "masked by the codec");
       // A client must mask, and `ws` closes a connection that sends an unmasked one.
       expect(codecOutboundMasked(handle)).toBe(true);
       socket.write(codecOutbound(handle).subarray(0, length));
@@ -142,4 +137,13 @@ test(
 function boundPort(server: WsServer): number {
   const address = server.address();
   return typeof address === "object" && address !== null ? address.port : 0;
+}
+
+/// One complete, uncompressed text frame from a codec, and its length.
+///
+/// The `false` is `compress`, and it is written out here rather than left to a reader:
+/// these cases are about masking and framing, so a reader should be able to see that
+/// nothing about this frame depends on RFC 7692.
+function frame(handle: bigint, text: string): number {
+  return encodeCodecFrame(handle, TEXT_ORDINAL, true, Buffer.from(text), false);
 }

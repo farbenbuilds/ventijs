@@ -64,7 +64,7 @@ pub fn encode_failure(failure: state.Failure) EncodeFailure {
     return switch (failure) {
         .unexpected_opcode => .unexpected_opcode,
         .message_too_large, .fragmented_message_too_large => .message_too_large,
-        .protocol_error, .reserved_bits, .invalid_utf8 => .protocol_error,
+        .protocol_error, .reserved_bits, .invalid_utf8, .invalid_compressed_data => .protocol_error,
         .too_many_fragments => .protocol_error,
     };
 }

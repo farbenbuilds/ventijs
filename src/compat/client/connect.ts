@@ -11,6 +11,7 @@ import { CLOSED } from "../ready-state";
 import { parseAddress, type ClientAddress } from "./address";
 import { normalizeProtocols, protocolSet, type ProtocolSet } from "./protocols";
 import { buildRequest, newKey, type Handshake } from "./request";
+import { thresholdOf } from "../extensions/threshold";
 import { respond } from "./open";
 import { connectionError, openTransport } from "./transport";
 import { readHead } from "./head";
@@ -61,6 +62,9 @@ export function connectSocket(
   state.validateUtf8 = !normalized.skipUTF8Validation;
   state.maxPayload = normalized.maxPayload;
   state.maxFragments = normalized.maxFragments;
+  // The threshold is known before the handshake, so it is set here; whether the
+  // extension was actually negotiated is not, and `open.ts` sets that from the response.
+  state.threshold = thresholdOf(normalized.perMessageDeflate);
   const socket = buildSocketRecord(state);
   const transport = openTransport(parsed);
   const attempt: Attempt = {

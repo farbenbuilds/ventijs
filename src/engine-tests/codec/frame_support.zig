@@ -8,6 +8,7 @@
 const std = @import("std");
 const zslay = @import("zslay");
 const codec = @import("../../engine/codec/state.zig");
+const outbound = @import("../../engine/codec/outbound.zig");
 const limits = @import("../../engine/codec/limits.zig");
 
 /// The codec type the decode and encode suites share, and the ceilings they give it.
@@ -29,7 +30,7 @@ pub const default_max_fragments = 64;
 
 /// The limits every codec in these suites shares, trusted the way the table trusts.
 pub fn trusted() limits.Limits {
-    return limits.Limits.trust(default_max_message, default_max_fragments, true) catch unreachable;
+    return limits.Limits.trust(default_max_message, default_max_fragments, true, false) catch unreachable;
 }
 
 /// One frame, built the way a peer would put it on the wire.
@@ -108,7 +109,7 @@ pub fn client() codec_type {
 /// and reading the length from one encode and the bytes from another is a test that
 /// passes while asserting nothing.
 pub const Framed = struct {
-    result: codec.Encoded,
+    result: outbound.Encoded,
     bytes: []const u8,
     masked: bool,
 };
@@ -120,7 +121,7 @@ pub fn framed(
     fin: bool,
     payload: []const u8,
 ) Framed {
-    const encoded = peer.tx.encode(kind, fin, payload);
+    const encoded = peer.tx.encode(kind, fin, payload, false);
     return .{ .result = encoded, .bytes = peer.tx.bytes(), .masked = peer.tx.last_was_masked() };
 }
 

@@ -35,16 +35,23 @@ function ordinalOf(kind: CodecKindName): number {
 /// `false` and opens a message, the second passes `true` and appends a continuation
 /// frame. It was hardcoded, so a caller who asked for a fragment got a complete message
 /// with the `fin` bit set and no error anywhere.
+///
+/// `compress` is the caller's for the same reason: RSV1 is a per-frame decision, and
+/// RFC 7692 only allows it on the first frame of a data message. A control frame or a
+/// continuation that asks for it is refused by the engine with 1002, which is what a
+/// peer would be entitled to close on, so the decision is made here where the socket's
+/// state is visible.
 export function writeFrame(
   state: SocketState,
   kind: CodecKindName,
   payload: Buffer,
   fin = true,
+  compress = false,
 ): FrameStatus {
   const handle = state.codec;
   if (handle === null) return "closed";
   if (!isWritable(state)) return state.transport?.writableEnded === true ? "closed" : "closing";
-  const length = encodeCodecFrame(handle, ordinalOf(kind), fin, payload);
+  const length = encodeCodecFrame(handle, ordinalOf(kind), fin, payload, compress);
   if (length < 0) return encodeFailure(-length);
   const framed = codecOutbound(handle);
   if (state.transport === null) return "closed";

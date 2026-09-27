@@ -5,7 +5,8 @@ import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED } from "../ready-state";
 import { buildRequest, newKey } from "./request";
-import { extensionsRejection, parseResponse, rejection } from "./response";
+import { parseResponse, rejection } from "./response";
+import { acceptExtension } from "./extension";
 import { decide, isRedirect, reportUnexpected } from "./redirect";
 import { dial } from "./connect";
 import { abort, type Attempt } from "./connect";
@@ -66,14 +67,18 @@ export function respond(attempt: Attempt, bytes: Buffer): void {
     abort(attempt, createError("ERR_PROTOCOL", refused));
     return;
   }
-  const extensions = extensionsRejection(response, attempt.options.perMessageDeflate !== false);
-  if (extensions !== null) {
-    abort(attempt, createError("ERR_PROTOCOL", extensions));
+  const state = attempt.state;
+  const extension = acceptExtension(response, attempt.options.perMessageDeflate);
+  if ("refusal" in extension) {
+    abort(attempt, createError("ERR_PROTOCOL", extension.refusal));
     return;
   }
-  const state = attempt.state;
   state.protocol = response.headers["sec-websocket-protocol"] ?? "";
   state.extensions = response.headers["sec-websocket-extensions"] ?? "";
+  // Set before `attachSocket` below, because the codec reads it there: a codec built
+  // for an uncompressed connection refuses a compressed frame with 1002, so a
+  // negotiation that only reached the header would break the first message.
+  state.compressible = extension.accepted !== null;
   // The timeout was the handshake's, not the connection's: `ws` leaves an open socket
   // with no read deadline, and a caller that wants one sets it itself.
   attempt.transport.setTimeout(0);
