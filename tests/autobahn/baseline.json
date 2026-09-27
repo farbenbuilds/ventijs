@@ -1,18 +1,10 @@
 {
   "note": "Cases the engine is known to fail. The gate fails on any failure outside this list and reports any entry that now passes, so it can only shrink. Every case is still classified and reported; nothing here is excluded from the count checks.",
-  "recordedFrom": "autobahn.yml run 36287763043, this branch, ubuntu-24.04: 248 of 257 evaluated framing cases passed and 9 failed. The two per-message-deflate groups carry over from the earlier full run, which is the only one that covered them.",
+  "recordedFrom": "autobahn.yml run 36297620675, this branch, ubuntu-24.04: 251 of 257 evaluated framing cases passed and 6 failed. That is 3 more passing and 3 fewer failing than the previous recording, and the gate names the three that moved: 5.19, 5.20, and 7.1.1 now pass and are removed here. All three were inbound-echo cases, and all three were failing because of the shared inbound ring rather than of the close or fragment path: a connection that closed with messages still staged left a record no consumer could ever match, and because the ring is strictly FIFO that stranded head stalled the next case on the same shard. Purging on the close event fixed all three at once, which is also the evidence that they shared one cause.",
   "groups": {
     "1": {
-      "reason": "Six valid text payloads are closed with 1009 where the suite expects an echo, and the rest of the group is conformant. 1009 is the engine-s own message cap, so either the cap is below these payloads or it is applied where the suite does not expect one; the per-case payloads are not in this repository, so which of the two it is needs one case report to settle. Raising `message_capacity` is the first thing to try, and it is a one-line change plus a regenerated set of capacity counts.",
+      "reason": "Six valid text and binary payloads are closed with 1009 where the suite expects a clean echo, and these are now the only failing cases in a framing run. Settled: it is the cap. The vendored zslay validator refuses payload_len > max_frame_len, the largest payload in this group is 65535-65536 bytes, and message_capacity is 32768, so the engine answers 1009 correctly to a limit the suite never agreed to. Raising message_capacity to 64 KiB is a one-line change to a comptime constant that converts all six, at about 22 MB per live server. It is not applied here because it also moves 92 recorded cases across the deflate groups and invalidates the harness's derived capacity model and shard weight table, and both are only re-derivable from a run against the digest-pinned client, which is the run this entry was written from.",
       "cases": "1.1.6 1.1.7 1.1.8 1.2.6 1.2.7 1.2.8"
-    },
-    "5": {
-      "reason": "Two cases fail with a clean close and no remote close code, so the connection is healthy and the frame is delivered; something about the resulting message is not what the suite expected. 5.19 and 5.20 are the fragment-boundary cases, so this is about reassembly rather than framing.",
-      "cases": "5.19 5.20"
-    },
-    "7": {
-      "reason": "7.1.1 sends 1001 where the suite expects 1007. This one is specific and actionable: the close path maps an invalid close reason onto the normal-closure code instead of 1007. It is the only remaining failure with a remote close code that is simply wrong, rather than a cap or a message-content problem.",
-      "cases": "7.1.1"
     },
     "12": {
       "reason": "permessage-deflate is normalised but never negotiated, so the extension is absent. Not covered by a framing run and unchanged by the work that shrank the rest of this list; carried over from the run that recorded it.",

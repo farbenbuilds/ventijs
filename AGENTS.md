@@ -30,14 +30,18 @@ will own parsing, buffers, and backpressure.
   close code, framing, and backpressure helpers.
   `src/engine/` holds the native foundation grouped by plane: `channel/`
   (threadsafe transport, event vocabulary, ring), `ffi/` (the N-API entry
-  points), `server/` (lifecycle, instance table, config, route wiring), and
-  `socket/` (per-connection slab, ops, staging); `src/engine-tests/` mirrors
+  points, split into the outbound `socket_pump` and the inbound
+  `socket_inbound`), `server/` (lifecycle, instance table, config, route wiring,
+  and the inbound message path in `inbound.zig`), and `socket/` (per-connection
+  slab, ops, staging); `src/engine-tests/` mirrors
   those folders with one Zig unit suite per testable module, entered through
   `src/engine_tests.zig`; the engine-coupled
   `server`/`connections` modules are covered by the addon-backed tests. Socket
   ops stage into a bounded ring and return typed statuses; the engine-thread
   drain that frames and writes them is still missing, so the facade's native
   sockets stage without flushing and the Node upgrade path has no receiver.
+  `src/lib.zig` also exports `engineLimits`, so the compiled capacities are read
+  rather than restated.
   `pnpm build:binding` builds the addon in ReleaseSafe, and
   `scripts/check-conventions.mjs` (run by `pnpm lint` and a `lefthook` job)
   enforces the line budget, Zig naming, filename case, and the emoji ban. The
@@ -47,10 +51,10 @@ will own parsing, buffers, and backpressure.
   `SKILL.md`) specify the intended architecture. When they disagree with
   `package.json`, `tsconfig.json`, `flake.nix`, or `src/`, trust the config
   and code.
-- Documented scripts `test:compat` and `bench` do not exist in `package.json`.
-  `build`, `build:binding`, `dev`, `format`, `format:check`, `lint`, `lint:fix`,
-  `test`, `test:watch`, `typecheck`, `typecheck:dist`, `release`, and
-  `prepublishOnly` are wired. `pnpm typecheck` checks `src`, `tests/types`, and
+- Every script is wired: `build`, `build:binding`, `dev`, `format`,
+  `format:check`, `lint`, `lint:fix`, `test`, `test:compat`, `test:watch`,
+  `test:autobahn`, `bench`, `typecheck`, `typecheck:dist`, `release`, and
+  `prepublishOnly`. `pnpm typecheck` checks `src`, `tests/types`, and
   the vitest suites through `tsconfig.test.json`; `pnpm build` ends with
   `typecheck:dist`, which checks the built
   declarations through the package `exports` map.
@@ -122,6 +126,7 @@ declarations through the package `exports` map; it needs `tsdown` output.
 ## Read before changing a subsystem
 
 - Ownership, target layout, boundary contracts: `CODEBASE.md`
+- Why Node owns the socket and Zig owns the framing: `docs/adr/0001-transport-and-framing-ownership.md`
 - Style depth and anti-OOP patterns: `CODING_CONVENTION.md`
 - Script contract, testing, PRs, release: `CONTRIBUTE.md`
 - Target workflows and native matrix: `CI_CD_PIPELINE.md`

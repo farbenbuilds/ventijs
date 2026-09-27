@@ -36,3 +36,15 @@ export function reply(a: VentiAddon, state: EchoState): void {
     a.pumpSocket(state.handle, connection);
   }
 }
+
+/// Drops the staged inbound records of a connection that has closed.
+///
+/// Every case in the suite opens a fresh connection, and `reply` drains eagerly,
+/// so a well-behaved run never leaves anything staged. A case that lost the race
+/// would, though, and its records would sit at the head of an inbound ring that is
+/// one strictly ordered FIFO across the whole server. Nothing could ever match
+/// them again, and the next case on a different connection would stall behind
+/// them and be recorded as a protocol failure it did not produce.
+export function purge(a: VentiAddon, state: EchoState, index: number, generation: number): void {
+  a.purgeSocketMessage(state.handle, index, generation);
+}

@@ -75,6 +75,44 @@ pub fn release_inbound(slab: anytype, view: payload.View) void {
     slab.inbound.release(view);
 }
 
+/// Drops every staged inbound message belonging to a connection that has closed,
+/// and counts them. Node main thread only, and for the same reason `take_inbound`
+/// is: the inbound ring has a single consumer, and adding a second one on the
+/// engine thread would let two callers release the same head and leave
+/// `dequeue_pos` pointing at an already-freed slot.
+///
+/// This is not a memory leak fix; the ring is fixed-capacity, so the bytes are
+/// bounded either way. It is a starvation fix, and it is the difference between
+/// a stall and a permanent outage.
+///
+/// Without it, a peer that sends a burst and disconnects leaves records for a
+/// handle that `slab.release` has already retired. Nothing can match those
+/// `(index, generation)` pairs again, so `take_inbound` returns null for them
+/// forever, and because the ring is strictly FIFO with one consumer, a stranded
+/// record at the head makes `take_inbound` return null for *every other
+/// connection on the server*. `stage_inbound` then fails for all of them, the
+/// drop counter climbs, and the server is permanently deaf while every connection
+/// still looks healthy. Sixty-four messages and a disconnect is not an exotic
+/// shape; it is what any burst-then-hangup does.
+///
+/// Only a leading run is removed, because the ring is ordered and a record behind
+/// a live connection's cannot be reached without consuming that connection's
+/// message, which would deliver one peer's data on another peer's socket. A
+/// closing connection's records that sit behind live ones are therefore left for
+/// the ordinary drain to overtake, which is the stall `queues`' module note
+/// already describes and which per-connection inbound rings would remove.
+pub fn discard_inbound(slab: anytype, index: u32, generation: u32) u32 {
+    var dropped: u32 = 0;
+    while (slab.inbound.peek()) |view| {
+        if (view.index != index or view.generation != generation) break;
+        slab.inbound.release(view);
+        dropped += 1;
+    }
+    if (dropped == 0) return 0;
+    _ = slab.inbound.dropped.fetchAdd(dropped, .monotonic);
+    return dropped;
+}
+
 /// Borrows the oldest staged outbound message, or null when the ring is empty.
 /// Node main thread only.
 ///

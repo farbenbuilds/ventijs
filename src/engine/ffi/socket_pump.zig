@@ -1,5 +1,4 @@
-//! The engine-thread drain: moving staged bytes onto the wire and parsed
-//! frames back out to JavaScript.
+//! The engine-thread drain: moving staged bytes onto the wire.
 //!
 //! Staging a payload is not sending it. `send_socket` copies bytes into a
 //! bounded ring on the Node main thread, and nothing about that reaches the
@@ -10,12 +9,14 @@
 //!
 //! The topic publisher maps a message onto a text or binary opcode and nothing
 //! else, so only those two opcodes can make this hop. Close, ping, and pong
-//! frames cannot, and are refused by the compatibility layer rather than
-//! silently dropped here.
+//! frames cannot, and `can_publish` refuses them rather than letting a control
+//! record reach the peer as application data. The inbound half of this boundary
+//! is `socket_inbound.zig`.
 
 const napi = @import("napi-zig");
 const topic = @import("../server/topic.zig");
 const instance = @import("../server/instance.zig");
+const payload = @import("../socket/payload.zig");
 const queues = @import("../socket/queues.zig");
 const status = @import("../socket/status.zig");
 
@@ -48,50 +49,19 @@ pub fn pump_socket(env: napi.Env, server: u40, connection: u64) !Status {
     return @intFromEnum(flush(target));
 }
 
-/// Inbound messages lost before JavaScript could see them, from either cause.
+/// Staged payloads the engine refused after the pump had already taken them out
+/// of the ring, and payloads it refused because the connection had no
+/// subscription.
 ///
-/// The ring refuses a stage when the Node main thread has not drained it, and the
-/// engine also discards a message from a connection an application has paused.
-/// Both are a peer outrunning the consumer and both are invisible from JavaScript
-/// otherwise, so they share the one counter rather than each having a number
-/// nothing reads. A paused connection is bounded to itself; a full ring is not.
-pub fn server_dropped_messages(env: napi.Env, server: u40) !u64 {
+/// This is the outbound counterpart of `socket_inbound.server_dropped_messages`,
+/// and it exists because the outbound path had no honest answer: the pump
+/// reported `ok` for a payload the engine then discarded. A caller that watches
+/// only the status saw success; a caller that watches only `bufferedAmount` saw
+/// the bytes debited. The two counters together are the difference between "sent"
+/// and "reported sent".
+pub fn server_undelivered_messages(env: napi.Env, server: u40) !u64 {
     const target = instance.lookup(env, server) orelse return error.UnknownServer;
-    return target.sockets.inbound.dropped_count();
-}
-
-/// Removes the oldest parsed message and copies it into a JavaScript-owned
-/// buffer.
-///
-/// The copy is what makes the payload safe to retain: the engine reuses its own
-/// message buffer for the next frame and the ring slot is freed here, so no
-/// engine memory is ever reachable from JavaScript. A null return means nothing
-/// is staged, which is the normal case when a wakeup was coalesced or the event
-/// channel dropped its notification.
-///
-/// The slot is released by a `defer` rather than on the success path alone. A
-/// failed `createBuffer` or `createArrayWithLength` would otherwise return with
-/// the record still claimed, and the ring head would stick on it for every later
-/// take, stalling the inbound path permanently.
-///
-/// The result is a two-element `[buffer, isBinary]` array. The opcode travels
-/// with the bytes rather than being read from the wakeup event because the two
-/// queues are bounded separately: a dropped wakeup would otherwise pair one
-/// message's opcode with the next message's bytes.
-pub fn take_socket_message(env: napi.Env, server: u40, connection: u64) !?napi.Val {
-    const target = instance.lookup(env, server) orelse return error.UnknownServer;
-    const handle = instance.resolve_connection(target, connection) orelse return null;
-    const view = queues.take_inbound(&target.sockets, handle.index, handle.generation) orelse {
-        return null;
-    };
-    defer queues.release_inbound(&target.sockets, view);
-    const buffer = try env.createBuffer(view.bytes.len);
-    @memcpy(buffer.data[0..view.bytes.len], view.bytes);
-    const is_binary = try env.createBoolean(view.kind != .text);
-    const result = try env.createArrayWithLength(2);
-    try result.setElement(env, 0, buffer.val);
-    try result.setElement(env, 1, is_binary);
-    return result;
+    return target.undelivered.load(.acquire);
 }
 
 /// Publishes every staged payload, oldest first.
@@ -100,9 +70,20 @@ pub fn take_socket_message(env: napi.Env, server: u40, connection: u64) !?napi.V
 /// being freed, so a refused send is still owed to the peer and a later pump
 /// retries it. Freeing it would turn a transient engine-inbox backlog into a
 /// silently dropped message the application had already been told was accepted.
+///
+/// A refusal is counted rather than merely reported. `Cluster.publish` returns
+/// the number of worker inboxes it queued, not the number of sockets written, and
+/// the far end discards a send error outright, so a full connection write queue
+/// used to end with the record freed, the slot debited, and `ok` returned: the
+/// bytes were gone and the application had been told they were sent. The counter
+/// is the only place that loss is observable.
 fn flush(target: *instance.Instance) status.Status {
     while (queues.take_outbound(&target.sockets)) |view| {
-        if (queue(target, view) == 0) return .backpressure;
+        if (!can_publish(view.kind)) return .policy_violation;
+        if (queue(target, view) == 0) {
+            _ = target.undelivered.fetchAdd(1, .monotonic);
+            return .backpressure;
+        }
         queues.release_outbound(&target.sockets, view);
     }
     return .ok;
@@ -113,4 +94,29 @@ fn queue(target: *instance.Instance, view: anytype) usize {
     const name = topic.write_topic(&buffer, view.index, view.generation);
     const is_text = view.kind == .text;
     return target.cluster.publish(name, view.bytes, is_text) catch 0;
+}
+
+/// Whether a staged record can make the topic hop at all.
+///
+/// The topic publisher maps a message onto a text or binary opcode and nothing
+/// else, so a control record staged by the compatibility layer has no opcode to
+/// travel as. Publishing one anyway is not a silent drop, it is worse: a staged
+/// close frame becomes a binary message carrying the close code and reason as
+/// payload, so the peer receives `[0x03, 0xE8]` as application data and never
+/// sees a close frame at all.
+///
+/// `payload.Kind` has carried `ping`, `pong`, and `close` since the staging ring
+/// was introduced, and nothing filtered them here. The bug was dormant only
+/// because no file under `src/compat/` reached the pump, which is exactly the
+/// condition the frame codec removes, so the filter has to land first.
+///
+/// The records are refused rather than dropped so the ring slot is not freed: the
+/// payload stays owed to its connection and a later drain can route it through a
+/// path that carries a real opcode. That is why this returns a status instead of
+/// consuming the view.
+fn can_publish(kind: payload.Kind) bool {
+    return switch (kind) {
+        .text, .binary => true,
+        .ping, .pong, .close => false,
+    };
 }

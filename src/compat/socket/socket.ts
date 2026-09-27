@@ -10,12 +10,9 @@ import {
   type DomListenerOptions,
 } from "../events/dom-listeners";
 import { CLOSED, CLOSING, CONNECTING, OPEN } from "../ready-state";
-import {
-  closeConnection,
-  pauseConnection,
-  resumeConnection,
-  terminateConnection,
-} from "./lifecycle";
+import { closeConnection } from "./lifecycle";
+import { terminateConnection } from "./transport";
+import { pauseConnection, resumeConnection } from "./gating";
 import { controlFrame } from "./control";
 import { sendData } from "./send";
 import { brandSocket, createSocketState } from "./state";

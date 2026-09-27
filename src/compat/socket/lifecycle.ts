@@ -1,4 +1,4 @@
-import { closeSocket, pauseSocket, resumeSocket } from "../../binding/socket";
+import { closeSocket } from "../../binding/socket";
 import { CLOSE_ABNORMAL, CLOSE_NORMAL, isValidStatusCode } from "../../protocol/close-codes";
 import type { SocketState } from "../../types/socket";
 import { emitEvent } from "../events/emitter";
@@ -80,7 +80,10 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   state.readyState = CLOSING;
   const closeCode = code === undefined ? CLOSE_NORMAL : Math.trunc(assertCloseCode(code));
   const closeReason = toCloseReason(reason);
-  if (state.attachment === null) return;
+  if (state.attachment === null) {
+    closeUnattached(state);
+    return;
+  }
   const status = closeSocket(
     state.attachment.server,
     state.attachment.connection,
@@ -99,6 +102,29 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   failConnection(state, closeFailure(status));
 }
 
+/// Completes a close on a socket with no native attachment.
+///
+/// The latch above has already moved the socket to `CLOSING`, so this path must
+/// always reach `CLOSED` on its own. Returning without doing anything stranded
+/// the socket at `CLOSING` for the life of the process: no close frame went out,
+/// the transport stayed open, and nothing else could complete the socket because
+/// the transport's own `close` event is the only other door out. A caller that
+/// called `close()` and then read `readyState` saw a socket that would never
+/// close again, with no error and no event to explain it.
+///
+/// Until the Zig frame codec owns the upgrade route there is no close frame to
+/// write, so the transport is destroyed and the socket finishes through the
+/// transport's `close` event. The socket then reports `1006`, which is what a
+/// close whose handshake never completed deserves. The caller asked to close, the
+/// ready state reaches `CLOSED`, and `close` fires exactly once.
+function closeUnattached(state: SocketState): void {
+  if (state.transport === null) {
+    finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+    return;
+  }
+  state.transport.destroy();
+}
+
 function assertCloseCode(code: unknown): number {
   if (typeof code !== "number" || !isValidStatusCode(code)) {
     throw createError(
@@ -108,42 +134,4 @@ function assertCloseCode(code: unknown): number {
     );
   }
   return code;
-}
-
-export function pauseConnection(state: SocketState): void {
-  if (state.readyState === CONNECTING || state.readyState === CLOSED) return;
-  state.isPaused = true;
-  if (state.attachment === null) return;
-  pauseSocket(state.attachment.server, state.attachment.connection);
-}
-
-export function resumeConnection(state: SocketState): void {
-  if (state.readyState === CONNECTING || state.readyState === CLOSED) return;
-  state.isPaused = false;
-  if (state.attachment === null) return;
-  resumeSocket(state.attachment.server, state.attachment.connection);
-}
-
-export function terminateConnection(state: SocketState): void {
-  if (state.readyState === CLOSED) return;
-  if (state.readyState === CONNECTING) {
-    failConnection(
-      state,
-      createError(
-        "ERR_INVALID_STATE",
-        "WebSocket was closed before the connection was established",
-      ),
-    );
-    return;
-  }
-  // The latch precedes the destroy, matching `ws`: a terminated socket is
-  // observably `CLOSING` until the transport's `close` event finishes it, and a
-  // socket left `OPEN` after `terminate()` is a second call's opportunity to send
-  // on a connection that is already gone.
-  state.readyState = CLOSING;
-  if (state.transport !== null) {
-    state.transport.destroy();
-    return;
-  }
-  finishConnection(state, CLOSE_ABNORMAL, EMPTY);
 }

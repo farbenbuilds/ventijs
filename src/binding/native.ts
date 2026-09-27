@@ -24,6 +24,10 @@ export type NativeServerConfig = {
   readonly maxConnections?: number;
   readonly maxMessageBytes?: number;
   readonly maxFrameBytes?: number;
+  /// Negotiates RFC 7692 `permessage-deflate` on the route. The engine already
+  /// reserves the paired deflate scratch for every configuration, so this turns
+  /// reserved memory into function rather than asking for more.
+  readonly permessageDeflate?: boolean;
 };
 
 export type EngineDispatch = (event: EngineEvent) => void;
@@ -46,9 +50,22 @@ export const NATIVE_SOCKET_STATUSES = [
 
 export type NativeSocketStatus = (typeof NATIVE_SOCKET_STATUSES)[number];
 
+/// The capacities the addon was compiled with, read from the Zig comptime
+/// constants rather than restated in TypeScript. A duplicated constant is how a
+/// compiled limit and its documented value drift apart.
+export type NativeEngineLimits = {
+  readonly connectionCapacity: number;
+  readonly messageBytes: number;
+  readonly frameBytes: number;
+  readonly inboundSlots: number;
+  readonly outboundSlots: number;
+};
+
 export type VentiAddon = {
   engineVersion(): string;
   http3Available(): boolean;
+  /// The compiled-in capacities. Takes no handle and cannot fail.
+  engineLimits(): NativeEngineLimits;
   createServer(config: NativeServerConfig, dispatch: EngineDispatch): number;
   listenServer(server: number): void;
   closeServer(server: number): void;
@@ -65,6 +82,13 @@ export type VentiAddon = {
   /// Takes the oldest parsed message for a connection as
   /// `[buffer, isBinary]`, or null when nothing is staged.
   takeSocketMessage(server: number, connection: bigint): [Buffer, boolean] | null;
+  /// Drops the staged inbound messages of a connection that has closed, so a
+  /// departed peer cannot leave a record at the head of the inbound ring and stall
+  /// every other connection behind it. Takes the index and generation from the
+  /// `connectionClose` event rather than a connection handle, because the handle
+  /// is already stale by the time the close is dispatched. Returns how many
+  /// messages were dropped.
+  purgeSocketMessage(server: number, index: number, generation: number): bigint;
   socketBufferedAmount(server: number, connection: bigint): number;
   /// Events the channel could not reserve or queue, including threadsafe
   /// function failures. The terminal reserve keeps close and shutdown events
@@ -73,4 +97,8 @@ export type VentiAddon = {
   /// Inbound messages the engine parsed and then had to discard because the
   /// Node main thread had not drained the inbound ring yet.
   serverDroppedMessages(server: number): bigint;
+  /// Staged payloads the engine refused after the pump had taken them off the
+  /// outbound ring. Non-zero means `pumpSocket` reported `ok` for bytes that never
+  /// reached a peer, so this is the honest measure of outbound loss.
+  serverUndeliveredMessages(server: number): bigint;
 };

@@ -16,6 +16,7 @@ export function target(): {
   const state: EmitterState<TestEventMap> = {
     listeners: createRegistry<TestEventMap>(),
     maxListeners: 10,
+    warned: new Set<string>(),
     target: undefined,
   };
   const emitter = createEmitter(state);

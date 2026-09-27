@@ -3,6 +3,7 @@ const uwz = @import("uWebZockets");
 const build_options = @import("build_options");
 const server_io = @import("engine/ffi/server_io.zig");
 const socket_io = @import("engine/ffi/socket_io.zig");
+const socket_inbound = @import("engine/ffi/socket_inbound.zig");
 const socket_pump = @import("engine/ffi/socket_pump.zig");
 
 comptime {
@@ -18,6 +19,9 @@ pub fn engine_version() []const u8 {
 pub fn http3_available() bool {
     return uwz.http3_available;
 }
+
+/// The capacities the addon was compiled with.
+pub const engine_limits = server_io.engine_limits;
 
 /// Validates an untrusted configuration, builds an engine server around a
 /// dispatch function, and returns a generation-checked server handle.
@@ -42,8 +46,12 @@ pub const resume_socket = socket_io.resume_socket;
 /// Hands one connection's staged payloads to the engine thread.
 pub const pump_socket = socket_pump.pump_socket;
 /// Takes the oldest parsed message for a connection as a JavaScript-owned buffer.
-pub const take_socket_message = socket_pump.take_socket_message;
+pub const take_socket_message = socket_inbound.take_socket_message;
+/// Drops the staged inbound messages of a connection that has closed.
+pub const purge_socket_message = socket_inbound.purge_socket_message;
 /// Bytes staged behind a connection handle and not yet drained.
 pub const socket_buffered_amount = socket_io.socket_buffered_amount;
-/// Inbound messages the inbound ring refused because JavaScript fell behind.
-pub const server_dropped_messages = socket_pump.server_dropped_messages;
+/// Inbound messages lost to a refused stage, a pause, or a closed connection.
+pub const server_dropped_messages = socket_inbound.server_dropped_messages;
+/// Staged payloads the engine refused after the pump had taken them off the ring.
+pub const server_undelivered_messages = socket_pump.server_undelivered_messages;

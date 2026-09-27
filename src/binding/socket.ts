@@ -6,6 +6,8 @@ import { assertConnectionHandle } from "./handle";
 import { loadAddon } from "./load";
 import { assertServerHandle, type ServerHandle } from "./server";
 
+export { purgeSocketMessage, takeSocketMessage } from "./inbound";
+
 const MAX_UINT16 = 65_535;
 
 const ENGINE_STATUS_BY_NATIVE: Readonly<Record<NativeSocketStatus, EngineStatus>> = {
@@ -110,24 +112,6 @@ export function pumpSocket(server: ServerHandle, connection: ConnectionHandle): 
   assertConnectionHandle(connection);
   const addon = loadAddon();
   return statusFromOrdinal(callNative(() => addon.pumpSocket(server, connection)));
-}
-
-/// One parsed inbound message, copied into a Node-owned buffer.
-///
-/// The engine reuses its own message buffer for the next frame and frees the
-/// ring slot here, so the returned buffer is the only copy and is safe to retain
-/// past the handler. Null means nothing is staged, which happens when a wakeup
-/// was coalesced or the event channel dropped its notification.
-export function takeSocketMessage(
-  server: ServerHandle,
-  connection: ConnectionHandle,
-): { readonly bytes: Buffer; readonly isBinary: boolean } | null {
-  assertServerHandle(server);
-  assertConnectionHandle(connection);
-  const addon = loadAddon();
-  const taken = callNative(() => addon.takeSocketMessage(server, connection));
-  if (taken === null) return null;
-  return { bytes: taken[0], isBinary: taken[1] };
 }
 
 /// Bytes staged for the connection and not yet drained. A stale handle reads

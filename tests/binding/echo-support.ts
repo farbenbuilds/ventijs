@@ -1,7 +1,12 @@
 import type { ConnectionHandle } from "../../src/binding/handle";
 import { packConnectionHandle } from "../../src/binding/handle";
 import type { EngineEvent } from "../../src/binding/native";
-import { pumpSocket, sendSocket, takeSocketMessage } from "../../src/binding/socket";
+import {
+  pumpSocket,
+  purgeSocketMessage,
+  sendSocket,
+  takeSocketMessage,
+} from "../../src/binding/socket";
 import { closeServer, createServer, finalizeServer, listenServer } from "../../src/binding/server";
 import type { ServerHandle } from "../../src/binding/server";
 
@@ -81,6 +86,15 @@ export async function startEcho(): Promise<EchoServer> {
         return;
       case "connectionMessage":
         echo(handle, opened.value, received);
+        return;
+      case "connectionClose":
+        // The inbound ring is one ordered FIFO shared by every connection, and a
+        // consumer may only skip a head it does not own. A connection that closes
+        // with messages still staged therefore leaves records nothing can ever
+        // match, and the stranded head stalls every other connection on the
+        // server. Purging on the close event is what keeps one departed peer from
+        // taking the rest of the server down with it.
+        purgeSocketMessage(handle, event.index, event.generation);
         return;
       default:
         return;

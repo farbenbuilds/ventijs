@@ -1,4 +1,4 @@
-import { createRegistry, dispatch, subscribe } from "../../src/compat/events/registry";
+import { createRegistry, dispatchWith, subscribe } from "../../src/compat/events/registry";
 import { normalizeServerOptions } from "../../src/compat/options/server";
 import type { EventMap, EventName, Handler, Listener, Registry } from "../../src/types/events";
 import type { ServerEventMap, ServerState } from "../../src/types/server";
@@ -82,6 +82,7 @@ export const socketState: SocketState = {
   transport: null,
   listeners: createRegistry<SocketEventMap>(),
   maxListeners: 10,
+  warned: new Set<string>(),
   target: undefined,
 };
 
@@ -100,6 +101,7 @@ export const serverState: ServerState = {
   removeListeners: null,
   listeners: createRegistry<ServerEventMap>(),
   maxListeners: 10,
+  warned: new Set<string>(),
   target: undefined,
 };
 
@@ -118,9 +120,9 @@ export function registerMessage(
 }
 
 export function announceClose(socket: SocketState): number {
-  return dispatch(socket.listeners, "close", 1000, Buffer.from("done"));
+  return dispatchWith(socket.listeners, socket, "close", 1000, Buffer.from("done"));
 }
 
 export function announceOpen(): number {
-  return dispatch(createRegistry<SocketEventMap>(), "open");
+  return dispatchWith(createRegistry<SocketEventMap>(), undefined, "open");
 }

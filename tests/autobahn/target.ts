@@ -1,7 +1,7 @@
 import { loadVentijsAddon } from "./addon.ts";
 import type { EngineEvent } from "./addon.ts";
 import { DEFAULT_TARGET_HOST, DEFAULT_TARGET_PORT } from "./paths.ts";
-import { echoState, pack, reply, type EchoState } from "./target-echo.ts";
+import { echoState, pack, purge, reply, type EchoState } from "./target-echo.ts";
 import { encodeTargetReady } from "./target-record.ts";
 
 /// `message_capacity` and `frame_capacity` from `src/engine/server/capacities.zig`.
@@ -104,6 +104,7 @@ function onEvent(state: TargetState, event: EngineEvent): void {
       reply(loadVentijsAddon(), state);
       return;
     case "connectionClose":
+      purge(loadVentijsAddon(), state, event.index, event.generation);
       return;
     case "engineError":
       onEngineError(state);

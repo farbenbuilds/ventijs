@@ -49,6 +49,7 @@ export function createSocketState(): SocketState {
     transport: null,
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,
+    warned: new Set<string>(),
     target: undefined,
   };
 }

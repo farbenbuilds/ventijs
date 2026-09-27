@@ -68,7 +68,12 @@ pub fn connection_slab(comptime capacity: u32) type {
         const Self = @This();
 
         slots: [capacity]Slot = [_]Slot{.{}} ** capacity,
-        active: u32 = 0,
+        /// Live connections. Atomic because it is the only count in the slab that
+        /// is not read out of a slot word, and `connections.on_open` uses it as
+        /// the `max_connections` admission gate: a torn or reordered count there
+        /// is an admission bug rather than a crash, which is exactly the kind of
+        /// defect that is invisible until a server is under load.
+        active: std.atomic.Value(u32) = .init(0),
 
         /// Marks a pool slot active and returns a fresh handle for it.
         ///
@@ -84,7 +89,7 @@ pub fn connection_slab(comptime capacity: u32) type {
                 if (Slot.state_of(word) != .free) return error.SlotBusy;
                 const generation = Slot.generation_of(word) +% 1;
                 if (slot.word.cmpxchgWeak(word, Slot.pack(.active, generation), .acq_rel, .acquire) == null) {
-                    slab.active += 1;
+                    _ = slab.active.fetchAdd(1, .acq_rel);
                     return .{ .index = index, .generation = generation };
                 }
             }
@@ -99,7 +104,7 @@ pub fn connection_slab(comptime capacity: u32) type {
                 const generation = Slot.generation_of(word);
                 if (Slot.state_of(word) != .active) return null;
                 if (slot.word.cmpxchgWeak(word, Slot.pack(.free, generation), .acq_rel, .acquire) == null) {
-                    slab.active -= 1;
+                    _ = slab.active.fetchSub(1, .acq_rel);
                     return .{ .index = index, .generation = generation };
                 }
             }
@@ -130,7 +135,7 @@ pub fn connection_slab(comptime capacity: u32) type {
         }
 
         pub fn count_active(slab: *const Self) u32 {
-            return slab.active;
+            return slab.active.load(.acquire);
         }
     };
 }

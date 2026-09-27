@@ -1,11 +1,6 @@
 import { expect, test } from "vitest";
-import {
-  createRegistry,
-  dispatch,
-  listenerCount,
-  subscribe,
-  unsubscribe,
-} from "../../../src/compat/events/registry";
+import { dispatch, unsubscribe } from "./registry-support";
+import { createRegistry, listenerCount, subscribe } from "../../../src/compat/events/registry";
 
 type TestEventMap = {
   open: [];

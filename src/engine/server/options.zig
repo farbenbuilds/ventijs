@@ -43,6 +43,7 @@ pub const RawConfig = struct {
     max_connections: JsInt = connection_capacity,
     max_message_bytes: JsInt = message_capacity,
     max_frame_bytes: JsInt = frame_capacity,
+    permessage_deflate: bool = false,
 };
 
 /// Per-route limits handed to the engine WebSocket behavior.
@@ -50,6 +51,16 @@ pub const Limits = struct {
     max_connections: u32,
     max_message_bytes: u32,
     max_frame_bytes: u32,
+    /// Whether the route negotiates RFC 7692 `permessage-deflate`.
+    ///
+    /// The choice is per route rather than a build option because `ws` makes it a
+    /// per-`WebSocketServer` boolean. It needs no startup-slab reservation: the
+    /// engine carves the paired deflate scratch inside the slab unconditionally
+    /// (`ServerConfig.compression_stride` is called from `layout_offsets` for
+    /// every configuration), so the memory was already being reserved and
+    /// untouched. Enabling this turns dead slab into function at zero additional
+    /// cost, which is why it and the message cap are the same piece of work.
+    permessage_deflate: bool,
 };
 
 /// Immutable listen address copied out of the JavaScript argument.
@@ -120,6 +131,7 @@ fn trust_limits(raw: RawConfig) Error!Limits {
         .max_connections = @intCast(raw.max_connections),
         .max_message_bytes = @intCast(raw.max_message_bytes),
         .max_frame_bytes = @intCast(raw.max_frame_bytes),
+        .permessage_deflate = raw.permessage_deflate,
     };
 }
 

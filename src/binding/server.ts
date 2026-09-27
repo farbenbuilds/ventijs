@@ -1,4 +1,4 @@
-import type { EngineDispatch, NativeServerConfig } from "./native";
+import type { EngineDispatch, NativeEngineLimits, NativeServerConfig } from "./native";
 import { callNative, guardError } from "./errors";
 import { loadAddon } from "./load";
 
@@ -104,4 +104,31 @@ export function serverDroppedMessages(handle: ServerHandle): bigint {
   assertServerHandle(handle);
   const addon = loadAddon();
   return callNative(() => addon.serverDroppedMessages(handle));
+}
+
+/// Staged payloads the engine refused after the pump had taken them off the
+/// outbound ring.
+///
+/// This is the outbound counterpart of `serverDroppedMessages`, and it exists
+/// because the outbound path had no honest answer. `pumpSocket` returns `ok` once
+/// the engine's inbox has accepted a payload, and the engine then discards it if
+/// the connection's write queue is full, so a caller that watched only the status
+/// saw success for bytes that were never sent. A non-zero count means exactly
+/// that, and the app should be told rather than left to assume every frame
+/// arrived.
+export function serverUndeliveredMessages(handle: ServerHandle): bigint {
+  assertServerHandle(handle);
+  const addon = loadAddon();
+  return callNative(() => addon.serverUndeliveredMessages(handle));
+}
+
+/// The capacities the linked addon was compiled with.
+///
+/// Read from the addon rather than restated in TypeScript, because every one of
+/// them is a promise the compatibility layer has to keep and a restated copy is
+/// how the promise and the build drift apart. Nothing here is configurable at
+/// runtime: the engine bakes these into its application type and refuses a
+/// configuration that disagrees.
+export function engineLimits(): NativeEngineLimits {
+  return loadAddon().engineLimits();
 }

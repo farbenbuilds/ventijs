@@ -19,6 +19,10 @@ export type Registry<E extends EventMap> = {
 export type EmitterState<E extends EventMap> = {
   listeners: Registry<E>;
   maxListeners: number;
+  /// Events already reported past `maxListeners`. Node raises the leak warning
+  /// once per event rather than once per registration, and a repeated warning
+  /// for a single leak is noise that trains callers to ignore it.
+  warned: Set<string>;
   target: unknown;
 };
 

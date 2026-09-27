@@ -10,12 +10,13 @@ devDependencies, so the conformance suite can run the two implementations side
 by side. The public type surface is the vendored declaration file
 `src/types/ws.d.ts`.
 
-| Document                                                    | Question it answers                                         |
-| ----------------------------------------------------------- | ----------------------------------------------------------- |
-| [COMPATIBILITY.md](../COMPATIBILITY.md)                     | Which behaviour is verified, and by which test?             |
-| [docs/compliance-api.md](compliance-api.md)                 | Which module implements each `ws` API item?                 |
-| [docs/compliance-error-codes.md](compliance-error-codes.md) | Which `WS_ERR_*` codes and environment variables can occur? |
-| [docs/ventijs.md](ventijs.md)                               | What does `ws` do? The contract, not a feature list.        |
+| Document                                                                                   | Question it answers                                                          |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| [COMPATIBILITY.md](../COMPATIBILITY.md)                                                    | Which behaviour is verified, and by which test?                              |
+| [adr/0001-transport-and-framing-ownership.md](adr/0001-transport-and-framing-ownership.md) | Why Node owns the socket and Zig owns the frame codec, and what was rejected |
+| [docs/compliance-api.md](compliance-api.md)                                                | Which module implements each `ws` API item?                                  |
+| [docs/compliance-error-codes.md](compliance-error-codes.md)                                | Which `WS_ERR_*` codes and environment variables can occur?                  |
+| [docs/ventijs.md](ventijs.md)                                                              | What does `ws` do? The contract, not a feature list.                         |
 
 ## Status vocabulary
 
@@ -63,8 +64,28 @@ describes the facade, so a route the facade cannot reach is a `todo`, and a row
 whose note mentions the engine route is a row whose real gap is that no public
 socket is ever attached to one.
 
-`COMPATIBILITY.md` names the two architectures that would change that, and neither
-is a patch: a TypeScript receiver over the adopted `Duplex`, which duplicates
-framing the architecture document says Zig will own, or reducing `WebSocketServer`
-to a `noServer`-shaped shim over the binding, which changes the transport model of
-every public server surface.
+Both of the architectures `COMPATIBILITY.md` used to name here are now settled,
+and the decision is recorded as
+[ADR 0001](adr/0001-transport-and-framing-ownership.md). A TypeScript receiver
+over the adopted `Duplex` was rejected because it duplicates framing the
+architecture says Zig will own and hands UTF-8 validation, masking, and length
+checks to the runtime. Reducing `WebSocketServer` to a `noServer`-shaped shim was
+rejected because it changes the transport model of every public server surface and
+drops the client. What replaces both is a third shape: Node keeps the transport,
+which is what the drop-in contract requires anyway, and a pure Zig frame codec
+behind a Node-API handle takes over parsing, masking, UTF-8, fragmentation,
+control frames, and backpressure.
+
+The upgrade route is not left broken while that lands. `close()` now reaches
+`CLOSED` rather than stranding the socket at `CLOSING`, a transport failure
+reaches the socket as `error` rather than a silent `close(1006)`, a multi-byte
+typed array puts every byte it holds on the wire, and `close(code, reason)`
+measures the argument before dispatching on its type, which is the order `ws`
+uses and which decides the error class a caller sees.
+`tests/compat/socket/upgrade-route.test.ts` is the suite for that route.
+
+The inbound ring's starvation defect turned out to be visible in the conformance
+report as well. `5.19`, `5.20`, and `7.1.1` were recorded as three separate
+failures with three different explanations; the run after the purge passes all
+three, which is the evidence that they shared one cause, on the shared inbound
+ring, and that the previous three explanations were all symptoms of it.

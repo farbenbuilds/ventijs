@@ -6,6 +6,7 @@ import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, OPEN } from "../ready-state";
 import { finishConnection } from "./lifecycle";
+import { failTransport } from "./transport";
 import { socketStateOf } from "./state";
 
 /// Adopts a generation-checked native connection. Socket operations then
@@ -44,15 +45,29 @@ export function attachSocket(socket: WebSocket, transport: Duplex): void {
     if (state.readyState !== CLOSED) state.readyState = CLOSING;
     transport.end();
   });
-  transport.on("error", () => {
+  transport.on("error", (error: Error) => {
     // Latch before destroying, matching `ws`'s socket error path: the terminal
-    // state is `CLOSING` from here, not `OPEN` on a dead transport.
-    if (state.readyState !== CLOSED) state.readyState = CLOSING;
-    transport.destroy();
+    // state is `CLOSING` from here, not `OPEN` on a dead transport. The destroy
+    // runs in `finally` so an unhandled `error` listener, which `emitEvent`
+    // throws on, cannot leave the transport open.
+    try {
+      failTransport(state, asCodedError(error));
+    } finally {
+      transport.destroy();
+    }
   });
   transport.on("close", () => {
     finishConnection(state, state.closeCode, state.closeReason);
   });
   state.readyState = OPEN;
   emitEvent(state, "open");
+}
+
+/// Node hands a stream `error` an `Error`, and a `net.Socket` error already
+/// carries the syscall code that makes it diagnosable. The guard exists so a
+/// non-`Error` thrown by a custom stream cannot reach `emitEvent` as a value
+/// the facade has no policy for.
+function asCodedError(error: Error): Error {
+  if (error instanceof Error) return error;
+  return createError("ERR_PROTOCOL", `ventijs: the transport failed: ${String(error)}`);
 }

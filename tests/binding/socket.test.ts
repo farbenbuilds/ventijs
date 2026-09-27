@@ -6,10 +6,15 @@ import {
   sendSocket,
   socketBufferedAmount,
 } from "../../src/binding/socket";
+import { engineLimits } from "../../src/binding/server";
 import { connectedSocket } from "./socket-support";
 import { TEST_TIMEOUT_MS } from "./support";
 
-const MAX_MESSAGE_BYTES = 32 * 1024;
+/// Read from the addon rather than restated. The cap is a Zig comptime constant
+/// and a TypeScript copy of it is a second source of truth: the cap was raised
+/// from 32 KiB to 64 KiB while this file still asserted 32 KiB, so the boundary
+/// test passed by asserting a limit the engine no longer enforced.
+const MESSAGE_BYTES = engineLimits().messageBytes;
 
 test(
   "stages outbound payloads and reports the buffered amount",
@@ -34,9 +39,9 @@ test(
   async () => {
     const { server, connection, socket } = await connectedSocket();
     try {
-      const exact = new Uint8Array(MAX_MESSAGE_BYTES);
+      const exact = new Uint8Array(MESSAGE_BYTES);
       expect(sendSocket(server.handle, connection, exact, true)).toBe("ok");
-      expect(sendSocket(server.handle, connection, new Uint8Array(MAX_MESSAGE_BYTES + 1))).toBe(
+      expect(sendSocket(server.handle, connection, new Uint8Array(MESSAGE_BYTES + 1))).toBe(
         "payload-too-large",
       );
 
@@ -44,7 +49,7 @@ test(
         expect(sendSocket(server.handle, connection, new Uint8Array([staged]))).toBe("ok");
       }
       expect(sendSocket(server.handle, connection, new Uint8Array([0xff]))).toBe("backpressure");
-      expect(socketBufferedAmount(server.handle, connection)).toBe(MAX_MESSAGE_BYTES + 7);
+      expect(socketBufferedAmount(server.handle, connection)).toBe(MESSAGE_BYTES + 7);
     } finally {
       socket.close();
       await server.dispose();
