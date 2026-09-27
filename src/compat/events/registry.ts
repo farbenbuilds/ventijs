@@ -29,14 +29,6 @@ export function prepend<E extends EventMap, K extends EventName<E>>(
   return { ...registry, [event]: [handler, ...bucket] };
 }
 
-export function unsubscribe<E extends EventMap, K extends EventName<E>>(
-  registry: Registry<E>,
-  event: K,
-  handler: Listener<E, K>,
-): Registry<E> {
-  return unsubscribeMatching(registry, event, (entry) => entry === handler);
-}
-
 /// Removes the most recent entry a predicate accepts, matching
 /// `EventEmitter.removeListener`, which scans from the end. Once wrappers and
 /// DOM listeners are matched through their tags by the caller.
@@ -71,19 +63,6 @@ export function eventNames<E extends EventMap>(registry: Registry<E>): EventName
     if ((registry[key]?.length ?? 0) > 0) names.push(key);
   }
   return names;
-}
-
-export function dispatch<E extends EventMap, K extends EventName<E>>(
-  registry: Registry<E>,
-  event: K,
-  ...args: E[K]
-): number {
-  const bucket = registry[event];
-  if (bucket === undefined) return 0;
-  for (let index = 0; index < bucket.length; index += 1) {
-    bucket[index](...args);
-  }
-  return bucket.length;
 }
 
 /// Dispatches with the emitter as `this`, which is the contract the vendored

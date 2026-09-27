@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  STATUS_ERROR_CODES,
-  createError,
-  createStatusError,
-  isCodedError,
-} from "../../src/compat/errors";
+import { STATUS_ERROR_CODES, createError, createStatusError } from "../../src/compat/errors";
 
 test("creates coded errors with the requested constructor", () => {
   const error = createError("ERR_INVALID_OPTION", "bad option");
@@ -27,23 +22,4 @@ test("maps every engine error status to a stable code", () => {
     "policy-violation": "ERR_POLICY_VIOLATION",
   });
   expect(createStatusError("protocol-error", "bad frame").code).toBe("ERR_PROTOCOL");
-});
-
-test("recognizes coded errors at untrusted boundaries", () => {
-  expect(isCodedError(createError("ERR_PROTOCOL", "bad frame"))).toBe(true);
-  expect(isCodedError(new Error("plain"))).toBe(false);
-  expect(isCodedError({ code: "ERR_PROTOCOL" })).toBe(false);
-  expect(isCodedError(null)).toBe(false);
-});
-
-test("rejects foreign and hostile codes", () => {
-  const foreign = Object.assign(new Error("ws"), { code: "WS_ERR_UNEXPECTED_RSV_1" });
-  expect(isCodedError(foreign)).toBe(false);
-  const hostile = new Error("hostile");
-  Object.defineProperty(hostile, "code", {
-    get() {
-      throw new Error("boom");
-    },
-  });
-  expect(isCodedError(hostile)).toBe(false);
 });

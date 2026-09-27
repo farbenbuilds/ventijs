@@ -41,22 +41,23 @@ of ventijs.
 | Exception propagation              | A throwing handler propagates and skips the remaining handlers                                                                 | `src/compat/events/registry.ts`                              | done   | `tests/compat/events/registry.test.ts` |
 | Listener counts and empty dispatch | `listenerCount` and `dispatch` return counts, zero included                                                                    | `src/compat/events/registry.ts`                              | done   | `tests/compat/events/registry.test.ts` |
 | `this` binding                     | Listeners are invoked with the emitter as `this`                                                                               | `src/compat/{events/emitter,socket/socket,server/server}.ts` | done   | `tests/compat/events/emitter.test.ts`  |
+| Listener leak warning              | `MaxListenersExceededWarning` once per event past the limit; `setMaxListeners(0)` is unlimited                                 | `src/compat/events/limits.ts`                                | done   | `tests/compat/events/limits.test.ts`   |
 | `error` with no listeners          | `emit("error")` throws the error; policy lives with the factories                                                              | `src/compat/{events/emitter,socket/socket,server/server}.ts` | done   | `tests/compat/events/emitter.test.ts`  |
 | `once` and prepend variants        | `once`, `prependListener`, `prependOnceListener`                                                                               | `src/compat/events/emitter.ts`                               | done   | `tests/compat/events/emitter.test.ts`  |
 | Emitter introspection and teardown | `emit`, `removeAllListeners`, `listeners`, `rawListeners`, `eventNames`, `listenerCount`, `getMaxListeners`, `setMaxListeners` | `src/compat/{events/emitter,events/registry}.ts`             | done   | `tests/compat/events/emitter.test.ts`  |
 
 ## Socket API (server-side connection)
 
-| Surface                   | Contract                                                                                  | Owner                                                                                   | Status   | Evidence                                                                  |
-| ------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
-| Observable properties     | `binaryType`, `bufferedAmount`, `extensions`, `isPaused`, `protocol`, `readyState`, `url` | `src/compat/socket/socket.ts`, `src/binding/socket.ts`, `src/engine/socket/socket.zig`  | partial  | `tests/compat/socket/socket.test.ts`                                      |
-| Ready-state constants     | `CONNECTING`/`OPEN`/`CLOSING`/`CLOSED` on the constructor and the instance                | `src/compat/{constructors,ready-state}.ts`                                              | done     | `tests/compat/socket/socket.test.ts`                                      |
-| Send and frame methods    | `send(data, options?, cb?)`, `ping`, `pong`, `close`, `terminate`, `pause`, `resume`      | `src/compat/socket/{send,lifecycle}.ts`, `src/binding/socket.ts`                        | partial  | `tests/compat/socket/socket.test.ts`, `tests/binding/socket-echo.test.ts` |
-| Node events               | `open`, `message`, `close`, `error`, `ping`, `pong`                                       | `src/compat/socket/socket.ts`, `src/compat/events/dom-events.ts`, `src/types/socket.ts` | partial  | `tests/compat/socket/socket.test.ts`, `tests/binding/socket-echo.test.ts` |
-| Client-only socket events | `upgrade`, `redirect`, `unexpected-response`                                              | deferred (client scope, ADR)                                                            | deferred | -                                                                         |
-| DOM handlers              | `onopen`/`onerror`/`onclose`/`onmessage`, `addEventListener`, `removeEventListener`       | `src/compat/events/{dom-listeners,dom-events}.ts`                                       | done     | `tests/compat/events/dom-listeners.test.ts`                               |
-| Close reason handling     | `close(code, reason)` mirrors `ws`: string, `Uint8Array`, or absent reason                | `src/compat/socket/close-reason.ts`                                                     | partial  | `tests/conformance/close.conformance.test.ts`                             |
-| Pause gating              | `pause()` stops event emission until `resume()`                                           | `src/compat/socket/lifecycle.ts`, `src/engine/socket/socket.zig`                        | partial  | `tests/compat/socket/socket.test.ts`                                      |
+| Surface                   | Contract                                                                                                           | Owner                                                                                   | Status   | Evidence                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
+| Observable properties     | `binaryType`, `bufferedAmount`, `extensions`, `isPaused`, `protocol`, `readyState`, `url`                          | `src/compat/socket/socket.ts`, `src/binding/socket.ts`, `src/engine/socket/socket.zig`  | partial  | `tests/compat/socket/socket.test.ts`                                      |
+| Ready-state constants     | `CONNECTING`/`OPEN`/`CLOSING`/`CLOSED` on the constructor and the instance                                         | `src/compat/{constructors,ready-state}.ts`                                              | done     | `tests/compat/socket/socket.test.ts`                                      |
+| Send and frame methods    | `send(data, options?, cb?)`, `ping`, `pong`, `close`, `terminate`, `pause`, `resume`                               | `src/compat/socket/{send,lifecycle}.ts`, `src/binding/socket.ts`                        | partial  | `tests/compat/socket/socket.test.ts`, `tests/binding/socket-echo.test.ts` |
+| Node events               | `open`, `message`, `close`, `error`, `ping`, `pong`                                                                | `src/compat/socket/socket.ts`, `src/compat/events/dom-events.ts`, `src/types/socket.ts` | partial  | `tests/compat/socket/socket.test.ts`, `tests/binding/socket-echo.test.ts` |
+| Client-only socket events | `upgrade`, `redirect`, `unexpected-response`                                                                       | deferred (client scope, ADR)                                                            | deferred | -                                                                         |
+| DOM handlers              | `onopen`/`onerror`/`onclose`/`onmessage`, `addEventListener`, `removeEventListener`                                | `src/compat/events/{dom-listeners,dom-events}.ts`                                       | done     | `tests/compat/events/dom-listeners.test.ts`                               |
+| Close reason handling     | `close(code, reason)` mirrors `ws`: string, `Uint8Array`, or absent reason, measured before the type is dispatched | `src/compat/socket/close-reason.ts`                                                     | done     | `tests/conformance/close.conformance.test.ts`                             |
+| Pause gating              | `pause()` stops event emission until `resume()`                                                                    | `src/compat/socket/lifecycle.ts`, `src/engine/socket/socket.zig`                        | partial  | `tests/compat/socket/socket.test.ts`                                      |
 
 ### Where messages flow today
 
@@ -69,48 +70,35 @@ inside the inbound budget, and the drop accounting beyond it.
 `tests/autobahn/target.ts` is a reference echo over the same path, and
 `pnpm bench` measures it against `ws`.
 
-**That route is not reachable from the public surface, and the rows that say
-"engine route" mean the test harness, not the product.** No file under
-`src/compat/` calls `createServer`, `listenServer`, `pumpSocket`, or
-`takeSocketMessage`; the complete set of `src/binding/**` imports in the facade is
-five lines, all socket operations. `src/compat/server/server.ts` is a Node
-`http.Server` throughout. The only callers of `pumpSocket` are
-`tests/binding/echo-support.ts`, `tests/autobahn/target-echo.ts`, and
-`bench/echo/native-state.ts`, and the only producers of a `ConnectionHandle` are
-two test files. So `send` on a `WebSocketServer`-produced socket stages nothing and
-emits `ERR_INVALID_STATE`, and `message` never fires there.
+**That route is not reachable from the public surface, and this is architecture
+rather than effort.** No file under `src/compat/` calls `createServer`,
+`listenServer`, `pumpSocket`, or `takeSocketMessage`; the complete set of
+`src/binding/**` value imports in the facade is three lines, all socket
+operations. `src/compat/server/server.ts` is a Node `http.Server` throughout. So
+`send` on a `WebSocketServer`-produced socket stages nothing and reports
+`ERR_INVALID_STATE`, and `message` never fires there.
 
-Two gaps follow, and they are architecture rather than effort:
+The reason is now settled and written down as
+[ADR 0001](docs/adr/0001-transport-and-framing-ownership.md). The pinned engine
+cannot adopt an already-accepted socket: its `WebSocket` holds a
+`*TcpConnection` whose buffers are carved from a startup slab the engine owns,
+`upgrade` is called from exactly one place in the whole tree, its own HTTP
+request dispatcher, and the C ABI exports nothing that takes a socket or a
+descriptor. A drop-in `ws` replacement has to keep Node's transport anyway,
+because `noServer`, `server`, `handleUpgrade`, `shouldHandle`, and the whole
+client half are Node's HTTP upgrade and `net`/`tls` surface. So the decision is
+to split transport from framing: Node owns the socket, and a pure Zig frame codec
+behind a Node-API handle owns parsing, masking, UTF-8, fragmentation, control
+frames, and backpressure, which is what `AGENTS.md` already says Zig owns.
 
-- The facade's HTTP upgrade path adopts a raw Node `Duplex` and does no framing.
-  The pinned engine cannot adopt an already-accepted socket: its `WebSocket`
-  requires a router `Request`/`Response` pair from its own listener. A working
-  route is therefore either a TypeScript receiver over the adopted `Duplex`, which
-  duplicates framing that `AGENTS.md` says Zig will own, or a reduction of
-  `WebSocketServer` to a `noServer`-shaped shim over `src/binding/server.ts`,
-  which changes the transport model of every public server surface. The first is
-  shippable and the second is not, and the choice contradicts the architecture
-  document either way, so it needs an ADR rather than a patch.
-- Client construction throws `ERR_INVALID_STATE`, so the whole documented client
-  half is unreachable. `normalizeClientOptions` has no caller in `src/`, and
-  `createSocket` discards both `protocols` and `options` outright. A client needs
-  a TCP or TLS socket and the same RFC 6455 codec; the engine exposes no client
-  entry point at all, so this is facade work or a new engine ABI.
-
-Because of that, the remaining `partial` rows split as follows. `send`, `pause`,
-and `resume` work on a natively attached socket and fire their callbacks when the
-payload is staged rather than when the engine has written it; `close` stages a
-close frame that cannot cross the engine's topic publisher, so a peer-initiated
-close works and an application-initiated one does not. `ping` and `pong` cannot
-cross that publisher either, because it maps a message onto a text or binary
-opcode and nothing else; their argument handling, including the RFC 6455 125-byte
-control-payload cap, is implemented and pinned against `ws`.
-`message` events fire on the engine path and not on the upgrade path.
-`terminate()` latches `CLOSING` before it destroys. `protocol` is now published
-before `open` fires, so it is observable from an `open` listener; `url` and
-`extensions` keep their defaults, and the server's `perMessageDeflate` option is
-normalized but never negotiated, so a client offering the extension still
-connects uncompressed.
+Until that codec lands, the upgrade route's defects are fixed rather than
+papered over. `close()` reaches `CLOSED` instead of stranding the socket at
+`CLOSING` (`closeUnattached` in `src/compat/socket/lifecycle.ts`), a transport
+failure reaches the socket as `error` rather than a silent `close(1006)`, a
+multi-byte typed array puts every byte it holds on the wire rather than one byte
+per element, `close(code, reason)` measures before it dispatches on the type so
+the error class matches `ws`, and `bufferedAmount` no longer grows without bound
+on a route with nothing to drain it.
 
 ## Engine capacity limits
 
@@ -119,20 +107,35 @@ JavaScript option can raise them. Each row names the constant that governs it.
 The constants live in `src/engine/server/capacities.zig` and are re-exported
 from `options.zig`, which owns their validation.
 
-| Limit                  | Value                                  | Governed by                                            | Observable as                                                                                                                                              |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inbound message size   | 32 KiB                                 | `message_capacity`, `src/engine/server/capacities.zig` | Engine closes with 1009 "Message too large"; `maxPayload` cannot lift it                                                                                   |
-| Outbound frame size    | 32 KiB                                 | `max_frame_bytes`, same                                | `send` reports `ERR_MAX_PAYLOAD`                                                                                                                           |
-| Inbound burst          | 64 messages before the consumer drains | `inbound_slots`, `src/engine/server/instance.zig`      | `serverDroppedMessages` counts the loss, and also counts a message discarded from a paused connection; `tests/binding/socket-echo.test.ts` pins both sides |
-| Connections per server | 128                                    | `connection_capacity`, same                            | A connection past the cap is terminated on open                                                                                                            |
+| Limit                  | Value                                  | Governed by                                            | Observable as                                                                                                                                                                            |
+| ---------------------- | -------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inbound message size   | 32 KiB                                 | `message_capacity`, `src/engine/server/capacities.zig` | Engine closes with 1009 "Message too large"; `maxPayload` cannot lift it                                                                                                                 |
+| Outbound frame size    | 32 KiB                                 | `max_frame_bytes`, same                                | `send` reports `ERR_MAX_PAYLOAD`                                                                                                                                                         |
+| Inbound burst          | 64 messages before the consumer drains | `inbound_slots`, `src/engine/server/instance.zig`      | `serverDroppedMessages` counts all three causes of inbound loss: a refused stage, a message from a paused connection, and a purge of a connection that closed with messages still staged |
+| Connections per server | 128                                    | `connection_capacity`, same                            | A connection past the cap is terminated on open                                                                                                                                          |
 
 `ws` defaults `maxPayload` to 100 MiB and vents 500 MiB frames in its own speed
 harness, so the message-size rows are a missing capability rather than a slower
-one. Raising `message_capacity` is a one-line change to a `comptime` constant in
-`src/engine/server/capacities.zig` and costs `message_capacity x connection_capacity`
-of slab per live server; it is not gated on anything except a Docker run, because
-it changes the case counts the harness asserts. `pnpm bench` refuses a payload above the ceiling instead of comparing
-absent against present, and `tests/autobahn/` reports the 128 blocked cases as
+one.
+
+The inbound `1009` is now known to be the cap rather than a misapplied check:
+the vendored `zslay` validator refuses `payload_len > max_frame_len`, the suite's
+largest group-1 payload is 64 KiB, and the cap is 32 KiB. Raising
+`message_capacity` to 64 KiB is a one-line change to a `comptime` constant and
+converts all six group-1 cases, at about 22 MB per live server, because the
+message slab, the write queue, the RFC 7692 scratch, the cluster inbox, and both
+staging rings all scale with it. It is deliberately not done yet: it moves 92
+recorded conformance cases and invalidates the harness's derived capacity model
+and shard weight table, and both are only re-derivable from a run against the
+digest-pinned fuzzing client.
+
+`engineLimits` reports the compiled capacities to JavaScript so the promise these
+rows make is checkable rather than restated. A hardcoded TypeScript copy is how
+the cap came to be 64 KiB in the engine while a test still asserted 32 KiB and
+passed.
+
+`pnpm bench` refuses a payload above the ceiling instead of comparing absent
+against present, and `tests/autobahn/` reports the 128 blocked cases as
 `skipped-capacity` rather than folding them into a pass or a failure.
 
 ## RFC 6455 conformance
@@ -147,12 +150,12 @@ selection produced 44 capacity-blocked cases and **248 of 257 evaluated cases
 passing, 9 failing.** For comparison the first run, on commit `47bfc68`, had 160
 of 389 passing and 229 failing.
 
-| Group  | Failing | What the report says                                                                                                                                                                                                                                      |
-| ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1      | 6       | `1.1.6`-`1.1.8` and `1.2.6`-`1.2.8` close with 1009 where the suite expects an echo. 1009 is the engine's own message cap, so the cap is either below these payloads or applied where the suite does not expect one. The rest of the group is conformant. |
-| 5      | 2       | `5.19` and `5.20` fail with a clean close and no remote close code: the frame is delivered and the connection is healthy, so this is about the reassembled message.                                                                                       |
-| 7      | 1       | `7.1.1` sends 1001 where the suite expects 1007. The close path maps an invalid close reason onto the normal-closure code. The most specific of the nine.                                                                                                 |
-| 12, 13 | 132     | Carried over. `permessage-deflate` is normalised and never negotiated, and a framing run does not select those groups.                                                                                                                                    |
+| Group  | Failing | What the report says                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1      | 6       | `1.1.6`-`1.1.8` and `1.2.6`-`1.2.8` close with 1009 where the suite expects an echo. 1009 is the engine's own message cap, so the cap is either below these payloads or applied where the suite does not expect one. The rest of the group is conformant.                                                                                                                                                                                         |
+| 5      | 2       | `5.19` and `5.20` fail with a clean close and no remote close code: the frame is delivered and the connection is healthy, so this is about the reassembled message.                                                                                                                                                                                                                                                                               |
+| 7      | 1       | `7.1.1` expects an echo and a normal close, and the fuzzing client ends the case with `killAfter(1)` rather than a close frame. An earlier version of this row claimed the close path maps an invalid close reason onto 1001; that case has no close reason in it, and the engine's 1007 mapping for invalid UTF-8 is present and correct. Observed alongside 5.19 and 5.20, which are also echo cases, so the outbound echo path is the suspect. |
+| 12, 13 | 132     | Carried over. `permessage-deflate` is normalised and never negotiated, and a framing run does not select those groups.                                                                                                                                                                                                                                                                                                                            |
 
 **Four of the five causes this table used to record do not survive a reading of
 the pinned engine, and the recorded run is what proved it.** The incremental UTF-8
@@ -184,11 +187,26 @@ _ = try app.ws(target.config.path_slice(), .{
 ```
 
 `WsBehavior.compression` defaults to `.disabled`, and `WebSocket.send` compresses
-once `permessage_deflate` is negotiated, so the outbound hop is not the obstacle
-either. Groups 12 and 13 are UNIMPLEMENTED for want of one struct field on that
-route registration, plus the option reaching Zig: `NativeServerConfig` in
-`src/binding/native.ts` and `RawConfig` in `src/engine/server/options.zig` have
-no compression field.
+once `permessage_deflate` is negotiated, so the outbound hop was never the
+obstacle either. Groups 12 and 13 were UNIMPLEMENTED for want of one struct field
+on that route registration, plus the option reaching Zig, and both now exist:
+`permessage_deflate` crosses `NativeServerConfig` in `src/binding/native.ts`,
+`RawConfig` and `Limits` in `src/engine/server/options.zig` carry it, and
+`attach_route` registers the compression. A `ws` client that offers the extension
+is answered with a negotiated `permessage-deflate` and a compressed message
+round-trips.
+
+The engine already reserved the paired deflate scratch for every configuration,
+because `ServerConfig.compression_stride` is called from `layout_offsets`
+unconditionally, so at 32 KiB the engine was holding 9.14 MiB per server in
+scratch it never touched. Enabling the extension turns that dead slab into
+function at no additional memory, which is why the extension and the message cap
+are the same piece of work rather than two.
+
+The 86 cases in groups 12 and 13 are still listed in `tests/autobahn/baseline.json`
+because the baseline can only be re-recorded by a run of the digest-pinned suite.
+The gate is written to fail on a listed case that now passes, so that run is what
+shortens the list.
 
 **None of that can land yet, and the reason is structural rather than a matter of
 effort.** The gate fails a run whose `baseline.json` lists a case that now passes,
@@ -203,12 +221,12 @@ fidelity would be lost.
 So the roadmap for these rows is written down and mechanical, and each needs one
 Docker-capable host and one recorded run:
 
-| Gap    | What is missing                                                                                                                     | Where                                                                   |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 1      | Whichever of the two the 1009 is: a `message_capacity` below these payloads, or the cap applied where the suite does not expect one | `src/engine/server/capacities.zig`, or the vendored `zslay` limit check |
-| 5      | Whatever the two fragment-boundary cases disagree about, once one case report says                                                  | `src/engine/server/connections.zig` on the engine route                 |
-| 7      | The close-reason mapping: 1007 instead of 1001                                                                                      | the pinned engine's `close_payload_status`                              |
-| 12, 13 | `.compression = .permessage_deflate` on the route, plus the option reaching Zig                                                     | `src/engine/server/connections.zig`                                     |
+| Gap    | What is missing                                                                                                                                                                                | Where                                   |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 1      | `message_capacity` is 32 KiB and the payloads are 64 KiB. Settled: it is the former, and the check is `zslay`'s own `max_frame_len`                                                            | `src/engine/server/capacities.zig`      |
+| 5      | Whatever the two fragment-boundary cases disagree about, once one case report says. Reassembly and interleaved control frames were traced and are correct, so the suspect is the outbound echo | one recorded per-case report settles it |
+| 7      | The same outbound echo path as group 5, reached through a different report code                                                                                                                | one recorded per-case report settles it |
+| 12, 13 | Implemented. The baseline still lists them because only a recorded run may shorten it                                                                                                          | `tests/autobahn/baseline.json`          |
 
 ### Why the suite used to take 35 minutes
 
@@ -244,15 +262,16 @@ step is now 14s. `CI_CD_PIPELINE.md` has the step timings and what the remaining
 
 ## Boundary and lifetime invariants
 
-| Invariant                  | Contract                                                                                            | Owner                                                                                                  | Status  | Evidence                                                                                                                 |
-| -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Retained inbound payloads  | Frames are copied into Node-owned buffers before handlers run                                       | `src/binding/socket.ts`, `src/engine/ffi/socket_pump.zig`                                              | done    | `tests/binding/socket-echo.test.ts`                                                                                      |
-| Borrowed outbound buffers  | Buffers live only for the native call, then land in the bounded queue                               | `src/binding/socket.ts`, `src/engine/socket/{payload,socket}.zig`                                      | done    | `tests/binding/socket.test.ts`                                                                                           |
-| Generation-checked handles | Stale handles produce typed errors, never crashes or use-after-free                                 | `src/binding/{handle,server,socket}.ts`, `src/engine/socket/handles.zig`                               | done    | `tests/binding/server-lifecycle.test.ts`, `tests/binding/socket-boundary.test.ts`                                        |
-| Exactly-once close         | Terminal state is latched before `close` dispatch                                                   | `src/compat/socket/lifecycle.ts`, `src/engine/socket/socket.zig`                                       | done    | `tests/binding/socket-boundary.test.ts`, `tests/compat/socket/socket.test.ts`, `src/engine-tests/socket/socket_test.zig` |
-| Backpressure               | `bufferedAmount` growth plus send callbacks, bounded queues; `send` returns no value, matching `ws` | `src/binding/socket.ts`, `src/engine/socket/payload.zig`                                               | partial | `tests/binding/socket.test.ts`, `tests/compat/socket/socket.test.ts`, `tests/compat/socket/send-reporting.test.ts`       |
-| Close code mapping         | `maxPayload` 1009, protocol errors 1002, policy rejections 1008                                     | `src/protocol/close-codes.ts` (outgoing validation), the pinned engine's `ws/socket.zig` (the mapping) | partial | `tests/protocol/close-codes.test.ts`                                                                                     |
-| Per-message deflate        | Option normalization in TS, codec in the engine                                                     | `src/compat/options/{shared,server,client}.ts`, `src/engine/socket/socket.zig`                         | partial | `tests/compat/options/normalization.test.ts`                                                                             |
+| Invariant                  | Contract                                                                                                                                          | Owner                                                                                                  | Status  | Evidence                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Retained inbound payloads  | Frames are copied into Node-owned buffers before handlers run                                                                                     | `src/binding/socket.ts`, `src/engine/ffi/socket_pump.zig`                                              | done    | `tests/binding/socket-echo.test.ts`                                                                                      |
+| Borrowed outbound buffers  | Buffers live only for the native call, then land in the bounded queue                                                                             | `src/binding/socket.ts`, `src/engine/socket/{payload,socket}.zig`                                      | done    | `tests/binding/socket.test.ts`                                                                                           |
+| Generation-checked handles | Stale handles produce typed errors, never crashes or use-after-free                                                                               | `src/binding/{handle,server,socket}.ts`, `src/engine/socket/handles.zig`                               | done    | `tests/binding/server-lifecycle.test.ts`, `tests/binding/socket-boundary.test.ts`                                        |
+| Exactly-once close         | Terminal state is latched before `close` dispatch                                                                                                 | `src/compat/socket/lifecycle.ts`, `src/engine/socket/socket.zig`                                       | done    | `tests/binding/socket-boundary.test.ts`, `tests/compat/socket/socket.test.ts`, `src/engine-tests/socket/socket_test.zig` |
+| Inbound ring reclamation   | A connection that closes with messages staged cannot strand the ring for every other connection                                                   | `src/engine/socket/queues.zig`, `src/engine/ffi/socket_inbound.zig`                                    | done    | `src/engine-tests/socket/inbound_purge_test.zig`                                                                         |
+| Backpressure               | `bufferedAmount` growth plus send callbacks, bounded queues; `send` returns no value, matching `ws`; inbound and outbound loss counted separately | `src/binding/{socket,inbound,server}.ts`, `src/engine/socket/payload.zig`                              | partial | `tests/binding/socket.test.ts`, `tests/compat/socket/socket.test.ts`, `tests/compat/socket/send-reporting.test.ts`       |
+| Close code mapping         | `maxPayload` 1009, protocol errors 1002, policy rejections 1008                                                                                   | `src/protocol/close-codes.ts` (outgoing validation), the pinned engine's `ws/socket.zig` (the mapping) | partial | `tests/protocol/close-codes.test.ts`                                                                                     |
+| Per-message deflate        | Option normalization in TS, negotiation and codec in the engine                                                                                   | `src/compat/options/{shared,server,client}.ts`, `src/engine/server/{options,connections}.zig`          | partial | `tests/compat/options/normalization.test.ts`                                                                             |
 
 ## Error shape policy
 
