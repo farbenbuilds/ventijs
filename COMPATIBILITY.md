@@ -145,10 +145,10 @@ records the cases the engine is known to fail; anything failing outside that lis
 fails the run, and a listed case that starts passing is reported and fails the run
 until the list is shortened, so the list can only shrink.
 
-**Current state, from `autobahn.yml` run 36287763043:** the 301-case framing
-selection produced 44 capacity-blocked cases and **248 of 257 evaluated cases
-passing, 9 failing.** For comparison the first run, on commit `47bfc68`, had 160
-of 389 passing and 229 failing.
+**Current state, from `autobahn.yml` run 36297620675:** the 301-case framing
+selection produced 44 capacity-blocked cases and **251 of 257 evaluated cases
+passing, 6 failing.** The previous recording had 248 of 257 passing and 9 failing;
+the first run, on commit `47bfc68`, had 160 of 389 passing and 229 failing.
 
 | Group  | Failing | What the report says                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -83,3 +83,9 @@ typed array puts every byte it holds on the wire, and `close(code, reason)`
 measures the argument before dispatching on its type, which is the order `ws`
 uses and which decides the error class a caller sees.
 `tests/compat/socket/upgrade-route.test.ts` is the suite for that route.
+
+The inbound ring's starvation defect turned out to be visible in the conformance
+report as well. `5.19`, `5.20`, and `7.1.1` were recorded as three separate
+failures with three different explanations; the run after the purge passes all
+three, which is the evidence that they shared one cause, on the shared inbound
+ring, and that the previous three explanations were all symptoms of it.
