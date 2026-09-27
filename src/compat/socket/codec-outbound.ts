@@ -1,9 +1,5 @@
-import {
-  CODEC_KINDS,
-  codecOutbound,
-  encodeCodecFrame,
-  type CodecKindName,
-} from "../../binding/codec";
+import { CODEC_KINDS, type CodecKindName } from "../../binding/codec";
+import { codecOutbound, encodeCodecFrame } from "../../binding/codec-encode";
 import type { SocketState } from "../../types/socket";
 import { createError } from "../errors";
 import { isWritable, noTransportError } from "./codec-handle";

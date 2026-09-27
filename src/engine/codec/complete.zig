@@ -39,6 +39,12 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
     // continue.
     if (opcode != .continuation) peer.message_opcode = opcode;
     if (!decoded.header.fin) {
+        // A boundary before the accumulator is released, so a caller that asked for
+        // the fragments rather than the message can slice what was already copied.
+        // Past the bound this is a policy failure and not a protocol error: the frames
+        // were well formed, the peer simply split one message into more pieces than
+        // the option allows, which RFC 6455 does not forbid.
+        peer.note_fragment() catch return error.TooManyFragments;
         peer.conn.complete_frame();
         return .fragment;
     }
@@ -46,8 +52,9 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
     const message_opcode = peer.message_opcode orelse return error.ProtocolError;
     // A message that ends mid-sequence is invalid even though every byte it did
     // contain was in range, which is the case a validator that only ever checks
-    // incoming bytes cannot see.
-    if (message_opcode == .text and !utf8.complete(peer.utf8_state)) {
+    // incoming bytes cannot see. Skipped when the caller asked for it to be: the
+    // check is what `skipUTF8Validation` turns off.
+    if (message_opcode == .text and peer.validate_utf8 and !utf8.complete(peer.utf8_state)) {
         return error.InvalidUtf8;
     }
     const kind: Kind = if (message_opcode == .text) .text else .binary;

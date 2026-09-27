@@ -72,6 +72,13 @@ export function completeUpgrade(
     // overwrote it, so a caller who said "I will answer pings myself" got a pong from
     // the library anyway and its own answer was a second one.
     acceptedState.autoPong = state.normalizedOptions.autoPong;
+    // Both are per-socket decisions the server already made, and neither reached the
+    // socket: `allowSynchronousEvents` was normalized and never read, so a caller who
+    // set `false` saw every event on the read that produced it; `skipUTF8Validation`
+    // was normalized and never read, so a caller who trusts their own server got a
+    // hard 1007 on a payload `ws` would have delivered.
+    acceptedState.allowSynchronousEvents = state.normalizedOptions.allowSynchronousEvents;
+    acceptedState.validateUtf8 = !state.normalizedOptions.skipUTF8Validation;
   }
   attachSocket(accepted, socket);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);

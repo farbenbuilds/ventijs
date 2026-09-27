@@ -46,6 +46,14 @@ pub const Failure = enum(u8) {
     invalid_utf8,
     message_too_large,
     fragmented_message_too_large,
+    /// More pieces in one message than the compiled fragment bound allows.
+    ///
+    /// Its own member rather than `protocol_error` because the close code is
+    /// different: every frame was well formed, so this is 1008 (a policy violation)
+    /// and not 1002 (a protocol error). `ws` closes 1008 for `maxFragments` too, and
+    /// a peer that cannot tell the two apart cannot tell a misconfiguration from a
+    /// malformed stream.
+    too_many_fragments,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
@@ -59,6 +67,7 @@ pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
         .message_too_large, .fragmented_message_too_large => CLOSE_MESSAGE_TOO_BIG,
         .invalid_utf8 => CLOSE_INVALID_PAYLOAD,
+        .too_many_fragments => CLOSE_POLICY_VIOLATION,
         .protocol_error, .unexpected_opcode, .reserved_bits => CLOSE_PROTOCOL_ERROR,
     };
 }
@@ -87,6 +96,7 @@ pub fn describe(failure: Failure) []const u8 {
     return switch (failure) {
         .invalid_utf8 => "Invalid UTF-8",
         .message_too_large, .fragmented_message_too_large => "Message too large",
+        .too_many_fragments => "Too many message fragments",
         .protocol_error, .unexpected_opcode, .reserved_bits => "Protocol error",
     };
 }
@@ -110,10 +120,12 @@ pub fn classify(err: anyerror) Failure {
         error.PayloadTooLarge => .message_too_large,
         error.InvalidUtf8 => .invalid_utf8,
         error.InvalidOpcode => .unexpected_opcode,
+        error.TooManyFragments => .too_many_fragments,
         else => .protocol_error,
     };
 }
 
 const CLOSE_MESSAGE_TOO_BIG: u16 = 1009;
 const CLOSE_INVALID_PAYLOAD: u16 = 1007;
+const CLOSE_POLICY_VIOLATION: u16 = 1008;
 const CLOSE_PROTOCOL_ERROR: u16 = 1002;

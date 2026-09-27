@@ -57,6 +57,8 @@ export function connectSocket(
   state.url = parsed.url;
   state.closeTimeout = normalized.closeTimeout;
   state.autoPong = normalized.autoPong;
+  state.allowSynchronousEvents = normalized.allowSynchronousEvents;
+  state.validateUtf8 = !normalized.skipUTF8Validation;
   const socket = buildSocketRecord(state);
   const transport = openTransport(parsed);
   const attempt: Attempt = {

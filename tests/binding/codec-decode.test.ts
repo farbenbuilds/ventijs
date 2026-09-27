@@ -29,18 +29,22 @@ test("masked frames decode to the events a server owes a peer", () => {
     const text = clientFrames([{ opcode: 0x1, payload: Buffer.from("hello") }]);
     const close = clientFrames([{ opcode: 0x8, payload: closePayload(1000, "bye") }]);
 
-    // A ping and a close are control frames, so they queue alongside a message and
-    // come out ahead of it: a ping the caller has not answered has a deadline the
-    // rest of the queue does not.
+    // A ping is a control frame, so it comes out ahead of the message behind it: a
+    // ping the caller has not answered has a deadline the rest of the queue does not.
+    // A close is a control frame too, and it does *not* overtake: `close` is terminal,
+    // so delivering it first ends the socket and drops a message the peer sent before
+    // it. A peer that writes a message and a close in one read is how every
+    // application says goodbye, which makes this the queue where the ordering is most
+    // observable -- and it used to deliver `close` first and lose the message.
     const fed = feedCodec(handle, Buffer.concat([ping, text, close]));
     expect(fed).toEqual({ kind: "consumed", bytes: ping.length + text.length + close.length });
     const events = drain(handle);
-    expect(events.map((event) => event.kind)).toEqual(["ping", "close", "text"]);
+    expect(events.map((event) => event.kind)).toEqual(["ping", "text", "close"]);
     expect(events[0]?.payload.toString()).toBe("beat");
-    expect(events[1]?.code).toBe(1000);
+    expect(events[1]?.payload.toString()).toBe("hello");
+    expect(events[2]?.code).toBe(1000);
     // The reason is what is left after the code, not the whole payload.
-    expect(events[1]?.payload.toString()).toBe("bye");
-    expect(events[2]?.payload.toString()).toBe("hello");
+    expect(events[2]?.payload.toString()).toBe("bye");
   } finally {
     destroyCodec(handle);
   }

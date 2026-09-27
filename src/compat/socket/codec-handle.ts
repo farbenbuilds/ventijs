@@ -16,9 +16,14 @@ export function codecOf(state: SocketState): bigint | null {
 /// server socket opens `CODEC_ROLE.server` and a client socket
 /// `CODEC_ROLE.client`, and the wrong choice is a connection that dies on its first
 /// frame with a 1002 neither side expected.
+///
+/// The UTF-8 policy rides along because the codec *is* the validator, and it is
+/// latched on the state rather than passed per call: a codec is one connection, so
+/// there is no second call in which to change it, and a per-frame argument would be
+/// a knob that can disagree with itself halfway through a message.
 export function openCodec(state: SocketState, role: number): bigint {
   if (state.codec !== null) return state.codec;
-  const handle = createCodec(role);
+  const handle = createCodec(role, state.validateUtf8);
   state.codec = handle;
   return handle;
 }

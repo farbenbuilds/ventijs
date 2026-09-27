@@ -29,15 +29,20 @@ pub const FeedResult = result.FeedResult;
 /// A frame codec for one connection. `max_message` is the largest reassembled message
 /// it accepts and the only size a caller chooses; every other buffer follows from it,
 /// and `control_slots` is cheap because a control payload is capped at 125 bytes.
-pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
+pub fn codec(
+    comptime max_message: usize,
+    comptime control_slots: usize,
+    comptime max_fragments: usize,
+) type {
     if (control_slots == 0) @compileError("codec needs at least one control slot");
 
     return struct {
         const Self = @This();
 
         pub const max_message_bytes = max_message;
+        pub const max_fragments_per_message = max_fragments;
 
-        rx: inbound.receive(max_message) = undefined,
+        rx: inbound.receive(max_message, max_fragments) = undefined,
         tx: outbound.transmit(max_message) = undefined,
         events: store.event_store(control_slots) = .{},
 
@@ -51,12 +56,23 @@ pub fn codec(comptime max_message: usize, comptime control_slots: usize) type {
         /// peer's frame.
         resume_offset: usize = 0,
 
-        /// Builds a codec for one role.
-        pub fn init(role: zslay.EndpointRole) Self {
+        /// Builds a codec for one role, and for whether text is validated.
+        pub fn init(role: zslay.EndpointRole, validate_utf8: bool) Self {
             return .{
-                .rx = inbound.receive(max_message).init(role),
+                .rx = inbound.receive(max_message, max_fragments).init(role, validate_utf8),
                 .tx = outbound.transmit(max_message).init(role),
             };
+        }
+
+        /// The fragment boundaries of the data message just delivered, ascending.
+        ///
+        /// Read between `select` and `take`, which is the only window in which the
+        /// reassembly buffer is still the message the caller is holding. A caller
+        /// that wants the whole message ignores this; a caller that set
+        /// `binaryType: 'fragments'` slices one payload into several without the
+        /// second copy the alternative would need.
+        pub fn fragment_ends(self: *const Self) []const u32 {
+            return self.rx.fragment_ends();
         }
 
         /// Folds `input` into the codec, stopping when the input runs out, the

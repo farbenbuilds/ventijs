@@ -1,29 +1,17 @@
 import type { Duplex } from "node:stream";
-import {
-  codecFeedResume,
-  codecFailureCode,
-  feedCodec,
-  pendingCodecEvents,
-  selectCodecEvent,
-  selectedCodecEvent,
-  takeCodecEvent,
-  type CodecEvent,
-} from "../../binding/codec";
-import { CLOSE_NO_STATUS } from "../../protocol/close-codes";
+import { codecFailureCode, codecFeedResume, feedCodec } from "../../binding/codec";
 import type { SocketState } from "../../types/socket";
-import { emitEvent } from "../events/emitter";
-import { CLOSED, CLOSING } from "../ready-state";
-import { closeCodec, codecOf } from "./codec-handle";
+import { codecOf } from "./codec-handle";
+import { isDeliveryPaused } from "./codec-deferral";
 import { refuseByCodec } from "./codec-refusal";
-import { writeCloseFrame, writePong } from "./codec-outbound";
-import { finishConnection } from "./lifecycle";
+import { deliver, drainReleased } from "./codec-events";
 
 /// Folds the transport's bytes into the socket's codec and delivers what comes out.
 /// `pending` is what arrived with the upgrade response, if anything did.
 ///
 /// The codec is the only thing that knows what a frame is, per
 /// `docs/adr/0001-transport-and-framing-ownership.md`: this module moves bytes and
-/// dispatches events, and never looks at an opcode or a length itself.
+/// never looks at an opcode or a length itself.
 export function driveInbound(state: SocketState, transport: Duplex, pending?: Buffer): void {
   // The bytes that came with the upgrade response are fed before the listener goes on,
   // because a read can deliver the response and the first frame together and the
@@ -44,12 +32,20 @@ export function driveInbound(state: SocketState, transport: Duplex, pending?: Bu
 export function ingest(state: SocketState, chunk: Buffer): void {
   const handle = codecOf(state);
   if (handle === null) return;
+  if (state.pendingInput !== null) {
+    // A deferred delivery is still holding the bytes it has not decoded yet, and they
+    // came first. This chunk would decode out of order, so it is dropped rather than
+    // delivered as though the peer had sent it earlier.
+    return;
+  }
   let rest = chunk;
-  // Bounded by the input: every pass either consumes bytes or stops, and a refusal
-  // or an empty queue both end the loop.
+  // Bounded by the input: every pass either consumes bytes or stops, and a refusal, a
+  // full queue, or a deferred delivery all end the loop.
   while (rest.length > 0) {
     const outcome = feedCodec(handle, rest);
-    deliver(state);
+    deliver(state, () => {
+      resume(state);
+    });
     if (outcome.kind === "failed") {
       // The code the codec latched is the one the RFC assigns this refusal, and it
       // is what both ends of the connection get to see.
@@ -61,83 +57,28 @@ export function ingest(state: SocketState, chunk: Buffer): void {
     if (consumed <= 0) return;
     rest = rest.subarray(consumed);
     if (outcome.kind === "consumed") return;
+    // The decode stopped because the event store was full, and `deliver` has just
+    // emptied it -- unless the delivery paused, in which case the codec still holds an
+    // event and the tail is not ours to re-feed yet.
+    if (isDeliveryPaused(state)) {
+      state.pendingInput = rest;
+      return;
+    }
   }
 }
 
-/// Delivers every queued event, control frames first.
-export function deliver(state: SocketState): void {
-  const handle = codecOf(state);
-  if (handle === null) return;
-  while (pendingCodecEvents(handle) > 0 && selectCodecEvent(handle)) {
-    const event = selectedCodecEvent(handle);
-    takeCodecEvent(handle);
-    if (event === null) continue;
-    dispatch(state, handle, event);
-    if (state.readyState === CLOSED) return;
-  }
-}
-
-/// One decoded event, as the facade's event.
+/// What a deferred delivery resumes with.
 ///
-/// The handle is a parameter rather than looked up again because the `rejected` branch
-/// needs the code the codec latched, and reading it from a second lookup would be a
-/// chance to read a different codec than the one that queued the event.
-function dispatch(state: SocketState, handle: bigint, event: CodecEvent): void {
-  switch (event.kind) {
-    case "text":
-      // A Buffer, not a string: `ws` hands its Node listeners the reassembled buffer
-      // and converts only for the DOM wrapper, and a caller reading `message` must
-      // see the same bytes the peer sent.
-      emitEvent(state, "message", event.payload, false);
-      return;
-    case "binary":
-      emitEvent(state, "message", event.payload, true);
-      return;
-    case "ping":
-      // Section 5.5.2 requires the pong promptly, so it goes out before the
-      // application hears about the ping: a listener that blocks would otherwise
-      // delay the answer past its deadline. `autoPong: false` is the one caller choice
-      // that suppresses it, and the application answers with `pong()` itself.
-      if (state.autoPong) writePong(state, event.payload);
-      emitEvent(state, "ping", event.payload);
-      return;
-    case "pong":
-      emitEvent(state, "pong", event.payload);
-      return;
-    case "close":
-      closeFromPeer(state, event);
-      return;
-    case "rejected":
-      // The code is latched on the codec because one refused frame ends the
-      // connection; the queued description names the reason for the error.
-      refuseByCodec(state, codecFailureCode(handle));
-      return;
-  }
-}
-
-/// The peer's close frame: answer it, then finish.
-///
-/// `ws` echoes a close frame it did not send one for, and the socket's own close code
-/// is the peer's, so a clean close reports the code the peer chose rather than 1006 for
-/// a handshake that did happen.
-///
-/// A close frame with no code reports 1005, "no status received", which is what RFC
-/// 6455 section 7.1.5 assigns it and what `ws` surfaces. Reporting 1006 instead said
-/// the transport had failed, which is a claim about a connection that ended by exactly
-/// the agreed handshake, and it made 1005 impossible to observe on either route.
-function closeFromPeer(state: SocketState, event: CodecEvent): void {
-  if (state.readyState !== CLOSING) state.readyState = CLOSING;
-  state.closeFrameReceived = true;
-  if (!state.closeFrameSent) {
-    // The echo carries the peer's own code, which is what a clean shutdown needs: an
-    // empty close frame would report 1005 and read as a protocol fault. A peer that
-    // sent no code gets none back, which is the same rule applied in reverse.
-    writeCloseFrame(state, event.code === 0 ? undefined : event.code, event.payload);
-  }
-  finishConnection(state, event.code === 0 ? CLOSE_NO_STATUS : event.code, event.payload);
-  // The handshake is over, so the transport is ended rather than left for a peer
-  // that has already said everything it is going to. `ws` does the same, and it is
-  // what stops a socket sitting on an idle connection after a clean close.
-  closeCodec(state);
-  state.transport?.end();
+/// The pause is a *parse* pause, which is what `ws` does and what the option is for:
+/// the bytes behind the message the application has not heard about yet are not
+/// decoded until it has. That means the chunk the transport handed over has a tail
+/// this module still owns, and the tail has to be somewhere the resume can find it.
+/// `state.pendingInput` is that somewhere, and it holds at most one read -- Node's
+/// own high-water mark -- so the cost is bounded and only for a socket that asked for
+/// deferred events.
+function resume(state: SocketState): void {
+  drainReleased(state);
+  const pending = state.pendingInput;
+  state.pendingInput = null;
+  if (pending !== null && pending.length > 0) ingest(state, pending);
 }

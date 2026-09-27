@@ -107,6 +107,27 @@ pub fn codec_take(env: napi.Env, handle: u64) !void {
     peer.take();
 }
 
+/// The fragment boundaries of the selected data message, ascending.
+///
+/// Read between `codec_event` and `codec_take`, which is the only window in which the
+/// reassembly buffer is still the message the caller is holding. Empty for anything
+/// that is not a data message, and for a message that arrived whole, because a
+/// single fragment has no interior boundary to report.
+///
+/// Copied out for the same reason the payload is: the boundaries live in codec memory
+/// that the next message overwrites, and a caller that retained the view would read
+/// the next message's offsets.
+pub fn codec_fragments(env: napi.Env, handle: u64) !?napi.Val {
+    const peer = handles.resolve(handle) orelse return null;
+    const ends = peer.fragment_ends();
+    if (ends.len < 2) return null;
+    const array = try env.createArrayWithLength(@intCast(ends.len));
+    for (ends, 0..) |end, index| {
+        try array.setElement(env, @intCast(index), try env.createUint32(end));
+    }
+    return array;
+}
+
 /// Drops every buffered byte and event, for a connection being abandoned without
 /// a close handshake. Belongs here rather than with either direction because it
 /// touches both: a half-received frame and a formatted outbound frame are the same

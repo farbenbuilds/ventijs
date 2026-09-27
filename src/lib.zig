@@ -46,6 +46,8 @@ pub const codec_select = codec_io.codec_select;
 pub const codec_event = codec_io.codec_event;
 /// Retires the selected event.
 pub const codec_take = codec_io.codec_take;
+/// The fragment boundaries of the selected data message, or null when it arrived whole.
+pub const codec_fragments = codec_io.codec_fragments;
 /// Formats one frame, reporting its framed length.
 pub const codec_encode = codec_out.codec_encode;
 /// The framed bytes waiting to be copied out.

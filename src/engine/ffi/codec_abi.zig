@@ -46,11 +46,17 @@ pub fn event_kind(ordinal: Arg) ?state.Kind {
 
 /// The codec's failure vocabulary onto the boundary's, which is offset by one so
 /// that zero can mean "no failure".
+///
+/// The receive-only failures are listed rather than defaulted. `too_many_fragments` is
+/// a decision the receive path makes and `encode` cannot, so naming it says the
+/// boundary's writer vocabulary and the parser's are not the same set — which is why
+/// `events.Failure` is one enum and this is another.
 pub fn encode_failure(failure: state.Failure) EncodeFailure {
     return switch (failure) {
         .unexpected_opcode => .unexpected_opcode,
         .message_too_large, .fragmented_message_too_large => .message_too_large,
         .protocol_error, .reserved_bits, .invalid_utf8 => .protocol_error,
+        .too_many_fragments => .protocol_error,
     };
 }
 

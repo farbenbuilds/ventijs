@@ -96,7 +96,14 @@ pub fn event_store(comptime slots: usize) type {
         /// Selection and taking are separate so the payload can be read between
         /// them: the payload borrows receive state, and the caller has to copy it
         /// out before the event is retired.
+        ///
+        /// **A close never overtakes a queued data message.** See `select` below.
         pub fn select(self: *Self) bool {
+            if (self.message != null and self.count > 0 and self.controls[self.head].kind == .close) {
+                self.selected = true;
+                self.selected_message = true;
+                return true;
+            }
             if (self.count > 0) {
                 self.selected = true;
                 self.selected_message = false;
