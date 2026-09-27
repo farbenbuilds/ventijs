@@ -148,26 +148,26 @@ Status vocabulary, shared with [COMPATIBILITY.md](COMPATIBILITY.md):
 | `todo`     | Planned, not implemented                                     |
 | `deferred` | Deliberately out of scope until the named prerequisite lands |
 
-| Surface                                             | Status     | Note                                                                     |
-| --------------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
-| Package exports, ESM bundle, generated declarations | `done`     | Resolved through the `exports` map                                       |
-| Native addon build, load, engine version, HTTP/3    | `done`     | ReleaseSafe, Zig 0.16.0                                                  |
-| `WebSocketServer` construction, options, events     | `done`     | Including the `WebSocket` class option                                   |
-| `handleUpgrade`, `shouldHandle`, `address`, `close` | `done`     | Node HTTP upgrade path                                                   |
-| `verifyClient`, `handleProtocols`, `wsClientError`  | `done`     | Hardened beyond `ws`, divergence documented                              |
-| `createWebSocketStream`                             | `done`     | Duplex adapter, compared against `ws`                                    |
-| Server-side `WebSocket` properties and DOM handlers | `done`     | Ready states, `binaryType`, `addEventListener`, `on*`                    |
-| `WebSocket` client construction                     | `deferred` | Throws `ERR_INVALID_STATE`                                               |
-| Inbound text and binary messages                    | `partial`  | Engine route round-trips both; the upgrade route still does no framing   |
-| Fragmented messages                                 | `todo`     | `send` does not yet read the `fin` option                                |
-| Outbound `send` and `bufferedAmount`                | `partial`  | Engine route reaches the wire; upgrade route reports `ERR_INVALID_STATE` |
-| `ping`, `pong`, and their events                    | `partial`  | Arguments validated, control-frame transport missing                     |
-| Close codes, reasons, exactly-once `close`          | `partial`  | Argument handling compared with `ws`; `close` latched before dispatch    |
-| `maxPayload` and `1009`                             | `partial`  | Normalised but never read; the engine's 32 KiB cap applies               |
-| `perMessageDeflate`                                 | `partial`  | Normalised, never negotiated                                             |
-| `server.clients` and `server.options` shape         | `partial`  | `clients` always present; three option keys are missing                  |
-| RFC 6455 Autobahn suite                             | `done`     | `autobahn.yml`, capacity-scoped at 128 of 517 cases                      |
-| `ws` side-by-side conformance suite                 | `partial`  | Upgrade, close, stream, and options; message cases pending               |
+| Surface                                             | Status     | Note                                                                                                   |
+| --------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| Package exports, ESM bundle, generated declarations | `done`     | Resolved through the `exports` map                                                                     |
+| Native addon build, load, engine version, HTTP/3    | `done`     | ReleaseSafe, Zig 0.16.0                                                                                |
+| `WebSocketServer` construction, options, events     | `done`     | Including the `WebSocket` class option                                                                 |
+| `handleUpgrade`, `shouldHandle`, `address`, `close` | `done`     | Node HTTP upgrade path                                                                                 |
+| `verifyClient`, `handleProtocols`, `wsClientError`  | `done`     | Hardened beyond `ws`, divergence documented                                                            |
+| `createWebSocketStream`                             | `done`     | Duplex adapter, compared against `ws`                                                                  |
+| Server-side `WebSocket` properties and DOM handlers | `done`     | Ready states, `binaryType`, `addEventListener`, `on*`                                                  |
+| `WebSocket` client construction                     | `deferred` | Throws `ERR_INVALID_STATE`                                                                             |
+| Inbound text and binary messages                    | `partial`  | Engine route round-trips both; the upgrade route still does no framing                                 |
+| Fragmented messages                                 | `todo`     | `send` does not yet read the `fin` option                                                              |
+| Outbound `send` and `bufferedAmount`                | `partial`  | Engine route reaches the wire; upgrade route reports `ERR_INVALID_STATE`                               |
+| `ping`, `pong`, and their events                    | `partial`  | Arguments validated, control-frame transport missing                                                   |
+| Close codes, reasons, exactly-once `close`          | `partial`  | Latching and argument handling compared with `ws`; the close frame is not written on the upgrade route |
+| `maxPayload` and `1009`                             | `partial`  | Normalised but never read; the engine's 32 KiB cap applies                                             |
+| `perMessageDeflate`                                 | `partial`  | Normalised, never negotiated                                                                           |
+| `server.clients` and `server.options` shape         | `partial`  | Defaults compared with `ws`; the client set is now absent when tracking is off                         |
+| RFC 6455 Autobahn suite                             | `done`     | `autobahn.yml`, capacity-scoped at 128 of 517 cases                                                    |
+| `ws` side-by-side conformance suite                 | `partial`  | Upgrade, close, stream, and options; message cases pending                                             |
 
 ## Protocol conformance, honestly
 
@@ -180,9 +180,24 @@ The Autobahn suite ran end to end in CI on the first full attempt. The result:
 | Skipped, over capacity | 128   | Above the 32 KiB message ceiling below              |
 
 The 229 failures are the largest single source of remaining work, and they are
-not evenly spread: 132 are `permessage-deflate`, which is normalised and never
-negotiated; 76 are UTF-8 handling; 21 are fragmentation, limits, and close
-edges. The per-group breakdown and its reasoning are in
+not evenly spread: 132 are `permessage-deflate`; 76 are UTF-8 handling; 21 are
+fragmentation, limits, and close edges.
+
+**Four of those five recorded causes do not survive a reading of the pinned
+engine.** The incremental UTF-8 decoder, fragment reassembly, the 1007 rejection,
+the close handshake, and the deflate codec are all present and correct in the
+vendored `uWebZockets` tree, and its own Autobahn target enables the extension on
+the same route ventijs uses. Groups 12 and 13 are UNIMPLEMENTED for want of one
+struct field on the route registration. Groups 1, 5, 6, and 7 are not explained by
+the recorded reasons at all. `COMPATIBILITY.md` has the code, the derivation, and
+the recipe per group.
+
+None of it can land yet, and the reason is structural rather than effort. The gate
+fails a run whose baseline lists a case that now passes, so every protocol fix
+must ship with a regenerated baseline, and the baseline can only be recorded by
+the digest-pinned suite, which is a frozen Python 2.7 image and needs Docker. That
+is a Docker-capable host and a recorded run, not a patch. The per-group breakdown
+and its reasoning are in
 [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md) and in the baseline file itself, so the
 next person to pick this up does not have to re-derive it from a CI log.
 

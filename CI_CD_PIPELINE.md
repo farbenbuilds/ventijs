@@ -15,17 +15,17 @@ contributors run the same commands locally as described in
 
 ## Workflows
 
-| Workflow        | State       | Trigger                                              | Purpose                                                       |
-| --------------- | ----------- | ---------------------------------------------------- | ------------------------------------------------------------- |
-| `ts-lint.yml`   | Implemented | pushes and pull requests to `main`, manual           | oxlint, oxfmt, typecheck                                      |
-| `zig-lint.yml`  | Implemented | pushes and pull requests to `main`, manual           | `zig fmt` and the Zig build graph                             |
-| `zig-test.yml`  | Implemented | pushes and pull requests to `main`, manual           | `zig build test` units and the binding lifecycle suite        |
-| `nix-lint.yml`  | Implemented | pushes and pull requests to `main`, manual           | Nix formatting and flake checks                               |
-| `ts-test.yml`   | Implemented | pushes and pull requests to `main`, manual           | vitest unit, boundary, and registry tests without the addon   |
-| `native.yml`    | Planned     | pushes and pull requests to `main`, manual, reusable | Build and test the `napi-zig` addon on the native matrix      |
-| `compat.yml`    | Planned     | pushes and pull requests to `main`, manual           | RFC 6455 Autobahn suite and `ws` behavioral conformance       |
-| `benchmark.yml` | Planned     | pull requests to `main`, nightly, manual             | Regression guard against the `main` baseline and `ws`         |
-| `publish.yml`   | Planned     | `v*` tag push                                        | Verification, prebuild packaging, npm release with provenance |
+| Workflow       | State       | Trigger                                                      | Purpose                                                       |
+| -------------- | ----------- | ------------------------------------------------------------ | ------------------------------------------------------------- |
+| `ts-lint.yml`  | Implemented | pushes and pull requests to `main`, manual                   | oxlint, oxfmt, typecheck                                      |
+| `zig-lint.yml` | Implemented | pushes and pull requests to `main`, manual                   | `zig fmt` and the Zig build graph                             |
+| `zig-test.yml` | Implemented | pushes and pull requests to `main`, manual                   | `zig build test` units and the binding lifecycle suite        |
+| `nix-lint.yml` | Implemented | pushes and pull requests to `main`, manual                   | Nix formatting and flake checks                               |
+| `ts-test.yml`  | Implemented | pushes and pull requests to `main`, manual                   | vitest unit, boundary, and registry tests without the addon   |
+| `native.yml`   | Planned     | pushes and pull requests to `main`, manual, reusable         | Build and test the `napi-zig` addon on the native matrix      |
+| `autobahn.yml` | Implemented | Zig, harness, and lockfile changes to `main`, weekly, manual | RFC 6455 conformance, sharded and incrementally skipped       |
+| `perf.yml`     | Implemented | Zig and benchmark changes to `main`, nightly, manual         | Regression guard against the `main` baseline and `ws`         |
+| `publish.yml`  | Planned     | `v*` tag push                                                | Verification, prebuild packaging, npm release with provenance |
 
 Every workflow runs against the Node.js version pinned in `flake.nix`. The
 pnpm store and the Zig cache are cached per lockfile hash; caches are never
@@ -186,77 +186,135 @@ itself, which cannot be the contract.
 
 ### What the job costs, and what was cut
 
-Measured step timings from a full run: setup 7s, Zig cache restore 10s, addon
-build 126s, image pull 16s, **suite 2100s**. The suite is 92 per cent of the job,
-and it is not this project's cost. The target answers a connect, echo, and close
-in **0.42 ms**, so all 517 cases together are 0.2 seconds of target time against
-35 minutes of suite time. The four seconds per case is inside `wstest`, which is
-Python, and nothing on the Node or Zig side can make it faster. The only lever
-is selecting fewer cases.
+Measured step timings from a full run before sharding: setup 7s, Zig cache
+restore 10s, addon build 126s, image pull 16s, **suite 2100s**. The suite was 92
+per cent of the job, and it was not this project's cost: the target answers a
+connect, echo, and close in **0.42 ms**, so all 517 cases together are 0.2 seconds
+of target time against 35 minutes of suite time. The four seconds per case is
+inside `wstest`, which is Python, and nothing on the Node or Zig side can make it
+faster. The only lever was doing less of it, or doing it at the same time.
 
-Three things changed, in descending order of effect:
+The cost is also **not per case**, and that is what made the difference between
+the two levers. Two runs of the same job: the full selection took 2100s of suite
+time for 517 cases, the framing selection 2086s for 301. The 216 per-message
+deflate cases therefore account for 14s between them, about 0.065s each, against
+6.93s for a framing case. A deflate case whose extension is never negotiated is
+decided at the handshake and returns immediately, while the framing and UTF-8
+groups are where the client actually waits on its own handshake timers. So
+dropping 42 per cent of the cases saved nothing, and the selection that dropped
+them was not a speedup and never claimed to be: it exists to say in the report
+what it covered.
 
-1. **The path filter no longer matches `src/**`.** It previously did, which
-   subsumed `**.zig` and additionally matched every TypeScript file, so a change
-   to the `ws`-shaped facade, which this suite never exercises, still started the
-   job. Now only a Zig source, `build.zig.zon`, the harness, the lockfile, or the
-   workflow itself does. The same defect was in `perf.yml` and is fixed the same
-   way, since the benchmark drives the native engine and is equally indifferent to
-   the facade.
+That leaves concurrency, and the concurrency has to be inside one job. A matrix
+of four _jobs_ would cut the wall clock the same way but pay the addon build four
+times, which is more total runner minutes for the same result. A matrix inside
+one job pays setup, the build, and the pull once and then runs four fuzzing
+clients against four targets, which is strictly better on both axes.
 
-   What this does and does not save needs stating, because the first version of
-   this section overstated it. For a `pull_request` event GitHub evaluates
-   `paths` against the **whole pull request diff**, not the incremental push, so a
-   branch that already contains a Zig or harness change re-runs this job on every
-   later push however unrelated that push is. Measured on this pull request: a
-   commit touching only `README.md` and `docs/*.md`, neither of which appears in
-   the filter, still started the job. So the filter saves a run for a pull
-   request whose cumulative diff never touches those paths, and for pushes to
-   `main`. It does not help a long-lived engine branch, which is the case this
-   pull request is.
+So `AUTOBAHN_SHARDS` defaults to 4, one per runner core. Each shard gets its own
+target process on its own port from `SHARD_PORT_BASE`, its own generated
+`fuzzingclient.json`, and its own report directory; the reports are concatenated
+and the existing gate is evaluated over the union. The predicted critical path is
+748s against 2086s unsplit, so the suite step falls to about 12 minutes and the
+job to about 15. Four is chosen for the pessimistic reading as much as the
+optimistic one: if four concurrent Python reactors did contend for four cores,
+one shard per core still does not oversubscribe.
 
-   What actually bounds the waste on a busy branch is the `concurrency` block
-   above, with `cancel-in-progress` on a pull request: two of the runs on this
-   branch show `cancelled` rather than competing. Gating the job on the
-   _incremental_ diff instead would need `github.event.before` compared against
-   the changed-files API, with a decision about what to do when that call fails.
-   It is not done here.
+The partition is safe by construction rather than by tuning. A shard owns **whole
+groups** and selects `N.*`, so the union of every shard is provably the same case
+set one unsplit configuration selects, and the union is a concatenation rather
+than a merge by case id, so an overlapping shard surfaces as a `count-total`
+violation instead of being deduplicated into a pass. A mispriced weight therefore
+costs wall clock and nothing else, because the gate still holds the run to the
+mode's totals: 301/44/257 in `framing`, 517/128/389 in `full`.
 
-2. **A pull request runs the `framing` selection, which omits the two
-   per-message-deflate groups.** Those are 216 of 517 cases and every one reports
-   `UNIMPLEMENTED`, because `permessage-deflate` is normalised and never
-   negotiated, so they cannot change until deflate is implemented.
+The ceiling on the speedup is group 9, which is 108 of the 301 framing cases and
+lands whole on one shard at any shard count up to ten. Group granularity caps the
+critical path at 748s however the rest is split. Beating it means expressing a
+heavy group as several globs, which needs the pinned suite's per-sub-group case
+counts, which are not in this repository. `tests/autobahn/cost-rollup.ts`
+publishes the measured per-group duration and case count on every run, so that
+table can be re-derived from a measurement rather than from a derivation, and the
+split retuned, without another investigation. The 748s figure is the weight
+table's arithmetic, not a measured sharded run: the per-case constant and the
+non-contention assumption are both derivations, and the first sharded run
+measures both.
 
-   This is not a speedup, which was the assumption when it was added, and the
-   measurement is why. Two runs of the same job: the full selection took 2100s of
-   suite time for 517 cases, and the framing selection took 2086s for 301. Dropping
-   42 per cent of the cases saved fourteen seconds, because the cost is not per
-   case. A deflate case whose extension is never negotiated fails almost
-   immediately, while the framing and UTF-8 groups are where the client actually
-   waits. The cost is concentrated in the groups that were kept.
+### Skipping a push that cannot change the answer
 
-   The selection is kept because it is the same signal for marginally less work,
-   it makes the report state what it covered, and it will start costing real time
-   the moment deflate is implemented, at which point the groups have to come back.
+`paths` is necessary and not sufficient. For a `pull_request` GitHub evaluates it
+against the **whole pull request diff**, not the incremental push, so a branch that
+already touched the engine re-runs the job on every later commit however
+unrelated that commit is, and the `concurrency` block above only bounds the waste
+by cancelling the loser.
 
-3. **The preflight above** turns an unloadable addon from a 21-minute failure
-   into a 5-second one.
+The `gate` job closes that. It checks out full history, reads the commit the suite
+last ran on the same ref out of a cache, and diffs against it. Nothing
+engine-relevant in that delta, and the suite is skipped. The decision is a
+separate job rather than a conditional step on purpose: a skipped _step_ inside
+the suite job renders that job green, indistinguishable from a pass, while a
+skipped _job_ renders grey with the reason in the checks UI and the required check
+is still satisfied.
 
-The gate holds a run to the count its mode selects, so a config and an
-expectation that disagree fail rather than pass quietly: 517 / 128 / 389 in
-`full`, 301 / 44 / 257 in `framing`. A deflate case that appears in a `framing`
-report trips `count-total` and `count-evaluated`.
+It fails toward running on every uncertainty. No watermark, an unreadable history,
+a `schedule` or `workflow_dispatch` event, and a watermark that is no longer an
+ancestor of HEAD all measure. The job also seeds `run=true` into `$GITHUB_OUTPUT`
+before the script runs, because a _failing_ dependency reports as skipped rather
+than failed, which is indistinguishable from a deliberate skip, and the seed is
+the only thing that distinguishes them. The watermark is written on success only,
+so a red run is retried on the next push rather than recorded as tested.
 
-A case-group matrix would cut wall-clock roughly fourfold, at the cost of paying
-the addon build once per job, which increases total runner minutes. Since the
-concern is runner time, it was not done.
+The cost is about 25 seconds and no toolchain beyond Node: a checkout with full
+history and a `git diff`. On a live engine branch every later facade-only or
+docs-only push drops from about 15 minutes to about 25 seconds.
 
-There is no further reduction available on this side. The addon build is about
-two to four minutes against a warm cache, the image pull is sixteen seconds, and
-the per-case cost is not uniform enough for a subset to help. The honest summary
-is that the path filter is the only large win here, and the suite is expensive
-because the Autobahn fuzzing client is, not because of anything in this
-repository.
+### Harness fixes this needed along the way
+
+- `startTarget` read its port from a process-global environment and tracked one
+  child in a module singleton, so it could not be called once per shard. It is now
+  a factory over an explicit address, and the environment override applies only to
+  the default address, because honouring one global override would have started
+  every shard on the same port.
+- An interrupted run orphaned the `wstest` container. `--rm` only fires when a
+  container _stops_, so a SIGINT or the job timeout left it running and writing
+  into a report directory the next run deletes. Containers are named and force
+  removed. The SIGINT path is a race rather than a guarantee: `process.exit` runs
+  from the target module's handler and the `docker rm` spawns are not awaited, so
+  the removal is left to complete as an orphan, which it does in practice.
+- The shards settle rather than race. One unreadable report used to discard the
+  other three through `Promise.all`; it is `allSettled`, and a rejected read
+  becomes a named failed shard.
+- `classifyCase`'s comment claimed the opposite of what the code did, which
+  mattered more once a run could be short by a whole shard.
+- `AUTOBAHN_SHARDS` was validated in three places with three rules, and the
+  step whose job is to validate the plan had the weakest: 99 printed a four-shard
+  plan and exited zero, and the suite then died. One resolver now bounds it by the
+  mode's own group count, because a shard with no groups runs no cases and can
+  never satisfy the count check.
+- The `gate` job's shard-count ceiling and the workflow's `paths` filter are held
+  to each other by `tests/autobahn/diff-gate.test.ts`, so a path added to one and
+  not the other fails rather than silently skipping a push the filter runs.
+
+The other two things that were tried and rejected:
+
+- **Reducing the client's timeouts.** `openHandshakeTimeout` and
+  `closeHandshakeTimeout` are settable through the spec's `options` block, and
+  lowering them would cut the suite substantially. That is the one place where a
+  speedup would corrupt the signal: those timers are what turn a non-conformant
+  close into a `FAILED` rather than a silent pass. Rejected.
+- **Excluding the 128 capacity-blocked cases.** Tempting, since they are most of
+  the runtime, and wrong twice over. The gate requires `counts.capacity` to be 44
+  in `framing`, and the blocked set is decided by case id alone, so dropping them
+  would break the count contract and hide exactly the frame-and-payload-limit gap
+  the baseline records for group 9. Rejected.
+
+The addon build is about two to four minutes against a warm cache and is close to
+irreducible for a genuine Zig change: the change ripples through the engine module
+graph and relinks a 10 MB binary against BoringSSL, lsquic, libdeflate, and zlib,
+and `--release=safe` is the conformance contract. The job's `timeout-minutes` is
+45 for the cold path rather than the warm one, because the Zig cache key hashes
+`build.zig`, `build.zig.zon`, and `src/builds/**`, and a change to any of them with
+no prefix fallback available compiles all four vendored archives from source.
 
 ### The known-failure baseline
 
