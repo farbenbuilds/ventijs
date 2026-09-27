@@ -109,6 +109,15 @@ per element, `close(code, reason)` measures before it dispatches on the type so
 the error class matches `ws`, and `bufferedAmount` no longer grows without bound
 on a route with nothing to drain it.
 
+The client is the other half of that decision. `new WebSocket(address)` opens a
+`net` or `tls` connection, writes the opening handshake, checks every field of the
+101 rather than its status, and hands the socket to a codec opened in the _client_
+role, because a client masks and a server must not. `src/compat/client/` splits the
+handshake into the decisions it is made of — the address, the subprotocols, the
+request, the response head, the response, the transport — so each is one thing to
+read and one thing to test. The client's suites run a real `ws` server as the peer in
+both directions, the mirror of the upgrade route's suites.
+
 One limit is inherited rather than chosen. Every codec has the compiled
 `message_capacity`, and there is no per-connection `maxPayload`: the codec's
 message buffer is comptime-sized, so honouring a smaller per-socket limit would
