@@ -76,6 +76,12 @@ which is what the drop-in contract requires anyway, and a pure Zig frame codec
 behind a Node-API handle takes over parsing, masking, UTF-8, fragmentation,
 control frames, and backpressure.
 
+The client is the other half of the same decision and is implemented: Node's
+`net`/`tls` own the connection and the codec owns the framing, in the client role,
+because a client masks and a server must not. `src/compat/client/` splits the
+handshake into the decisions it is made of, and `tests/compat/client/` runs a real
+`ws` server as the peer in both directions, the mirror of the upgrade route's suites.
+
 That codec is in place and the upgrade route runs on it.
 `src/compat/socket/codec-inbound.ts` folds the transport's bytes into a
 server-role codec and dispatches what comes out; `codec-outbound.ts`,
