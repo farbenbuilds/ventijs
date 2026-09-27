@@ -1,3 +1,4 @@
+import { MEASURED_FRAMING_COUNTS } from "./shard-measurements.ts";
 import weights from "./shard-weights.json" with { type: "json" };
 import { COMPRESSION_CASES, COMPRESSION_GROUPS, TOTAL_CASES } from "./expected-cases.ts";
 import type { SuiteMode } from "./suite-mode.ts";
@@ -125,11 +126,16 @@ export function planShards(shardCount: number, mode: SuiteMode): readonly Shard[
 }
 
 /// Self-check on the committed weight table, run by the unit tests and by the
-/// preflight. The per-group case counts are a derivation, so the two totals the
-/// repository already asserts independently are used to confirm it: the framing
-/// groups must sum to `TOTAL_CASES` minus the deflate cases, and groups 12 and
-/// 13 must be exactly the deflate groups.
+/// preflight.
+///
+/// The counts are now measurements rather than a derivation, so the check is
+/// stronger than a sum: the measured per-group counts are pinned, and they must
+/// still add up to the totals the repository asserts independently. A sum alone
+/// was enough to accept a table that had group 6 and group 9 the wrong way round.
 export function weightTableIsConsistent(): boolean {
+  for (const [group, count] of Object.entries(MEASURED_FRAMING_COUNTS)) {
+    if (TABLE.caseCounts[group] !== count) return false;
+  }
   const counts = Object.entries(TABLE.caseCounts);
   const compression = counts
     .filter(([group]) => (COMPRESSION_GROUPS as readonly string[]).includes(group))

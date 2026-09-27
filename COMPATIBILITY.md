@@ -137,30 +137,29 @@ absent against present, and `tests/autobahn/` reports the 128 blocked cases as
 
 ## RFC 6455 conformance
 
-The first full Autobahn run, in `autobahn.yml` on commit `47bfc68`, produced 517
-cases: 128 skipped over capacity, **160 of 389 evaluated cases passed**, and 229
-failed. The failures are committed to `tests/autobahn/baseline.json` with a
-reason per group, and the gate fails on any failure outside that list, so it is a
-regression gate rather than an exclusion.
+The gate is a regression gate, not an exclusion list. `tests/autobahn/baseline.json`
+records the cases the engine is known to fail; anything failing outside that list
+fails the run, and a listed case that starts passing is reported and fails the run
+until the list is shortened, so the list can only shrink.
 
-| Group | Cases | Gap                                                            |
-| ----- | ----- | -------------------------------------------------------------- |
-| 13    | 77    | `permessage-deflate` is never negotiated                       |
-| 12    | 55    | `permessage-deflate` is never negotiated                       |
-| 6     | 70    | UTF-8 handling across the incremental decoder                  |
-| 9     | 12    | Frame and payload limits are not enforced as the suite expects |
-| 5     | 8     | Fragmented messages are not reassembled                        |
-| 1     | 6     | Invalid or partial UTF-8 is not rejected with 1007             |
-| 7     | 1     | A close-handshake edge is not conformant                       |
+**Current state, from `autobahn.yml` run 36287763043:** the 301-case framing
+selection produced 44 capacity-blocked cases and **248 of 257 evaluated cases
+passing, 9 failing.** For comparison the first run, on commit `47bfc68`, had 160
+of 389 passing and 229 failing.
 
-UTF-8 validation, fragmentation, and deflate negotiation account for 210 of the
-229, so they are the three largest gaps. **What causes them was re-derived from
-the pinned engine and four of the five recorded reasons do not survive.**
+| Group  | Failing | What the report says                                                                                                                                                                                                                                      |
+| ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1      | 6       | `1.1.6`-`1.1.8` and `1.2.6`-`1.2.8` close with 1009 where the suite expects an echo. 1009 is the engine's own message cap, so the cap is either below these payloads or applied where the suite does not expect one. The rest of the group is conformant. |
+| 5      | 2       | `5.19` and `5.20` fail with a clean close and no remote close code: the frame is delivered and the connection is healthy, so this is about the reassembled message.                                                                                       |
+| 7      | 1       | `7.1.1` sends 1001 where the suite expects 1007. The close path maps an invalid close reason onto the normal-closure code. The most specific of the nine.                                                                                                 |
+| 12, 13 | 132     | Carried over. `permessage-deflate` is normalised and never negotiated, and a framing run does not select those groups.                                                                                                                                    |
 
-The incremental UTF-8 decoder, fragment reassembly, the 1007 rejection, the close
-handshake, and the per-message deflate codec are all present and correct in the
-pinned `uWebZockets` tree, and the engine's own Autobahn target enables the
-extension on the same route ventijs uses:
+**Four of the five causes this table used to record do not survive a reading of
+the pinned engine, and the recorded run is what proved it.** The incremental UTF-8
+decoder, fragment reassembly, the 1007 rejection, the close handshake, and the
+per-message deflate codec are all present and correct in the pinned
+`uWebZockets` tree, and the engine's own Autobahn target enables the extension on
+the same route ventijs uses:
 
 ```zig
 // zig-pkg/uWebZockets-1.7.0-.../tests/autobahn/main.zig
@@ -179,34 +178,48 @@ _ = try app.ws(target.config.path_slice(), .{
     .open = Trampoline.open,
     .message = Trampoline.message,
     .close = Trampoline.close,
-    .max_frame_size = ...,
-    .max_message_size = ...,
+    .max_frame_size = target.config.limits.max_frame_bytes,
+    .max_message_size = target.config.limits.max_message_bytes,
 });
 ```
 
-`WsBehavior.compression` defaults to `.disabled`, so groups 12 and 13 are
-UNIMPLEMENTED for want of one struct field, and `WebSocket.send` compresses
-automatically once `permessage_deflate` is negotiated, so the outbound hop is not
-the obstacle. Groups 1, 5, 6, and 7 are not explained by the recorded reasons at
-all, and the baseline was recorded on `47bfc68`, whose `src/engine/` tree is
-byte-identical to this one, so the same code produced them.
+`WsBehavior.compression` defaults to `.disabled`, and `WebSocket.send` compresses
+once `permessage_deflate` is negotiated, so the outbound hop is not the obstacle
+either. Groups 12 and 13 are UNIMPLEMENTED for want of one struct field on that
+route registration, plus the option reaching Zig: `NativeServerConfig` in
+`src/binding/native.ts` and `RawConfig` in `src/engine/server/options.zig` have
+no compression field.
 
-**None of this can be landed as a protocol change yet, and the reason is
-structural rather than a matter of effort.** The gate fails a run whose
-`baseline.json` lists a case that now passes, so fixing a protocol gap _must_ be
-accompanied by a regenerated baseline, and the baseline can only be regenerated by
-the digest-pinned suite. That image is a frozen Python 2.7 / PyPy build, so it
-requires Docker, and the case set is only meaningful against that exact digest. A
-change to any of these five rows therefore lands red until a host with Docker
-records a new baseline, and the recipe for each is below.
+**None of that can land yet, and the reason is structural rather than a matter of
+effort.** The gate fails a run whose `baseline.json` lists a case that now passes,
+so a protocol fix _must_ ship with a regenerated baseline, and the baseline can
+only be recorded by the digest-pinned suite. That image is a frozen Python 2.7 /
+PyPy build, so it needs Docker, and the case set is only meaningful against that
+exact digest. A PyPI install is not a substitute: the published package is a
+broken Python 2 relic, and a `2to3` port of the `v25.10.1` source dies in the first
+case file on `str` versus `bytes` payload semantics, which is exactly where
+fidelity would be lost.
 
-| Gap        | What is actually missing                                                                                                                                                                                      | Where                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 12, 13     | `.compression = .permessage_deflate` on the route, plus the option reaching Zig: `NativeServerConfig` in `src/binding/native.ts` and `RawConfig` in `src/engine/server/options.zig` have no compression field | `src/engine/server/connections.zig:41` |
-| 9          | `9.7` and `9.8` are absent from `CAPACITY_RULES`, so twelve cases are counted as failures rather than capacity-blocked, or `message_capacity` raised above 64 KiB                                             | `tests/autobahn/expected-cases.ts:77`  |
-| 1, 6, 5, 7 | Not established. The recorded reasons are contradicted by the pinned code; a per-case `report.json` is the missing evidence                                                                                   | -                                      |
+So the roadmap for these rows is written down and mechanical, and each needs one
+Docker-capable host and one recorded run:
 
-`docs/compliance.md` records the status vocabulary these rows use.
+| Gap    | What is missing                                                                                                                     | Where                                                                   |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1      | Whichever of the two the 1009 is: a `message_capacity` below these payloads, or the cap applied where the suite does not expect one | `src/engine/server/capacities.zig`, or the vendored `zslay` limit check |
+| 5      | Whatever the two fragment-boundary cases disagree about, once one case report says                                                  | `src/engine/server/connections.zig` on the engine route                 |
+| 7      | The close-reason mapping: 1007 instead of 1001                                                                                      | the pinned engine's `close_payload_status`                              |
+| 12, 13 | `.compression = .permessage_deflate` on the route, plus the option reaching Zig                                                     | `src/engine/server/connections.zig`                                     |
+
+### Why the suite used to take 35 minutes
+
+Because it was failing. The report's per-case `duration` sums to 12 seconds across
+all 301 cases and never came close to the 2100s the suite step used to take,
+because the field spans `caseStart` at `onOpen` to `caseEnd` at `connectionLost`
+and so excludes the TCP connect and the opening handshake the client does per
+case. What the 2100s was: 229 failing cases waiting on the client's
+close-handshake timeout. Fixing the engine removed the timeouts, and the suite
+step is now 14s. `CI_CD_PIPELINE.md` has the step timings and what the remaining
+175s of build implies.
 
 ## WebSocketServer
 

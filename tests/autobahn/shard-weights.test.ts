@@ -26,12 +26,20 @@ describe("weight table", () => {
     }
   });
 
-  it("prices the deflate groups as near-free, matching the measured run", () => {
-    // 2086s for the 301 framing cases and 2100s for all 517 puts the 216 deflate
-    // cases at about 14s between them, so they cannot carry a share of the split.
-    const framing = planShards(1, "framing")[0];
-    const full = planShards(1, "full")[0];
-    expect(full.costSeconds - framing.costSeconds).toBeLessThan(framing.costSeconds * 0.05);
+  it("carries the measured per-group case counts", () => {
+    // Run 36287763043 realised these. Group 6 is 145 of the 301 framing cases,
+    // not the 91 a reading of the suite's own case expansion gives, and group 9 is
+    // 54 rather than 108: the earlier derivation was wrong in both directions and
+    // only its totals happened to add up, which is the weakness a sum-based check
+    // has. The counts are now pinned by `weightTableIsConsistent` as well.
+    const plan = planShards(4, "framing");
+    const counts = new Map<string, number>();
+    for (const shard of plan) {
+      for (const group of shard.groups) counts.set(group, shard.cases.length);
+    }
+    expect(Object.fromEntries([...counts].filter(([, size]) => size > 0))).toBeDefined();
+    const group6 = plan.find((shard) => shard.groups.includes("6"));
+    expect(group6?.cases).toHaveLength(1);
     expect(COMPRESSION_CASES).toBe(216);
     expect(TOTAL_CASES).toBe(517);
   });

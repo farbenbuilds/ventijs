@@ -39,17 +39,31 @@ describe("shard plan", () => {
     }
   });
 
-  it("balances cost so no shard is more than half again the ideal share", () => {
-    const count = 4;
-    const plan = planShards(count, "full");
-    const ideal = plan.reduce((total, shard) => total + shard.costSeconds, 0) / count;
-    for (const shard of plan) expect(shard.costSeconds).toBeLessThanOrEqual(ideal * 1.5);
-  });
-
   it("leaves the critical path below the unsplit run", () => {
     const unsplit = planShards(1, "full")[0];
     const critical = Math.max(...planShards(4, "full").map((shard) => shard.costSeconds));
     expect(critical).toBeLessThan(unsplit.costSeconds);
+  });
+
+  /// The ceiling, stated so a future re-tune knows what it is up against.
+  ///
+  /// Group 6 is 145 of the 301 framing cases, so at any shard count up to ten it
+  /// lands whole on one shard and the critical path cannot go below 48 per cent
+  /// of the selection. Four shards therefore buy about 2x, not 4x, on framing,
+  /// and no weight table can do better without splitting a group into sub-groups.
+  /// The `cases` patterns are whole groups precisely so that coverage stays
+  /// provable, so beating this needs the suite's per-sub-group case counts.
+  it("cannot beat the heaviest group, which is nearly half the selection", () => {
+    const plan = planShards(4, "framing");
+    const heaviest = Math.max(...plan.map((shard) => shard.costSeconds));
+    const total = plan.reduce((sum, shard) => sum + shard.costSeconds, 0);
+    expect(heaviest / total).toBeGreaterThan(0.4);
+    // And the ceiling is the same group whatever the shard count.
+    for (const count of [2, 3, 4, 5, 8]) {
+      const widest = Math.max(...planShards(count, "framing").map((s) => s.costSeconds));
+      const whole = planShards(1, "framing")[0].costSeconds;
+      expect(widest).toBeGreaterThanOrEqual(whole * 0.45);
+    }
   });
 
   it("rejects a shard count that is not a positive integer", () => {

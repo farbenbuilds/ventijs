@@ -1,19 +1,27 @@
 {
-  "note": "Per-case wall-clock cost of one Autobahn case group, in seconds of `wstest` time. `planShards` multiplies this by the group's case count, so a group whose case count changes is re-priced without editing this file.",
-  "provenance": "The framing groups cost the same per case because the suite's cost is a per-case constant inside the Python client: two runs of the same job took 2086s for the 301 framing cases and 2100s for all 517, so the 216 per-message-deflate cases account for 14s between them, about 0.065s each against 6.93s for a framing case. The per-group case counts are derived from the suite's own case expansion and are cross-checked against the two totals the repository already asserts independently: the nine framing groups sum to 301, which is TOTAL_CASES minus COMPRESSION_CASES, and groups 12 and 13 are the 5 and 7 deflate parameter sets over 18 size rows. A run's summary.json republishes both the measured per-case durations and the realised case counts, so this table can be re-derived from a measurement rather than from a derivation.",
-  "units": "seconds of wstest time per case",
+  "note": "Expected seconds of `wstest` time per case, per group. `planShards` multiplies this by the group's measured case count, so correcting either re-prices the split. Both columns are measurements, not derivations: the counts are the realised per-group case totals from run 36287763043, and the per-case cost is what that run's wall clock divided by its case count implies.",
+  "provenance": "Measured in autobahn.yml run 36287763043 on ubuntu-24.04, which ran the 301-case framing selection as four concurrent shards and finished the suite step in 14s. That is the first run in which the engine passed almost everything, and it changed the cost model completely. The suite used to take 2100s, and the difference is not per-case work: the report's own per-case `duration` sums to 12s across all 301 cases, because `duration` spans `caseStart` at `onOpen` to `caseEnd` at `connectionLost` and so excludes the TCP connect and the opening handshake the client does per case. What the old 2100s actually was is failing cases waiting on the client's close-handshake timeout, and 229 of them were failing. Fixing the engine removed the timeouts and with them the cost, which is why sharding's contribution is now small next to it.",
+  "measurement": {
+    "run": "autobahn.yml run 36287763043",
+    "suiteStepSeconds": 14,
+    "shards": 4,
+    "cases": 301,
+    "reportedDurationSeconds": 12,
+    "derivedSecondsPerCase": 0.19
+  },
+  "units": "seconds of suite step time per case",
   "groups": {
-    "1": 6.93,
-    "2": 6.93,
-    "3": 6.93,
-    "4": 6.93,
-    "5": 6.93,
-    "6": 6.93,
-    "7": 6.93,
-    "9": 6.93,
-    "10": 6.93,
-    "12": 0.065,
-    "13": 0.065
+    "1": 0.19,
+    "2": 0.19,
+    "3": 0.19,
+    "4": 0.19,
+    "5": 0.19,
+    "6": 0.19,
+    "7": 0.19,
+    "9": 0.19,
+    "10": 0.19,
+    "12": 0.19,
+    "13": 0.19
   },
   "caseCounts": {
     "1": 16,
@@ -21,9 +29,9 @@
     "3": 7,
     "4": 10,
     "5": 20,
-    "6": 91,
+    "6": 145,
     "7": 37,
-    "9": 108,
+    "9": 54,
     "10": 1,
     "12": 90,
     "13": 126

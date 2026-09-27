@@ -171,33 +171,43 @@ Status vocabulary, shared with [COMPATIBILITY.md](COMPATIBILITY.md):
 
 ## Protocol conformance, honestly
 
-The Autobahn suite ran end to end in CI on the first full attempt. The result:
+The Autobahn suite runs in `autobahn.yml` and is a regression gate: the cases the
+engine is known to fail are listed in `tests/autobahn/baseline.json`, anything
+failing outside that list fails the run, and a listed case that starts passing also
+fails the run until the list is shortened.
+
+The latest run, `36287763043`, over the 301-case framing selection:
 
 | Outcome                | Cases | Meaning                                             |
 | ---------------------- | ----- | --------------------------------------------------- |
-| Passed                 | 160   | Conformant                                          |
-| Failed                 | 229   | Tracked in `tests/autobahn/baseline.json`, by cause |
-| Skipped, over capacity | 128   | Above the 32 KiB message ceiling below              |
+| Passed                 | 248   | Conformant                                          |
+| Failed                 | 9     | Tracked in `tests/autobahn/baseline.json`, by cause |
+| Skipped, over capacity | 44    | Above the 32 KiB message ceiling below              |
 
-The 229 failures are the largest single source of remaining work, and they are
-not evenly spread: 132 are `permessage-deflate`; 76 are UTF-8 handling; 21 are
-fragmentation, limits, and close edges.
+The first run of the suite, on commit `47bfc68`, had 160 passing and 229 failing.
+The nine that remain are six in group 1 closed with 1009 where an echo is expected,
+two fragment-boundary cases in group 5, and `7.1.1` sending 1001 where the suite
+expects 1007. The two per-message-deflate groups are 132 more, carried over from
+the run that covered them: `permessage-deflate` is normalised and never
+negotiated, and it is UNIMPLEMENTED for want of one struct field on the engine's
+route registration.
 
-**Four of those five recorded causes do not survive a reading of the pinned
-engine.** The incremental UTF-8 decoder, fragment reassembly, the 1007 rejection,
-the close handshake, and the deflate codec are all present and correct in the
-vendored `uWebZockets` tree, and its own Autobahn target enables the extension on
-the same route ventijs uses. Groups 12 and 13 are UNIMPLEMENTED for want of one
-struct field on the route registration. Groups 1, 5, 6, and 7 are not explained by
-the recorded reasons at all. `COMPATIBILITY.md` has the code, the derivation, and
-the recipe per group.
+**Four of the five causes this table used to record do not survive a reading of the
+pinned engine.** The incremental UTF-8 decoder, fragment reassembly, the 1007
+rejection, the close handshake, and the deflate codec are all present and correct
+in the vendored `uWebZockets` tree, and its own Autobahn target enables the
+extension on the same route ventijs uses. `COMPATIBILITY.md` has the code, the
+per-group recipe, and why none of it can land without a recorded run: the gate
+fails a run whose baseline lists a case that now passes, so every protocol fix must
+ship with a regenerated baseline, and the baseline can only be recorded by the
+digest-pinned suite, which is a frozen Python 2.7 image and needs Docker.
 
-None of it can land yet, and the reason is structural rather than effort. The gate
-fails a run whose baseline lists a case that now passes, so every protocol fix
-must ship with a regenerated baseline, and the baseline can only be recorded by
-the digest-pinned suite, which is a frozen Python 2.7 image and needs Docker. That
-is a Docker-capable host and a recorded run, not a patch. The per-group breakdown
-and its reasoning are in
+The suite step also used to take 35 minutes, and it was slow for the same reason
+the failures were slow: the per-case `duration` the report carries sums to 12
+seconds across all 301 cases, because it excludes the connect and the opening
+handshake the client does per case. The 2100s was 229 failing cases waiting on
+the client's close-handshake timeout. The suite step is now 14s and the job's
+remaining cost is the 175s addon build. The per-group breakdown is in
 [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md) and in the baseline file itself, so the
 next person to pick this up does not have to re-derive it from a CI log.
 

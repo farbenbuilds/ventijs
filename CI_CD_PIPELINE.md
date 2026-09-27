@@ -186,39 +186,60 @@ itself, which cannot be the contract.
 
 ### What the job costs, and what was cut
 
-Measured step timings from a full run before sharding: setup 7s, Zig cache
-restore 10s, addon build 126s, image pull 16s, **suite 2100s**. The suite was 92
-per cent of the job, and it was not this project's cost: the target answers a
-connect, echo, and close in **0.42 ms**, so all 517 cases together are 0.2 seconds
-of target time against 35 minutes of suite time. The four seconds per case is
-inside `wstest`, which is Python, and nothing on the Node or Zig side can make it
-faster. The only lever was doing less of it, or doing it at the same time.
+Two runs of this job, six commits apart, and the difference is the whole story.
 
-The cost is also **not per case**, and that is what made the difference between
-the two levers. Two runs of the same job: the full selection took 2100s of suite
-time for 517 cases, the framing selection 2086s for 301. The 216 per-message
-deflate cases therefore account for 14s between them, about 0.065s each, against
-6.93s for a framing case. A deflate case whose extension is never negotiated is
-decided at the handshake and returns immediately, while the framing and UTF-8
-groups are where the client actually waits on its own handshake timers. So
-dropping 42 per cent of the cases saved nothing, and the selection that dropped
-them was not a speedup and never claimed to be: it exists to say in the report
-what it covered.
+Before the engine work, the suite step took **2100s** of a 37-minute job. The
+suite was 92 per cent of it, and the conclusion recorded here was that nothing on
+this side could reduce it, because the target answers a connect, echo, and close
+in 0.42 ms and the four seconds per case was inside `wstest`, which is Python.
 
-That leaves concurrency, and the concurrency has to be inside one job. A matrix
-of four _jobs_ would cut the wall clock the same way but pay the addon build four
-times, which is more total runner minutes for the same result. A matrix inside
-one job pays setup, the build, and the pull once and then runs four fuzzing
-clients against four targets, which is strictly better on both axes.
+That conclusion was right about the cause and wrong about the fix. The report's
+own per-case `duration` sums to **12 seconds across all 301 cases**, and it did
+not come close to 2100s before either. The field spans `caseStart` at `onOpen` to
+`caseEnd` at `connectionLost`, so it excludes the TCP connect and the opening
+handshake the client does per case. What the 2100s actually was: **failing cases
+waiting on the client's close-handshake timeout.** 229 of 517 were failing, and a
+case that waits for a timeout costs a timeout.
 
-So `AUTOBAHN_SHARDS` defaults to 4, one per runner core. Each shard gets its own
-target process on its own port from `SHARD_PORT_BASE`, its own generated
-`fuzzingclient.json`, and its own report directory; the reports are concatenated
-and the existing gate is evaluated over the union. The predicted critical path is
-748s against 2086s unsplit, so the suite step falls to about 12 minutes and the
-job to about 15. Four is chosen for the pessimistic reading as much as the
-optimistic one: if four concurrent Python reactors did contend for four cores,
-one shard per core still does not oversubscribe.
+So the order of the two fixes is the opposite of what this section previously
+claimed. The engine fixes took 97 of the 257 evaluated framing cases from failing
+to passing, which removed the timeouts that were the cost, and the suite step
+fell to **14s**. Sharding is real and it is kept, but on this evidence it is the
+smaller of the two: 301 cases as four concurrent clients finish in 14s, so the
+same work unsplit is on the order of a minute, and sharding is worth tens of
+seconds rather than the twenty minutes the previous revision of this file
+claimed.
+
+Measured step timings now: setup 21s, Zig cache restore 8s, install 2s, **addon
+build 175s**, image pull 18s, **suite 14s**. The build is the bottleneck and the
+suite is a rounding error, which inverts the only remaining lever worth
+discussing. The build is ~175s because the runner restored a cache whose key no
+longer matched and rebuilt; `zig build` against a warm `.zig-cache` is seconds.
+A two-tier cache that stores only `zig-out/lib/ventijs.node` under a key hashing
+every Zig source would skip both the 10s restore and the build on a hit, and
+`src/binding/load.ts` looks for that file first, so the path is real. It was
+dismissed earlier in this file as near-inert, on the reasoning that a key hashing
+the Zig sources can only hit when no Zig file changed, and the job only runs when
+one did. That reasoning was about the suite's share of the job; with the suite at
+14s the build is 77 per cent of it, and the same argument no longer decides
+anything. Worth doing, and deliberately not done in the same change as a protocol
+fix that needs a recorded run.
+
+So the suite cost, in order of effect:
+
+1. **Stop failing.** A case that fails waits for a timeout; a case that passes
+   does not. This is why the previous section's arithmetic -- 2086s for 301
+   framing cases, 2100s for all 517, therefore 6.93s per framing case -- produced
+   a number that turned out to be wrong by a factor of 36. It was derived from two
+   runs in which most cases failed, so it measured the timeout, not the case.
+2. **Shard inside one job.** Four concurrent fuzzing clients against four targets,
+   paying setup, the build, and the pull once. A matrix of N _jobs_ would cut the
+   same wall clock at the cost of building the addon N times, so it was rejected on
+   total runner minutes. On this evidence the saving is tens of seconds, and the
+   real reason to keep sharding is that it is already written, already tested, and
+   scales with the suite if the case count grows.
+3. **Skip a push that cannot change the answer.** The `gate` job below. This is
+   the largest remaining win by a wide margin, and it is free.
 
 The partition is safe by construction rather than by tuning. A shard owns **whole
 groups** and selects `N.*`, so the union of every shard is provably the same case
@@ -228,17 +249,31 @@ violation instead of being deduplicated into a pass. A mispriced weight therefor
 costs wall clock and nothing else, because the gate still holds the run to the
 mode's totals: 301/44/257 in `framing`, 517/128/389 in `full`.
 
-The ceiling on the speedup is group 9, which is 108 of the 301 framing cases and
-lands whole on one shard at any shard count up to ten. Group granularity caps the
-critical path at 748s however the rest is split. Beating it means expressing a
-heavy group as several globs, which needs the pinned suite's per-sub-group case
-counts, which are not in this repository. `tests/autobahn/cost-rollup.ts`
-publishes the measured per-group duration and case count on every run, so that
-table can be re-derived from a measurement rather than from a derivation, and the
-split retuned, without another investigation. The 748s figure is the weight
-table's arithmetic, not a measured sharded run: the per-case constant and the
-non-contention assumption are both derivations, and the first sharded run
-measures both.
+The ceiling is group 6, which is 145 of the 301 framing cases. At any shard count
+up to ten it lands whole on one shard, so the critical path cannot go below about
+48 per cent of the selection and four shards buy roughly 2x rather than 4x. The
+`cases` patterns are whole groups precisely so coverage stays provable, so beating
+this needs the suite's per-sub-group case counts, which are not in this
+repository. `tests/autobahn/cost-rollup.ts` publishes the measured per-group case
+count and duration on every run, so those counts are now data rather than a
+derivation -- and the first run showed the derivation was wrong: group 6 is 145
+cases, not the 91 the case expansion suggests, and group 9 is 54, not 108. Only
+the totals had matched.
+
+Two things tried and rejected:
+
+- **Reducing the client's timeouts.** `openHandshakeTimeout` and
+  `closeHandshakeTimeout` are settable through the spec's `options` block, and
+  lowering them is exactly the lever the measurements above say the old cost came
+  from. It is also the one change here that would corrupt the signal: those timers
+  are what turn a non-conformant close into a `FAILED` rather than a silent pass.
+  Making the suite fast by shortening the detection of failure is not a speedup.
+  Rejected.
+- **Excluding the capacity-blocked cases.** Tempting, since they are a large share
+  of the selection, and wrong twice over. The gate requires `counts.capacity` to
+  be 44 in `framing`, and the blocked set is decided by case id alone, so dropping
+  them would break the count contract and hide exactly the frame-and-payload-limit
+  gap the baseline records for group 1. Rejected.
 
 ### Skipping a push that cannot change the answer
 
