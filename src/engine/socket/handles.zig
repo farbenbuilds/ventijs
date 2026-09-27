@@ -37,8 +37,16 @@ const Slot = struct {
         return (@as(u64, generation) << 8) | @intFromEnum(state);
     }
 
+    /// Reconstructs the state from the low byte rather than with
+    /// `@enumFromInt`. Only `pack` ever writes that byte, so the switch is
+    /// total by construction; the cast would panic in a safe mode and be
+    /// undefined in a fast one if a second writer ever appeared.
     fn state_of(word: u64) State {
-        return @enumFromInt(@as(u8, @truncate(word)));
+        return switch (@as(u8, @truncate(word))) {
+            0 => .free,
+            1 => .active,
+            else => .free,
+        };
     }
 
     fn generation_of(word: u64) u32 {

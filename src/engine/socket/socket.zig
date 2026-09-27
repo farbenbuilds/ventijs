@@ -88,15 +88,13 @@ pub fn socket_slab(
             return ops.set_paused(slot, generation, paused);
         }
 
-        /// Flips the terminal latch. Returns true for exactly one caller per
-        /// connection generation; every other terminal path observes false.
-        pub fn latch_terminal(slab: *Self, index: u32) bool {
-            const slot = slab.slot_at(index) orelse return false;
-            return slot.terminal.cmpxchgStrong(false, true, .acq_rel, .acquire) == null;
-        }
-
         /// Latches the terminal transition and marks the slot closed. The
         /// winning caller owns the single close emission and slab release.
+        ///
+        /// This is the only terminal latch. It used to have a second,
+        /// lock-free form that flipped the same word without setting the state;
+        /// nothing in the addon called it, so there were two latches for one job
+        /// and one of them was reachable only from a test.
         pub fn finish(slab: *Self, index: u32) bool {
             const slot = slab.slot_at(index) orelse return false;
             slot.lock();
@@ -109,10 +107,16 @@ pub fn socket_slab(
         /// Accounts bytes the engine thread drained from the staging ring.
         /// The drain is the single caller; the lock keeps the saturation check
         /// atomic against it.
-        pub fn note_drained(slab: *Self, index: u32, drained: u32) void {
+        ///
+        /// The generation is re-checked under the record lock like every other
+        /// transition. A payload released after its connection's slot was
+        /// recycled would otherwise debit the new occupant's `bufferedAmount`,
+        /// which reports a connection as drained when nothing of its was sent.
+        pub fn note_drained(slab: *Self, index: u32, generation: u32, drained: u32) void {
             const slot = slab.slot_at(index) orelse return;
             slot.lock();
             defer slot.unlock();
+            if (slot.generation != generation) return;
             const current = slot.buffered.load(.acquire);
             slot.buffered.store(current - @min(drained, current), .release);
         }

@@ -107,11 +107,18 @@ pub fn payload_ring(comptime slots: usize, comptime slot_bytes: usize) type {
             const difference = @as(isize, @bitCast(sequence -% (pos +% 1)));
             if (difference < 0) return null;
             const slot = pos % slots;
+            // The stored length is the only thing that decides how much of a
+            // fixed-size slot is read, so it is clamped at the read site rather
+            // than trusted from the producer's earlier check. One `min` on a cold
+            // path buys a slice that is in bounds by construction, which is what
+            // a release build needs.
+            const stored = ring.lengths[slot];
+            const length: usize = @min(@as(usize, stored), slot_bytes);
             return .{
                 .kind = ring.kinds[slot],
                 .index = ring.indices[slot],
                 .generation = ring.generations[slot],
-                .bytes = ring.bytes[slot][0..ring.lengths[slot]],
+                .bytes = ring.bytes[slot][0..length],
                 .sequence = pos,
             };
         }

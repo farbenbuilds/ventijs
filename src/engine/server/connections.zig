@@ -91,23 +91,29 @@ fn on_open(slot: usize, ws: *uwz.WebSocket) void {
 
 /// Copies one parsed message into the server's inbound ring and wakes the Node
 /// main thread. The bytes only borrow the engine's own message buffer for the
-/// duration of this call, so the copy is what makes the payload survive past
-/// the callback.
+/// duration of this call, so the copy is what makes the payload survive past the
+/// callback.
 ///
-/// A paused connection drops here rather than in the compatibility layer, so a
-/// `pause()` stops staging and not merely stops dispatch. A full ring also
-/// drops: the engine reads the next frame without waiting for JavaScript, so
-/// the buffer has to be bounded somewhere.
+/// A paused connection still stages, and only the wakeup is withheld: `ws.pause()`
+/// stops the socket *emitting* events, it does not discard what the peer sent. An
+/// earlier version returned before staging, which dropped the message silently
+/// and uncounted, so `serverDroppedMessages` reported zero while data was being
+/// lost. Staging while paused keeps the bytes for `resume()` and lets a ring that
+/// genuinely fills report a counted drop.
+///
+/// A ring that refused the message produces no event either. Announcing one that
+/// was never staged leaves JavaScript waiting for bytes that do not exist, and
+/// the drop counter is the only honest evidence.
 fn on_message(slot: usize, ws: *uwz.WebSocket, bytes: []const u8, opcode: uwz.Opcode) void {
     const server = instance.lookup_slot(@intCast(slot)) orelse return;
     const index = connection_index(server, ws) orelse return;
-    if (server.sockets.is_paused(index)) return;
     const generation = server.slab.generation_at(index) orelse return;
     const kind: payload.Kind = switch (opcode) {
         .text => .text,
         else => .binary,
     };
-    queues.stage_inbound(&server.sockets, index, generation, kind, bytes);
+    if (!queues.stage_inbound(&server.sockets, index, generation, kind, bytes)) return;
+    if (server.sockets.is_paused(index)) return;
     _ = server.channel.emit(.{
         .kind = .connection_message,
         .server = server.handle.to_int(),

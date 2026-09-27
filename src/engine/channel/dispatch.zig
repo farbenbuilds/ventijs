@@ -37,5 +37,14 @@ pub fn call_js(
     var receiver: c.napi_value = undefined;
     if (c.napi_get_undefined(raw_env, &receiver) != .ok) return;
     var result: c.napi_value = undefined;
-    _ = c.napi_call_function(raw_env, receiver, js_callback, 1, @ptrCast(&value.handle), &result);
+    const call = c.napi_call_function(raw_env, receiver, js_callback, 1, @ptrCast(&value.handle), &result);
+    if (call == .ok) return;
+    // A JavaScript exception is left pending on purpose: Node reports it as an
+    // uncaught exception, which is where a throwing dispatch handler belongs, and
+    // clearing it here would hide a real bug. Any other failure has no such
+    // channel, so it is reported on stderr rather than discarded, which is what
+    // the previous `_ =` did with it.
+    var pending: bool = false;
+    if (c.napi_is_exception_pending(raw_env, &pending) == .ok and pending) return;
+    std.debug.print("ventijs: dispatch callback failed with napi status {d}\n", .{@intFromEnum(call)});
 }
