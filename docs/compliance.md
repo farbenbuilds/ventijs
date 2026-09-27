@@ -44,6 +44,20 @@ construction, and calling them `todo` would imply a plan that does not exist.
 - `partial` is not a polite word for `todo`. It means the surface exists, a
   caller can reach it, and something observable is missing. The note says what.
 
+## Re-recording the Autobahn baseline
+
+The gate's evaluation half needs nothing but a report. `node tests/autobahn/run.ts
+--from-report PATH` reads an existing `servers/index.json` and produces the same summary
+and the same exit code a full run does, with no container, no target, and no network.
+
+Generating that report is the part that needs the digest-pinned fuzzing client, which is
+a frozen Python 2.7 image and so a Docker-capable host. The two halves were conflated,
+which made "I have no Docker here" read as "I cannot check the gate at all" -- and that
+is the reason a protocol fix could not ship alongside a regenerated baseline, since the
+gate deliberately _fails_ a run whose `baseline.json` lists a case that now passes.
+
+So the loop is: record on a Docker-capable host, copy the report out, gate it anywhere.
+
 ## Updating these tables
 
 Update the affected row in the same change that moves the status.
@@ -76,6 +90,20 @@ The client is the other half of the same decision and is implemented: Node's `ne
 client masks and a server must not. `src/compat/client/` splits the handshake into the
 decisions it is made of, and `tests/compat/client/` runs a real `ws` server as the peer
 in both directions, the mirror of the codec route's suites.
+
+## Re-recording the Autobahn baseline
+
+The gate's evaluation half needs nothing but a report. `node tests/autobahn/run.ts
+--from-report PATH` reads an existing `servers/index.json` and produces the same summary
+and the same exit code a full run does, with no container, no target, and no network.
+
+Generating that report is the part that needs the digest-pinned fuzzing client, which is
+a frozen Python 2.7 image and so a Docker-capable host. The two halves were conflated,
+which made "I have no Docker here" read as "I cannot check the gate at all" -- and that
+is the reason a protocol fix could not ship alongside a regenerated baseline, since the
+gate deliberately _fails_ a run whose `baseline.json` lists a case that now passes.
+
+So the loop is: record on a Docker-capable host, copy the report out, gate it anywhere.
 
 ## Updating these tables
 

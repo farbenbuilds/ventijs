@@ -11,6 +11,13 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SCAN_ROOTS = ["src", "tests"];
 const EXEMPT = new Set(["src/types/ws.d.ts"]);
+
+// Generated output that lands inside a scanned root. The Autobahn harness writes its
+// report and summary under `tests/autobahn/reports/`, which is gitignored, and a
+// generated summary is a thousand lines of prose about a run rather than source. The
+// scanner walks the filesystem rather than the index, so without this a suite run
+// leaves a file that fails the line budget on the next `pnpm lint`.
+const GENERATED_ROOTS = ["tests/autobahn/reports/"];
 const MAX_LINES = 150;
 const TEXT_EXTENSIONS = new Set([
   ".ts",
@@ -48,6 +55,7 @@ function walk(directory) {
 function check(path) {
   const name = relative(ROOT, path);
   if (EXEMPT.has(name)) return;
+  if (GENERATED_ROOTS.some((root) => name.startsWith(root))) return;
   const extension = name.slice(name.lastIndexOf("."));
   if (!TEXT_EXTENSIONS.has(extension)) return;
   const source = readFileSync(path, "utf8");
