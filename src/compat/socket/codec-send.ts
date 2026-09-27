@@ -1,8 +1,9 @@
-import { createError } from "../errors";
 import type { SocketState } from "../../types/socket";
 import { defer, notOpenError, type SocketPayload } from "./payload";
 import { frameError, writeFrame } from "./codec-outbound";
+import { createError } from "../errors";
 import { reportFailure } from "./send-failure";
+import { queuedBytes } from "./queued";
 
 /// Frames one message and writes it, for a socket the codec owns.
 ///
@@ -14,9 +15,11 @@ export function sendFramed(state: SocketState, payload: SocketPayload, callback:
   const status = writeFrame(state, payload.binary ? "binary" : "text", payload.bytes);
   switch (status) {
     case "ok":
-      // A framed write reaches the transport synchronously, so the bytes are already
-      // accounted for by the time the callback runs and there is nothing to add.
-      state.bufferedAmount = 0;
+      // Re-read rather than zeroed: `ws` reports the sender's queue length, and a
+      // transport that is still draining holds the bytes it was handed. Zeroing it here
+      // would report a socket with a megabyte queued as idle, which is the one number
+      // a caller polls to decide whether to stop sending.
+      state.bufferedAmount = queuedBytes(state);
       defer(callback);
       return;
     case "backpressure":
@@ -24,7 +27,7 @@ export function sendFramed(state: SocketState, payload: SocketPayload, callback:
     case "closed":
       // Not a failure: `ws` reports these through the callback and leaves the socket
       // alone, because a send that arrived too late is not a fault of the socket.
-      state.bufferedAmount += payload.bytes.length;
+      state.bufferedAmount = queuedBytes(state);
       defer(callback, notOpenError(state.readyState));
       return;
     case "invalid-handle":

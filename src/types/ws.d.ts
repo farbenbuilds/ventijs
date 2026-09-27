@@ -171,17 +171,17 @@ declare class WebSocket extends EventEmitter {
     event: "ping" | "pong",
     listener: (this: WebSocket, data: Buffer) => void,
   ): this;
+  // Narrowed from @types/ws: this client owns a `net.Socket` rather than an
+  // `http.ClientRequest`, so there is no request object to hand a listener. The URL and
+  // the status are what a caller needs in order to decide, and `close()` is how it
+  // declines. See `docs/compliance-api.md`.
   on(
     event: "redirect",
-    listener: (this: WebSocket, url: string, request: ClientRequest) => void,
+    listener: (this: WebSocket, url: string) => void,
   ): this;
   on(
     event: "unexpected-response",
-    listener: (
-      this: WebSocket,
-      request: ClientRequest,
-      response: IncomingMessage,
-    ) => void,
+    listener: (this: WebSocket, url: string, status: number) => void,
   ): this;
   on(
     event: string | symbol,
@@ -212,15 +212,11 @@ declare class WebSocket extends EventEmitter {
   ): this;
   once(
     event: "redirect",
-    listener: (this: WebSocket, url: string, request: ClientRequest) => void,
+    listener: (this: WebSocket, url: string) => void,
   ): this;
   once(
     event: "unexpected-response",
-    listener: (
-      this: WebSocket,
-      request: ClientRequest,
-      response: IncomingMessage,
-    ) => void,
+    listener: (this: WebSocket, url: string, status: number) => void,
   ): this;
   once(
     event: string | symbol,
@@ -251,15 +247,11 @@ declare class WebSocket extends EventEmitter {
   ): this;
   off(
     event: "redirect",
-    listener: (this: WebSocket, url: string, request: ClientRequest) => void,
+    listener: (this: WebSocket, url: string) => void,
   ): this;
   off(
     event: "unexpected-response",
-    listener: (
-      this: WebSocket,
-      request: ClientRequest,
-      response: IncomingMessage,
-    ) => void,
+    listener: (this: WebSocket, url: string, status: number) => void,
   ): this;
   off(
     event: string | symbol,
@@ -283,11 +275,11 @@ declare class WebSocket extends EventEmitter {
   addListener(event: "ping" | "pong", listener: (data: Buffer) => void): this;
   addListener(
     event: "redirect",
-    listener: (url: string, request: ClientRequest) => void,
+    listener: (url: string) => void,
   ): this;
   addListener(
     event: "unexpected-response",
-    listener: (request: ClientRequest, response: IncomingMessage) => void,
+    listener: (url: string, status: number) => void,
   ): this;
   addListener(event: string | symbol, listener: (...args: any[]) => void): this;
 
@@ -311,11 +303,11 @@ declare class WebSocket extends EventEmitter {
   ): this;
   removeListener(
     event: "redirect",
-    listener: (url: string, request: ClientRequest) => void,
+    listener: (url: string) => void,
   ): this;
   removeListener(
     event: "unexpected-response",
-    listener: (request: ClientRequest, response: IncomingMessage) => void,
+    listener: (url: string, status: number) => void,
   ): this;
   removeListener(
     event: string | symbol,

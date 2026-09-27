@@ -1,4 +1,5 @@
 import { socketBufferedAmount } from "../../binding/socket";
+import { queuedBytes } from "./queued";
 import type { CodedError } from "../../types/errors";
 import type { SocketState } from "../../types/socket";
 import type { ErrorStatus } from "../../types/status";
@@ -63,8 +64,12 @@ export function statusError(status: ErrorStatus): CodedError {
   return createStatusError(status, `ventijs: socket operation failed with status "${status}"`);
 }
 
+/// The staged bytes for a socket the engine owns.
+///
+/// A transport-owned socket has no staging ring to ask, so it reads the transport's
+/// own queue instead; see `queued.ts`.
 export function bufferedAmountOf(state: SocketState): number {
-  if (state.attachment === null) return state.bufferedAmount;
+  if (state.attachment === null) return queuedBytes(state);
   return socketBufferedAmount(state.attachment.server, state.attachment.connection);
 }
 

@@ -64,6 +64,8 @@ export function completeUpgrade(
   // empty protocol on a connection the server had already selected one for.
   const acceptedState = socketStateOf(accepted);
   if (acceptedState !== undefined && protocol) acceptedState.protocol = protocol;
+  if (acceptedState !== undefined)
+    acceptedState.closeTimeout = state.normalizedOptions.closeTimeout;
   attachSocket(accepted, socket);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);
   callback(accepted, request);

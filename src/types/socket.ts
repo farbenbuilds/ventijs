@@ -1,4 +1,4 @@
-import type { IncomingMessage, ClientRequest } from "node:http";
+import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { ConnectionHandle } from "../binding/handle";
 import type { ServerHandle } from "../binding/server";
@@ -27,8 +27,14 @@ export type SocketEventMap = {
   ping: [data: Buffer];
   pong: [data: Buffer];
   upgrade: [request: IncomingMessage];
-  redirect: [url: string, request: ClientRequest];
-  "unexpected-response": [request: ClientRequest, response: IncomingMessage];
+  /// The URL a redirect would send the client to. `ws` passes its `ClientRequest` as a
+  /// second argument; this client owns a `net.Socket` rather than an `http.ClientRequest`
+  /// and has none to hand over, so the event carries the one thing a caller needs in
+  /// order to decide, and `close()` is how it declines. The divergence is recorded in
+  /// `docs/compliance-api.md`.
+  redirect: [url: string];
+  /// The URL that was refused and the status it was refused with, for the same reason.
+  "unexpected-response": [url: string, status: number];
 };
 
 /// The generation-checked handles a native connection routes through. A
@@ -60,6 +66,18 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// The frame codec for this connection, or null before one is opened and after
   /// one is released. Null for native attachments, which the engine frames itself.
   codec: bigint | null;
+  /// The pending close-handshake deadline, or null when none is armed. A socket that
+  /// is finished by the peer, by a refusal, or by `terminate` has to drop it, and the
+  /// one place that knows which happened is the state itself.
+  closeTimer: ReturnType<typeof setTimeout> | null;
+  /// Milliseconds a close handshake on this socket may stay unfinished, resolved from
+  /// the options that created it. On the socket rather than read from a server's
+  /// options because a socket outlives the option record's scope, and a server socket
+  /// has no server reference to read it from.
+  closeTimeout: number;
+  /// Whether a ping is answered automatically. On the socket because the decision is
+  /// made per frame in the inbound path, where the peer is known to be a client.
+  autoPong: boolean;
 };
 
 export type SocketRegistry = Registry<SocketEventMap>;

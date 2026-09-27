@@ -96,8 +96,9 @@ function dispatch(state: SocketState, handle: bigint, event: CodecEvent): void {
     case "ping":
       // Section 5.5.2 requires the pong promptly, so it goes out before the
       // application hears about the ping: a listener that blocks would otherwise
-      // delay the answer past its deadline.
-      writePong(state, event.payload);
+      // delay the answer past its deadline. `autoPong: false` is the one caller choice
+      // that suppresses it, and the application answers with `pong()` itself.
+      if (state.autoPong) writePong(state, event.payload);
       emitEvent(state, "ping", event.payload);
       return;
     case "pong":

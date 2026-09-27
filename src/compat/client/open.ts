@@ -1,10 +1,15 @@
 import { CODEC_ROLE } from "../../binding/codec";
 import type { WebSocket } from "../../types/ws";
 import { attachSocket } from "../socket/attach";
+import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED } from "../ready-state";
+import { buildRequest, newKey } from "./request";
 import { extensionsRejection, parseResponse, rejection } from "./response";
+import { decide, isRedirect, reportUnexpected } from "./redirect";
+import { dial } from "./connect";
 import { abort, type Attempt } from "./connect";
+import { openTransport } from "./transport";
 
 /// Checks a complete response, then either opens the socket or refuses it.
 ///
@@ -22,6 +27,36 @@ export function respond(attempt: Attempt, bytes: Buffer): void {
     return;
   }
   const response = parseResponse(bytes);
+  // A redirect is a routing answer rather than a refusal, so it is handled before the
+  // 101 checks: a 302 has no `Sec-WebSocket-Accept` and would be reported as an invalid
+  // handshake rather than as the redirect it is.
+  const location = response.headers.location;
+  if (isRedirect(response.status, location)) {
+    const next = decide(attempt, location ?? "", attempt.address);
+    if (next !== null) {
+      // The old transport answered and has nothing more to say; the new one takes over
+      // from the same attempt, so the socket, its options, and its redirect count all
+      // survive.
+      attempt.transport.destroy();
+      attempt.transport = openTransport(next);
+      attempt.handshake = buildRequest(
+        next,
+        attempt.options,
+        attempt.requested,
+        newKey(),
+        attempt.auth,
+      );
+      attempt.redirects += 1;
+      if (attempt.redirects > 1) emitEvent(attempt.state, "redirect", next.url);
+      dial(attempt);
+      return;
+    }
+    return;
+  }
+  if (response.status !== 101) {
+    reportUnexpected(attempt, response.status);
+    return;
+  }
   const refused = rejection(response, attempt.handshake, attempt.offered);
   if (refused !== null) {
     abort(attempt, createError("ERR_PROTOCOL", refused));

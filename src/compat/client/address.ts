@@ -8,6 +8,11 @@ export type ClientAddress = {
   /// The host, with an IPv6 literal's brackets removed, because `net` and `tls` want
   /// the address rather than the URL form.
   readonly host: string;
+  /// `host:port`, which is what a redirect is compared against. Two peers on one host
+  /// but different ports are different origins, and a credential given to one is not
+  /// given to the other; comparing the hostname alone would carry a password across
+  /// that boundary.
+  readonly authority: string;
   readonly port: number;
   /// The request target: path and query, with a `/` when the URL has neither.
   readonly path: string;
@@ -65,11 +70,14 @@ function build(parsed: URL, scheme: ClientScheme): ClientAddress {
   // form even when the caller passed `http:`, which is what `ws` reports.
   parsed.protocol = scheme;
   const hasCredentials = parsed.username !== "" || parsed.password !== "";
+  const host = parsed.hostname.startsWith("[") ? parsed.hostname.slice(1, -1) : parsed.hostname;
+  const port = parsed.port === "" ? DEFAULT_PORTS[scheme] : Number(parsed.port);
   return {
     url: parsed.href,
     secure: scheme === "wss:",
-    host: parsed.hostname.startsWith("[") ? parsed.hostname.slice(1, -1) : parsed.hostname,
-    port: parsed.port === "" ? DEFAULT_PORTS[scheme] : Number(parsed.port),
+    host,
+    authority: parsed.host,
+    port,
     path: `${parsed.pathname}${parsed.search}`,
     auth: hasCredentials ? `${parsed.username}:${parsed.password}` : undefined,
   };
