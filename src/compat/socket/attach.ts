@@ -45,6 +45,9 @@ export function attachSocket(socket: WebSocket, transport: Duplex): void {
     transport.end();
   });
   transport.on("error", () => {
+    // Latch before destroying, matching `ws`'s socket error path: the terminal
+    // state is `CLOSING` from here, not `OPEN` on a dead transport.
+    if (state.readyState !== CLOSED) state.readyState = CLOSING;
     transport.destroy();
   });
   transport.on("close", () => {

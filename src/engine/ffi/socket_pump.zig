@@ -14,7 +14,7 @@
 //! silently dropped here.
 
 const napi = @import("napi-zig");
-const connections = @import("../server/connections.zig");
+const topic = @import("../server/topic.zig");
 const instance = @import("../server/instance.zig");
 const queues = @import("../socket/queues.zig");
 const status = @import("../socket/status.zig");
@@ -103,8 +103,8 @@ fn flush(target: *instance.Instance) status.Status {
 }
 
 fn queue(target: *instance.Instance, view: anytype) usize {
-    var buffer: [connections.topic_capacity]u8 = undefined;
-    const topic = connections.write_topic(&buffer, view.index, view.generation);
+    var buffer: [topic.topic_capacity]u8 = undefined;
+    const name = topic.write_topic(&buffer, view.index, view.generation);
     const is_text = view.kind == .text;
-    return target.cluster.publish(topic, view.bytes, is_text) catch 0;
+    return target.cluster.publish(name, view.bytes, is_text) catch 0;
 }

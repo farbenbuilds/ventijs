@@ -1,5 +1,5 @@
 import type { ReadyState } from "../../types/close";
-import type { BinaryType } from "../../types/socket";
+import type { BinaryTypeValue } from "../../types/socket";
 import type { ClientOptions, ServerOptions, WebSocket } from "../../types/ws";
 import { createEmitter } from "../events/emitter";
 import { createError } from "../errors";
@@ -21,6 +21,15 @@ import { sendData } from "./send";
 import { brandSocket, createSocketState } from "./state";
 
 export { isSocket } from "./state";
+
+/// Every value the setter accepts. One list, so the setter and the record's type
+/// cannot disagree about what "binary" means.
+const BINARY_TYPE_VALUES: readonly BinaryTypeValue[] = [
+  "nodebuffer",
+  "arraybuffer",
+  "fragments",
+  "blob",
+];
 
 /// The `ws`-shaped socket record. Client construction is deferred, so a
 /// non-null address reports the deferred scope; `null` builds the server-side
@@ -45,21 +54,20 @@ export function createSocket(
     OPEN,
     CLOSING,
     CLOSED,
-    get binaryType(): string {
+    // Reports the stored value, including "blob". `@types/ws` narrows the public
+    // type to the three Buffer views, and `createSocket` is annotated as
+    // returning `WebSocket`, so that narrowing is the vendored contract's rather
+    // than this getter's to invent.
+    get binaryType(): BinaryTypeValue {
       return state.binaryType;
     },
     set binaryType(value: string) {
-      // `ws` also accepts "blob" whenever the Blob global exists; the vendored
-      // types omit it, so the record widens only at runtime.
-      if (
-        value !== "nodebuffer" &&
-        value !== "arraybuffer" &&
-        value !== "fragments" &&
-        value !== "blob"
-      ) {
-        return;
-      }
-      state.binaryType = value as BinaryType;
+      // `ws` accepts "blob" whenever the Blob global exists and silently ignores
+      // anything else. `state.binaryType` is typed as the widened union, so this
+      // is a narrowing check rather than an assertion that could be wrong.
+      const accepted = BINARY_TYPE_VALUES.includes(value as BinaryTypeValue);
+      if (!accepted) return;
+      state.binaryType = value as BinaryTypeValue;
     },
     get bufferedAmount(): number {
       return state.bufferedAmount;

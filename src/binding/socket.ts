@@ -1,7 +1,7 @@
 import type { EngineStatus } from "../types/status";
 import type { ConnectionHandle } from "./handle";
 import { NATIVE_SOCKET_STATUSES, type NativeSocketStatus } from "./native";
-import { callNative } from "./errors";
+import { callNative, guardError } from "./errors";
 import { assertConnectionHandle } from "./handle";
 import { loadAddon } from "./load";
 import { assertServerHandle, type ServerHandle } from "./server";
@@ -23,7 +23,11 @@ const ENGINE_STATUS_BY_NATIVE: Readonly<Record<NativeSocketStatus, EngineStatus>
 
 function assertPayload(data: Uint8Array): void {
   if (!(data instanceof Uint8Array)) {
-    throw new TypeError("ventijs: socket payload must be a Uint8Array");
+    throw guardError(
+      "ventijs: socket payload must be a Uint8Array",
+      TypeError,
+      "ERR_INVALID_OPTION",
+    );
   }
 }
 
@@ -32,14 +36,18 @@ function assertPayload(data: Uint8Array): void {
 function statusFromOrdinal(ordinal: number): EngineStatus {
   const status = NATIVE_SOCKET_STATUSES[ordinal];
   if (status === undefined) {
-    throw new RangeError(`ventijs: unknown native socket status ${ordinal}`);
+    throw guardError(
+      `ventijs: unknown native socket status ${ordinal}`,
+      RangeError,
+      "ERR_PROTOCOL",
+    );
   }
   return ENGINE_STATUS_BY_NATIVE[status];
 }
 
 function assertCloseCode(code: number): void {
   if (!Number.isInteger(code) || code < 0 || code > MAX_UINT16) {
-    throw new RangeError(`ventijs: close code must be a uint16, got ${code}`);
+    throw guardError(`ventijs: close code must be a uint16, got ${code}`);
   }
 }
 

@@ -1,5 +1,5 @@
 import type { EngineDispatch, NativeServerConfig } from "./native";
-import { callNative } from "./errors";
+import { callNative, guardError } from "./errors";
 import { loadAddon } from "./load";
 
 export type ServerHandle = number;
@@ -20,7 +20,7 @@ const INTEGER_CONFIG_FIELDS = [
 
 export function assertServerHandle(handle: ServerHandle): void {
   if (!Number.isSafeInteger(handle) || handle < 0 || handle > MAX_SERVER_HANDLE) {
-    throw new RangeError(`ventijs: server handle must be a uint40, got ${handle}`);
+    throw guardError(`ventijs: server handle must be a uint40, got ${handle}`);
   }
 }
 
@@ -29,9 +29,7 @@ function assertConfigIntegers(config: NativeServerConfig): void {
     const value = config[field];
     if (value === undefined) continue;
     if (!Number.isSafeInteger(value)) {
-      throw new RangeError(
-        `ventijs: server config "${field}" must be a safe integer, got ${value}`,
-      );
+      throw guardError(`ventijs: server config "${field}" must be a safe integer, got ${value}`);
     }
   }
 }

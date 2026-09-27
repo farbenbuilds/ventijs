@@ -37,6 +37,21 @@ export function nativeError(error: unknown): CodedError {
   return Object.assign(new Error(name), { code });
 }
 
+/// A guard failure: a value the caller passed that the binding refuses before
+/// any native call is made.
+///
+/// Coded like every other error in the repository. These are the checks that keep
+/// a bad value away from the ABI, and an uncoded `RangeError` here is the one
+/// error shape a consumer sees that carries no stable code, which is exactly the
+/// thing the error policy exists to prevent.
+export function guardError(
+  message: string,
+  constructor: ErrorConstructor = RangeError,
+  code: ErrorCode = "ERR_INVALID_HANDLE",
+): CodedError {
+  return Object.assign(new constructor(message), { code });
+}
+
 /// Runs a native call, converting a native failure into a coded `Error`.
 export function callNative<T>(call: () => T): T {
   try {

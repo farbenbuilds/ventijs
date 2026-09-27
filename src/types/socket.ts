@@ -6,8 +6,14 @@ import type { ReadyState } from "./close";
 import type { EmitterState, Registry } from "./events";
 import type { WebSocket } from "./ws";
 
-/// Binary payload views the socket can produce.
+/// Binary payload views the socket can produce, as `@types/ws` declares them.
 export type BinaryType = "nodebuffer" | "arraybuffer" | "fragments";
+
+/// The same union widened by the one value `ws` accepts at runtime but the
+/// vendored types omit: `binaryType = "blob"` is legal wherever the `Blob`
+/// global exists. The record holds this and the public getter narrows to
+/// `BinaryType`, so the state is never typed as a value it can hold wrongly.
+export type BinaryTypeValue = BinaryType | "blob";
 
 export type SocketEventMap = {
   open: [];
@@ -33,7 +39,7 @@ export type SocketState = EmitterState<SocketEventMap> & {
   url: string;
   protocol: string;
   extensions: string;
-  binaryType: BinaryType;
+  binaryType: BinaryTypeValue;
   readyState: ReadyState;
   bufferedAmount: number;
   isPaused: boolean;

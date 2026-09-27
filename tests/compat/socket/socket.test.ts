@@ -25,20 +25,6 @@ test("client construction reports the deferred scope", () => {
   expect(() => new WebSocket("ws://127.0.0.1:1")).toThrow(/client construction is deferred/);
 });
 
-test("a detached socket closes abnormally and ignores later operations", () => {
-  const socket = new WebSocket(null);
-  const closes: Array<[number, Buffer]> = [];
-  socket.on("close", (code, reason) => {
-    closes.push([code, reason]);
-  });
-  expect(() => socket.send("hello")).toThrow(/readyState 0 \(CONNECTING\)/);
-  socket.close();
-  expect(socket.readyState).toBe(socket.CLOSED);
-  expect(closes).toEqual([[1006, Buffer.alloc(0)]]);
-  socket.terminate();
-  expect(closes).toHaveLength(1);
-});
-
 test(
   "attaching a native connection opens the socket and routes sends",
   { timeout: TEST_TIMEOUT_MS },

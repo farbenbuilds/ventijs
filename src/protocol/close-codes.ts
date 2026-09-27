@@ -21,6 +21,16 @@ export const APPLICATION_CLOSE_MIN = 3000;
 export const APPLICATION_CLOSE_MAX = 4999;
 export const MAX_CLOSE_REASON_LENGTH = 123;
 
+/// RFC 6455 §5.5 caps every control frame at 125 bytes. A close frame spends two
+/// of them on the code, which is where `MAX_CLOSE_REASON_LENGTH` comes from; a
+/// ping or pong spends none, so the cap is stated in its own terms rather than
+/// derived from the close case.
+export const MAX_CONTROL_PAYLOAD_BYTES = 125;
+
+export function isValidControlPayload(payload: string | Buffer): boolean {
+  return Buffer.byteLength(payload) <= MAX_CONTROL_PAYLOAD_BYTES;
+}
+
 export function isValidStatusCode(code: number): boolean {
   if (code >= APPLICATION_CLOSE_MIN && code <= APPLICATION_CLOSE_MAX) return true;
   return (

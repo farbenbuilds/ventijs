@@ -11,17 +11,32 @@ import {
   requestHeader,
 } from "./handshake";
 import { completeUpgrade, type UpgradeCallback } from "./accept";
+import { attachHandshakeError } from "./handshake-error";
 
 /// The `info` record a `verifyClient` hook receives. Its runtime `origin` can
 /// be undefined even though the vendored type declares `string`.
 type VerifyClientRequest = Parameters<VerifyClientCallbackSync>[0];
 
-export function shouldHandle(state: ServerState, request: IncomingMessage): boolean {
+/// The built-in routing rule: a server with no `path` accepts everything, and a
+/// server with one matches it against the request path without its query.
+export function defaultShouldHandle(state: ServerState, request: IncomingMessage): boolean {
   const path = state.options.path;
   if (!path) return true;
   const url = request.url ?? "";
   const index = url.indexOf("?");
   return (index !== -1 ? url.slice(0, index) : url) === path;
+}
+
+/// The routing decision, resolved through the server record's own method.
+///
+/// `ws` evaluates `this.shouldHandle(request)`, so a caller who reassigns
+/// `server.shouldHandle` changes the decision. Calling a captured predicate, or
+/// the module-level rule, made the documented override a no-op that still passed
+/// any test which invoked the method directly.
+export function shouldHandle(state: ServerState, request: IncomingMessage): boolean {
+  const assigned = state.record?.shouldHandle;
+  if (typeof assigned === "function") return assigned(request);
+  return defaultShouldHandle(state, request);
 }
 
 /// Mirrors `WebSocketServer.handleUpgrade`: validate the handshake, apply
@@ -34,9 +49,7 @@ export function handleUpgrade(
   head: Buffer,
   callback: UpgradeCallback,
 ): void {
-  socket.on("error", () => {
-    socket.destroy();
-  });
+  attachHandshakeError(socket);
 
   const key = request.headers["sec-websocket-key"];
   const upgrade = request.headers.upgrade;
