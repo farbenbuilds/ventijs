@@ -1,6 +1,6 @@
 import type { NormalizedClientOptions } from "../../types/options";
 import type { ClientOptions } from "../../types/ws";
-import { maxFragmentsOf, maxPayloadOf } from "./bounded";
+import { maxBufferedChunksOf, maxFragmentsOf, maxPayloadOf } from "./bounded";
 import { codecLimits } from "../../binding/codec";
 import {
   DEFAULT_MAX_REDIRECTS,
@@ -27,6 +27,7 @@ export function normalizeClientOptions(options?: ClientOptions): NormalizedClien
     handshakeTimeout: source.handshakeTimeout,
     maxPayload: maxPayloadOf(source, () => codecLimits().maxPayloadBytes),
     maxFragments: maxFragmentsOf(source, () => codecLimits().maxFragments),
+    maxBufferedChunks: maxBufferedChunksOf(source),
     skipUTF8Validation: source.skipUTF8Validation ?? false,
     allowSynchronousEvents: source.allowSynchronousEvents ?? true,
     autoPong: source.autoPong ?? true,

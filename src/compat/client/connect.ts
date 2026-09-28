@@ -54,6 +54,7 @@ export function connectSocket(
   state.validateUtf8 = !normalized.skipUTF8Validation;
   state.maxPayload = normalized.maxPayload;
   state.maxFragments = normalized.maxFragments;
+  state.maxBufferedChunks = normalized.maxBufferedChunks;
   // Whether the extension was negotiated is not known until the response; `open.ts` sets it.
   state.threshold = thresholdOf(normalized.perMessageDeflate);
   const socket = buildSocketRecord(state);

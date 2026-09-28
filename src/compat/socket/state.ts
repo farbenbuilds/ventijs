@@ -1,6 +1,7 @@
 import type { SocketEventMap, SocketState } from "../../types/socket";
 import {
   DEFAULT_CLOSE_TIMEOUT,
+  DEFAULT_MAX_BUFFERED_CHUNKS,
   DEFAULT_MAX_FRAGMENTS,
   DEFAULT_MAX_PAYLOAD,
 } from "../options/shared";
@@ -56,7 +57,8 @@ export function createSocketState(): SocketState {
     closeTimeout: DEFAULT_CLOSE_TIMEOUT,
     allowSynchronousEvents: true,
     deliveryPaused: false,
-    pendingInput: null,
+    pendingInput: [],
+    maxBufferedChunks: DEFAULT_MAX_BUFFERED_CHUNKS,
     validateUtf8: true,
     maxPayload: DEFAULT_MAX_PAYLOAD,
     maxFragments: DEFAULT_MAX_FRAGMENTS,

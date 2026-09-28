@@ -39,6 +39,9 @@ export type NormalizedServerOptions = {
   readonly maxPayload: number;
   /// `ws` documents and defaults this, but `@types/ws` declares it on neither record.
   readonly maxFragments: number;
+  /// Reads queued behind a paused parse, as in `ws`. Zero is no limit, and the default is
+  /// `ws`'s 262144.
+  readonly maxBufferedChunks: number;
   readonly skipUTF8Validation: boolean;
   readonly perMessageDeflate: false | NormalizedPerMessageDeflate;
   /// Milliseconds a close handshake may stay unfinished. Zero is a caller's choice, not
@@ -57,6 +60,8 @@ export type NormalizedClientOptions = {
   readonly maxPayload: number;
   /// See the server record.
   readonly maxFragments: number;
+  /// See the server record.
+  readonly maxBufferedChunks: number;
   readonly skipUTF8Validation: boolean;
   readonly allowSynchronousEvents: boolean;
   readonly autoPong: boolean;

@@ -8,7 +8,7 @@ import type { WebSocket } from "./ws";
 
 export type BinaryType = "nodebuffer" | "arraybuffer" | "fragments";
 
-/// `BinaryType` widened by `"blob"`, which `ws` accepts at runtime but the vendored types omit.
+/// `BinaryType` widened by `"blob"`, which `ws` takes at runtime and `@types/ws` omits.
 export type BinaryTypeValue = BinaryType | "blob";
 
 export type SocketEventMap = {
@@ -56,14 +56,16 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// `ws`'s `allowSynchronousEvents`, the same choice and the same default of true.
   allowSynchronousEvents: boolean;
   deliveryPaused: boolean;
-  /// A *parse* pause, as in `ws`: the unheard message's frames stay unread, one read's worth.
-  pendingInput: Buffer | null;
+  /// A *parse* pause, as in `ws`: the unheard message's frames stay unread. A queue rather than
+  /// one read, because a peer sending faster than the application decides would otherwise have
+  /// every later read discarded. Bounded by `maxBufferedChunks`, the read count `ws` bounds.
+  pendingInput: Buffer[];
+  maxBufferedChunks: number;
   /// `skipUTF8Validation` inverted, latched at creation: a codec is one connection.
   validateUtf8: boolean;
   /// Carried rather than read back because a socket outlives its codec.
   maxPayload: number;
-  maxFragments: number;
-  /// With `http.request` there is no socket until the 101, so `close()` on a `CONNECTING` client cancels it.
+  maxFragments: number; /// With `http.request` there is no socket until the 101, so `close()` on a `CONNECTING` client cancels it.
   cancelHandshake: (() => void) | null;
   /// Whether this connection negotiated RFC 7692 `permessage-deflate`, the only thing that may set RSV1.
   compressible: boolean;

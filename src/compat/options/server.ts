@@ -1,6 +1,6 @@
 import type { NormalizedServerOptions } from "../../types/options";
 import type { ServerOptions } from "../../types/ws";
-import { maxFragmentsOf, maxPayloadOf } from "./bounded";
+import { maxBufferedChunksOf, maxFragmentsOf, maxPayloadOf } from "./bounded";
 import { codecLimits } from "../../binding/codec";
 import { closeTimeoutOf, invalidOption, normalizePerMessageDeflate } from "./shared";
 
@@ -34,6 +34,7 @@ export function normalizeServerOptions(options?: ServerOptions): NormalizedServe
     // connection. The thunks are lazy, so `new WebSocketServer({ port })` loads no addon.
     maxPayload: maxPayloadOf(source, () => codecLimits().maxPayloadBytes),
     maxFragments: maxFragmentsOf(source, () => codecLimits().maxFragments),
+    maxBufferedChunks: maxBufferedChunksOf(source),
     skipUTF8Validation: source.skipUTF8Validation ?? false,
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, false),
     closeTimeout: closeTimeoutOf(source),
