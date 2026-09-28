@@ -10,16 +10,15 @@ import { finishConnection } from "./lifecycle";
 const CLOSE_ABNORMAL = 1006;
 
 /// The socket stays `CLOSING` in between, as in `ws`, which is what makes the difference
-/// between a close that completed and one that did not observable. The codec is not
-/// released: whichever door finishes the socket does that, and releasing it here would
-/// drop the close frame still in the transport's buffer.
+/// between a close that completed and one that did not observable. The codec is not released
+/// here: whichever door finishes the socket does that, or the buffered close frame is dropped.
 export function closeFramed(state: SocketState, code: number | undefined, reason: Buffer): void {
   writeCloseFrame(state, code, reason);
 }
 
-/// The close frame goes out first: a connection refused without one is a reset to the
-/// peer, and a reset cannot carry a code. `error` is emitted before `close`, as `ws`
-/// does, and inside a `finally` so a throwing listener cannot leave the socket open.
+/// The close frame goes out first: a connection refused without one is a reset to the peer,
+/// and a reset cannot carry a code. `error` is emitted before `close`, as `ws` does, and in
+/// a `finally` so a throwing listener cannot leave the socket open.
 export function refuseFramed(state: SocketState, refusal: Refusal): void {
   if (state.readyState === CLOSED) return;
   state.readyState = CLOSING;
@@ -36,16 +35,11 @@ export function refuseFramed(state: SocketState, refusal: Refusal): void {
   }
 }
 
-/// Without it a peer that never answers a close frame leaves the socket at `CLOSING` for
-/// the life of the process, holding its transport and its codec slot. `ws` bounds the
-/// same wait with `closeTimeout`, and its default of thirty seconds is the one here.
-
-// Zero is "tear down on the next tick", which is what `setTimeout(fn, 0)` does in
-// `ws` and what `closeTimeout: 0` asked for. Reading it as "no deadline" turned a
-// bounded teardown into a permanent hold, where a `ws` caller saw a clean 1006.
-//
-// The expiry is a `terminate` rather than a bare `close`: the peer is not answering,
-// so the frame will never be read.
+/// Without it a peer that never answers a close frame leaves the socket at `CLOSING` for the
+/// life of the process, holding its transport and its codec slot; `ws` bounds the same wait
+/// with `closeTimeout`, and its thirty-second default is the one here. Zero means "tear down
+/// on the next tick", which is what `setTimeout(fn, 0)` does in `ws` and what `closeTimeout: 0`
+/// asked for, and the expiry is a `terminate` because the peer is not answering.
 export function armCloseTimeout(state: SocketState, milliseconds: number): void {
   clearCloseTimeout(state);
   state.closeTimer = setTimeout(

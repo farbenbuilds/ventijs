@@ -1,8 +1,7 @@
 //! What the pinned suite puts on the wire, per case. **Per case, not per prefix**: group 9
 //! walks `DATALEN` from 1 KiB to 4 MiB inside one prefix, so a cap in that range fits no single number.
 
-/// 517 is the total in `CI_CD_PIPELINE.md`; the suite defines no group 11, so `11.*` adds nothing.
-/// The 514 `OK` and 3 `INFORMATIONAL` split in `CI_CD_PIPELINE.md` is context, not asserted here.
+/// 517 is the total in `CI_CD_PIPELINE.md`; the 514 `OK` and 3 `INFORMATIONAL` split is context.
 export const TOTAL_CASES = 517;
 
 import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
@@ -14,8 +13,8 @@ export type CapacityRule = {
   readonly origin: string;
 };
 
-/// Groups 12 and 13 expand five and seven deflate parameter sets over the rows of `MSG_SIZES`,
-/// derived from that table so the arithmetic cannot drift: 5 x 18 = 90 and 7 x 18 = 126 cases.
+/// Groups 12 and 13 expand five and seven deflate parameter sets over `MSG_SIZES`: 5 x 18 = 90
+/// and 7 x 18 = 126.
 export const DEFLATE_PARAMETER_SETS_GROUP_12 = 5;
 export const DEFLATE_PARAMETER_SETS_GROUP_13 = 7;
 

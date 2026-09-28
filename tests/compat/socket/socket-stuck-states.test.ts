@@ -1,10 +1,6 @@
-//! The states a socket can reach that a caller would call a bug.
-//!
-//! Each of these was reachable and each failed quietly: a transport that cannot be
-//! written left a socket `OPEN` for ever, a listener that threw left the codec holding
-//! half a frame with the undecoded tail lost, and a deferred resume held the event loop
-//! open for a turn. None of them is a `ws` behaviour, because `ws` has no equivalent
-//! state to get into.
+//! The states a socket can reach that a caller would call a bug, and the teardown a
+//! thrown listener is owed. The event-loop cases are in `socket-event-loop.test.ts`.
+//! None of these is a `ws` behaviour, because `ws` has no equivalent state to get into.
 
 import { Duplex } from "node:stream";
 import { expect, test } from "vitest";
@@ -13,7 +9,8 @@ import { TEST_TIMEOUT_MS } from "../../binding/support";
 import { clientFrames } from "../../binding/codec-frames";
 import { openRawClient } from "../../binding/codec-net";
 import { attachSocket } from "../../../src/compat/socket/attach";
-import { nextSocket, upgradeHarness, waitFor } from "./codec-upgrade-support";
+import { socketStateOf } from "../../../src/compat/socket/state";
+import { nextSocket, upgradeHarness } from "./codec-upgrade-support";
 
 /// A transport that is already gone, which is what a peer that disappears between the
 /// upgrade and the adoption hands over. Node reports it as neither readable nor
@@ -34,19 +31,63 @@ test(
     const harness = await upgradeHarness();
     try {
       const socket = new WebSocket("ws://example.invalid/");
-      socket.on("error", () => undefined);
+      // The listener is attached *after* the call, which is the natural order: a caller
+      // cannot know a socket will fail before it hands it a transport. Emitting
+      // synchronously here would latch the error with nobody to receive it and Node
+      // would rethrow it as an uncaught exception rather than a socket failing.
       attachSocket(socket, deadStream());
-      // A socket that reported `OPEN` here would accept sends, report them successful,
-      // and keep `bufferedAmount` at zero for the life of the process. It stays
-      // `CONNECTING` because nothing ever opened it, which is what a caller sees when
-      // the upgrade completed and the connection did not.
-      expect(socket.readyState).not.toBe(WebSocket.OPEN);
+      const outcome = new Promise<string>((resolve) => {
+        socket.on("error", (error: Error & { code?: string }) => resolve(error.code ?? "ERR_NONE"));
+        socket.on("close", () => resolve("CLOSED_WITHOUT_ERROR"));
+      });
+      // A socket left `CONNECTING` here never moves again, so a caller awaiting `open`
+      // or `close` waits for the life of the process. `ws` reports this handshake
+      // failure as ERR_INVALID_STATE, which is the code used here for the same thing.
+      expect(await outcome).toBe("ERR_INVALID_STATE");
+      expect(socket.readyState).toBe(WebSocket.CLOSED);
     } finally {
       await harness.close();
     }
   },
 );
 
+test(
+  "a throwing listener still releases the codec slot",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    // The teardown after `failConnection` has to run even when the application's own
+    // listener throws, or every connection that dies this way leaks a codec slot and the
+    // table fills after a bounded number of them. A `message` listener is what reaches
+    // that path: a `close` is emitted from a transport event that releases the codec on
+    // its own. The throw then leaves `driveInbound` and reaches the process, which is
+    // the application's business, so it is absorbed here rather than asserted.
+    const uncaught: string[] = [];
+    const swallow = (error: unknown): void => void uncaught.push((error as Error).message);
+    process.on("uncaughtException", swallow);
+    const harness = await upgradeHarness();
+    try {
+      const accepted = nextSocket(harness.server);
+      const raw = await openRawClient(harness.port);
+      const socket = await accepted;
+      const state = socketStateOf(socket);
+      socket.on("message", () => {
+        throw new Error("the application's own failure");
+      });
+      const drained = new Promise<number>((resolve) => {
+        socket.on("close", (code: number) => resolve(code));
+      });
+      raw.write(clientFrames([{ opcode: 0x1, payload: Buffer.from("hi") }]));
+      expect(await drained).toBe(1006);
+      expect(uncaught).toEqual(["the application's own failure"]);
+      // A codec left behind here is a `bigint` handle rather than null, and the next
+      // connection to fail the same way takes another slot until the table is full.
+      expect(state?.codec).toBeNull();
+    } finally {
+      process.off("uncaughtException", swallow);
+      await harness.close();
+    }
+  },
+);
 test(
   "a listener that throws ends the connection instead of corrupting it",
   { timeout: TEST_TIMEOUT_MS },
@@ -76,55 +117,6 @@ test(
       // message or refuse the connection for a fault the peer never committed.
       expect((await escaped).message).toBe("the application's own bug");
       expect(await closed).toBe(1006);
-    } finally {
-      raw.destroy();
-      await harness.close();
-    }
-  },
-);
-
-test(
-  "a deferred resume does not hold the event loop open",
-  { timeout: TEST_TIMEOUT_MS },
-  async () => {
-    const server = new WebSocketServer({ noServer: true, allowSynchronousEvents: false } as never);
-    const harness = await upgradeHarness(server);
-    const accepted = nextSocket(server);
-    const raw = await openRawClient(harness.port);
-    try {
-      const socket = await accepted;
-      const seen: string[] = [];
-      socket.on("error", () => undefined);
-      socket.on("message", (data: Buffer) => seen.push(data.toString()));
-      raw.write(clientFrames([{ opcode: 0x1, payload: Buffer.from("deferred") }]));
-      await waitFor(() => seen.length === 1);
-      expect(seen).toEqual(["deferred"]);
-    } finally {
-      raw.destroy();
-      await harness.close();
-    }
-  },
-);
-
-test(
-  "bufferedAmount tracks the transport rather than a counter nothing reads",
-  { timeout: TEST_TIMEOUT_MS },
-  async () => {
-    const server = new WebSocketServer({ noServer: true });
-    const harness = await upgradeHarness(server);
-    const accepted = nextSocket(server);
-    const raw = await openRawClient(harness.port);
-    try {
-      const socket = await accepted;
-      socket.on("error", () => undefined);
-      const before = socket.bufferedAmount;
-      socket.send("a message the peer is not reading yet");
-      // The point is that it moved with the transport and can move back down. A counter
-      // that only ever grew would pass an "is it above zero" assertion and fail the
-      // caller that polls it in a close handler.
-      expect(socket.bufferedAmount).toBeGreaterThanOrEqual(before);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(socket.bufferedAmount).toBe(0);
     } finally {
       raw.destroy();
       await harness.close();

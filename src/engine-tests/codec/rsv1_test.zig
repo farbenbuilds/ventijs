@@ -1,10 +1,9 @@
 //! What RSV1 means, once `permessage-deflate` is negotiated.
 //!
-//! **The payload is not arbitrary.** A single byte is very often a syntactically valid
-//! DEFLATE stream -- `0x79` alone is a fixed-Huffman block that decodes to something -- so
-//! a test that fed one byte and expected an inflate failure would be testing libdeflate's
-//! tolerance rather than the latch. Eight zero octets cannot be a stream: a stored block
-//! needs a length and its one's complement, and `0x0000` is not the complement of `0x0000`.
+//! **The payload is not arbitrary.** Eight zero octets cannot be a DEFLATE stream: a stored
+//! block needs a length and its one's complement, and `0x0000` is not the complement of
+//! `0x0000`. A single byte very often is one -- `0x79` is a fixed-Huffman block that decodes --
+//! so a test feeding one byte and expecting an inflate failure tests libdeflate, not the latch.
 
 const std = @import("std");
 const testing = std.testing;

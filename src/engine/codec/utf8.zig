@@ -1,23 +1,19 @@
 //! Incremental UTF-8 validation for RFC 6455 section 8.1, folded as a message arrives because
-//! a peer can split a 4-byte sequence across two frames. The carried range is what rejects
-//! overlongs, surrogates, and codepoints past `U+10FFFF`.
+//! a peer can split a 4-byte sequence across two frames; the carried range rejects overlongs,
+//! surrogates, and codepoints past `U+10FFFF`, and copying the state is the whole cost of a chunk.
 
-/// Folding state. Copying it is the whole cost of validating a chunk.
 pub const State = struct {
-    /// Continuation bytes still expected to finish the current sequence.
+    /// Continuation bytes still expected, and the bounds the next one must fall in.
     remaining: u3 = 0,
-    /// Lowest byte the next continuation may take.
     lower: u8 = continuation_lower,
-    /// Highest byte the next continuation may take.
     upper: u8 = continuation_upper,
 };
 
 const continuation_lower: u8 = 0x80;
 const continuation_upper: u8 = 0xbf;
 
-/// Folds one chunk into the validator, or returns null if it contains a byte that cannot
-/// continue or begin a valid sequence. A null is terminal: RFC 6455 requires a 1007 close and
-/// forbids delivery, and a stream cannot be resynchronized after invalid UTF-8.
+/// Folds one chunk into the validator, or returns null if it holds a byte that cannot continue
+/// or begin a valid sequence. A null is terminal: RFC 6455 wants a 1007 and forbids delivery.
 pub fn feed(state: State, input: []const u8) ?State {
     var next = state;
     for (input) |byte| {
@@ -33,8 +29,6 @@ pub fn feed(state: State, input: []const u8) ?State {
     return next;
 }
 
-/// Whether the state sits on a codepoint boundary. A message ending mid-sequence is invalid
-/// even when every byte was in range, which a byte-wise validator cannot see.
 pub fn complete(state: State) bool {
     return state.remaining == 0;
 }

@@ -1,13 +1,11 @@
 import { loadVentijsAddon } from "./addon.ts";
 import { weightTableIsConsistent } from "./shard-plan.ts";
 
-/// Loads the native addon, checks the shard weight table against the totals the
-/// gate already asserts, and prints the plan, then exits.
+/// Loads the native addon, checks the shard weight table against the totals the gate already
+/// asserts, and prints the plan, then exits.
 ///
-/// Two failures, both of which would otherwise be discovered after a full sharded
-/// suite: an addon that cannot be `dlopen` at all, and a weight table that has
-/// drifted away from the case counts so the split is silently wrong. The first
-/// costs five seconds instead of one; the second costs a mis-measured suite run.
+/// Two failures, both otherwise found after a full sharded suite: an addon that cannot be
+/// `dlopen` at all, and a weight table that has drifted from the case counts.
 const addon = loadVentijsAddon();
 if (!weightTableIsConsistent()) {
   process.stderr.write(

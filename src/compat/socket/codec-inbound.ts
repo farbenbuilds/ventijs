@@ -9,10 +9,8 @@ import { createError } from "../errors";
 import { CLOSED } from "../ready-state";
 import { failConnection } from "./lifecycle";
 
-/// Folds the transport's bytes into the socket's codec and delivers what comes out.
-/// `pending` is what arrived with the upgrade response. Per
-/// `docs/adr/0001-transport-and-framing-ownership.md` this moves bytes, never reads a
-/// frame.
+/// Folds the transport's bytes into the socket's codec and delivers what comes out. `pending`
+/// is what arrived with the upgrade response; per the ADR this moves bytes, never reads a frame.
 export function driveInbound(state: SocketState, transport: Duplex, pending?: Buffer): void {
   // Fed first: a read can deliver the response and the first frame together, and the
   // listener would otherwise take the newer bytes first.
@@ -22,9 +20,9 @@ export function driveInbound(state: SocketState, transport: Duplex, pending?: Bu
   });
 }
 
-/// Feeds one read and delivers what it decoded. A full queue stops the decoder rather
-/// than overwriting a queued payload, and the tail is re-fed once the caller has drained:
-/// pausing the transport here would deadlock a peer that only sends in response.
+/// Feeds one read and delivers what it decoded. A full queue stops the decoder rather than
+/// overwriting a queued payload, and the tail is re-fed once drained: pausing the transport
+/// here would deadlock a peer that only sends in response.
 export function ingest(state: SocketState, chunk: Buffer): void {
   const handle = codecOf(state);
   if (handle === null) return;
@@ -35,11 +33,9 @@ export function ingest(state: SocketState, chunk: Buffer): void {
   let rest = chunk;
   while (rest.length > 0) {
     const outcome = feedCodec(handle, rest);
-    // A throwing listener must not also cost the connection. `rest` is a local, so an
-    // exception out of the dispatch loses it and leaves the codec holding half a frame,
-    // which garbles the next message or refuses the connection for a fault the peer never
-    // committed. Finishing the socket first turns one throwing handler into one dead
-    // connection.
+    // A throwing listener must not also cost the connection: an exception out of the dispatch
+    // loses the local `rest` and leaves the codec holding half a frame, which garbles the next
+    // message or refuses the connection for a fault the peer never committed.
     try {
       deliver(state, () => {
         guardedResume(state);
@@ -70,17 +66,21 @@ export function ingest(state: SocketState, chunk: Buffer): void {
 /// is the corruption, not the application's own exception.
 function failOnThrow(state: SocketState, error: unknown): void {
   if (state.readyState === CLOSED) return;
-  failConnection(
-    state,
-    error instanceof Error ? error : createError("ERR_PROTOCOL", String(error)),
-  );
-  closeCodec(state);
-  state.transport?.destroy();
+  // The teardown is in a `finally` because `failConnection` emits `error` and an application
+  // listener may throw, which would leak the codec slot on this path.
+  try {
+    failConnection(
+      state,
+      error instanceof Error ? error : createError("ERR_PROTOCOL", String(error)),
+    );
+  } finally {
+    closeCodec(state);
+    state.transport?.destroy();
+  }
 }
 
-/// What a deferred delivery resumes with, through the same guard as the read that
-/// started it: a throw from a handler on a `allowSynchronousEvents: false` socket
-/// arrives from a `setImmediate` and would otherwise lose the same tail.
+/// What a deferred delivery resumes with, through the same guard as the read that started
+/// it: a throw from a handler on a deferred socket arrives from a `setImmediate`.
 function guardedResume(state: SocketState): void {
   try {
     resume(state);

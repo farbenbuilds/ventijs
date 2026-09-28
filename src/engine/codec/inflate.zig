@@ -1,11 +1,8 @@
-//! The receive half of RFC 7692: the state of a message that may be compressed.
-//!
-//! A compressed message's frames concatenate and are inflated once, at the final fragment,
-//! which is what `staged` is for -- inflating per frame would need a streaming inflate to
-//! carry state, and the engine's is one-shot. The compression flag lives here because it is a
-//! property of *this* message: latched from the RSV1 bit of the first frame and forgotten
-//! when the message is delivered, while whether RSV1 may mean anything is a connection
-//! property that arrives as `compressible`.
+//! The receive half of RFC 7692: the state of a message that may be compressed. A compressed
+//! message's frames concatenate and are inflated once, at the final fragment, which is what
+//! `staged` is for: the engine's inflate is one-shot, not streaming. The flag lives here because
+//! it is a property of *this* message, latched from the RSV1 bit of its first frame, while
+//! whether RSV1 may mean anything is a connection property arriving as `compressible`.
 const std = @import("std");
 const uwz = @import("uWebZockets");
 const deflate = @import("deflate.zig");

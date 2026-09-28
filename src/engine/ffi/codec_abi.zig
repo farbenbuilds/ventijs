@@ -1,14 +1,12 @@
 //! The codec boundary's vocabulary and numeric widths, defined once because a boundary that
-//! defines an ordinal twice defines it wrong once. napi-zig maps a signed integer wider than
-//! 53 bits to a `bigint` and a narrower one to a `number`, so a `u64` handle must be a `bigint`.
+//! defines an ordinal twice defines it wrong once. napi-zig maps a `u64` to a `bigint`.
 
 const capacities = @import("../codec/capacities.zig");
 const state = @import("../codec/state.zig");
 
 pub const Count = i32;
 
-/// A width, not a policy: `Arg` is 32 bits, so a larger value would arrive already truncated
-/// and the codec built with a limit nobody asked for. Cast from the codec's own ceiling.
+/// A width, not a policy: `Arg` is 32 bits, so a larger value arrives already truncated.
 pub const ceiling_arg_max: Arg = @intCast(capacities.max_message_bytes);
 
 pub const Arg = u32;
@@ -39,8 +37,7 @@ pub fn encode_failure(failure: state.Failure) EncodeFailure {
     };
 }
 
-/// A `feed` refusal as the negated ordinal: a non-negative return is a byte count. Two
-/// functions, not one over a union: `@intFromEnum` on a tagged union reads the *tag*.
+/// A `feed` refusal as the negated ordinal; a non-negative return is a byte count.
 pub fn feed_refusal(outcome: Outcome) Count {
     return -@as(Count, @intFromEnum(outcome));
 }

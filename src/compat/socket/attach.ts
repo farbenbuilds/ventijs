@@ -14,8 +14,8 @@ import { failTransport } from "./transport";
 import { socketStateOf } from "./state";
 
 /// Adopts a generation-checked native connection, after which socket operations route
-/// through `src/binding/socket.ts`. The engine-thread drain that flushes the staging
-/// ring lands with the message pump.
+/// through `src/binding/socket.ts`; the engine-thread drain that flushes the staging ring
+/// lands with the message pump.
 export function attachNativeSocket(
   socket: WebSocket,
   server: ServerHandle,
@@ -33,9 +33,9 @@ export function attachNativeSocket(
   openSocket(state);
 }
 
-/// Adopts an upgraded Node stream, opens its frame codec in the given role, opens the
-/// socket, and hands it whatever arrived with the handshake. The codec is what reads the
-/// peer from here, per `docs/adr/0001-transport-and-framing-ownership.md`.
+/// Adopts an upgraded Node stream, opens its frame codec in the given role, opens the socket,
+/// and hands it whatever arrived with the handshake. The codec reads the peer from here, per
+/// `docs/adr/0001-transport-and-framing-ownership.md`.
 export function attachSocket(
   socket: WebSocket,
   transport: Duplex,
@@ -49,19 +49,22 @@ export function attachSocket(
       "ventijs: attachSocket requires a ventijs socket record",
     );
   }
-  // A stream that cannot be read or written is not a connection, and one reporting
-  // `OPEN` is permanently `OPEN` with nothing on the wire: every send reports success
-  // and `bufferedAmount` stays at zero.
+  // A stream that cannot be read or written is not a connection, and one reporting `OPEN`
+  // is permanently `OPEN` with nothing on the wire: every send reports success.
   if (!transport.readable || !transport.writable) {
-    // Terminated rather than ignored: a socket left `CONNECTING` with no listener
-    // attached never moves again, and a caller awaiting `open` or `close` would wait
-    // for the life of the process. 1006 because no close frame was exchanged.
+    // Terminated rather than ignored: a socket left `CONNECTING` never moves again, and a
+    // caller awaiting `open` or `close` would wait for the life of the process. The report
+    // is deferred, because emitting `error` here would be synchronous and the caller has
+    // not had the chance to attach a listener, so Node would rethrow it as an uncaught
+    // exception instead of a socket failing. `ws` uses ERR_INVALID_STATE for the same fault.
     const gone = createError(
-      "ERR_SOCKET_CLOSED",
-      "ventijs: the transport was closed before the socket opened",
+      "ERR_INVALID_STATE",
+      "ventijs: the transport was closed before the connection was established",
     );
+    process.nextTick(() => {
+      failConnection(state, gone);
+    });
     transport.destroy();
-    failConnection(state, gone);
     return;
   }
   state.transport = transport;
@@ -71,9 +74,9 @@ export function attachSocket(
     transport.end();
   });
   transport.on("error", (error: Error) => {
-    // Latch before destroying, matching `ws`: the terminal state is `CLOSING` from here,
-    // not `OPEN` on a dead transport. The destroy runs in `finally` so a throwing
-    // `emitEvent` cannot leave the transport open.
+    // Latch before destroying, matching `ws`: the terminal state is `CLOSING` from here, not
+    // `OPEN` on a dead transport. The destroy runs in `finally` so a throwing `emitEvent`
+    // cannot leave the transport open.
     try {
       failTransport(state, asCodedError(error));
     } finally {
@@ -81,29 +84,27 @@ export function attachSocket(
     }
   });
   transport.on("close", () => {
-    // Released here rather than on the close event: the transport is gone, so nothing
-    // can read or write through it, and holding the slot would leak one per connection.
+    // Released here rather than on the close event: the transport is gone, so holding the
+    // slot would leak one per connection.
     closeCodec(state);
     finishConnection(state, state.closeCode, state.closeReason);
   });
-  // The order is the contract: the socket opens, and only then are the bytes that came
-  // with the upgrade handed over. A peer greeting with a close frame in the same read
-  // would otherwise see `close` before `open`.
+  // The order is the contract: the socket opens, and only then are the bytes that came with
+  // the upgrade handed over, or a peer greeting with a close frame in the same read would
+  // see `close` before `open`.
   openSocket(state);
   driveInbound(state, transport, pending);
 }
 
-/// Private because the order relative to the codec's first read is this module's
-/// decision, not a caller's: a caller opening the socket itself would have to know that
-/// ordering exists to get it right.
+/// Private because the order relative to the codec's first read is this module's decision,
+/// not a caller's: a caller opening the socket itself would have to know that ordering.
 function openSocket(state: SocketState): void {
   if (state.readyState === OPEN) return;
   state.readyState = OPEN;
   emitEvent(state, "open");
 }
 
-/// The guard stops a non-`Error` thrown by a custom stream reaching `emitEvent` as a
-/// value the facade has no policy for.
+/// The guard stops a non-`Error` thrown by a custom stream reaching `emitEvent` untyped.
 function asCodedError(error: Error): Error {
   if (error instanceof Error) return error;
   return createError("ERR_PROTOCOL", `ventijs: the transport failed: ${String(error)}`);

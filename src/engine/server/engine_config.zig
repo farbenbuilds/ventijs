@@ -1,23 +1,20 @@
-//! Trusted engine application configuration: the engine rejects a runtime configuration whose
-//! capacities differ from those compiled into its application type.
+//! Trusted engine application configuration, which the engine checks against its compiled type.
 
 const uwz = @import("uWebZockets");
 const options = @import("options.zig");
 
 /// The engine carves the HTTP/2 session and radix router regions unconditionally, and its
-/// defaults fill about 82 percent of the per-server startup slab with a transport ventijs
-/// never negotiates -- the listener is plaintext, so no ALPN, so no HTTP/2 session. Narrowing
-/// saves about 31 MB per instance at 128 connections; raising these is not a tuning knob.
+/// defaults fill about 82 percent of the startup slab with a transport ventijs never negotiates,
+/// so narrowing saves about 31 MB per instance at 128 connections.
 const h2_header_block_size: usize = 1024;
 const h2_response_header_size: usize = 1024;
-/// HTTP/2 response fields one WebSocket upgrade response can carry.
 const h2_response_header_count: usize = 8;
-/// Radix nodes for the single registered route: one node holds one path segment.
+/// Radix nodes for the single registered route, one per path segment.
 const route_node_capacity: usize = 16;
 /// Route path bytes kept for introspection; the engine requires one max-length path, 2048 bytes.
 const route_registry_capacity: usize = 4 * 1024;
 
-/// The development log stays off: a library must never write to the host process's streams.
+/// The development log stays off: a library must never write to the host's streams.
 pub const EngineConfig = uwz.ServerConfig{
     .max_connections = options.connection_capacity,
     .max_ws_message_size = options.message_capacity,

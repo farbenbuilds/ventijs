@@ -1,6 +1,5 @@
 /// A codec's own status: what it refused, what it is, and how to drop its buffers. None
-/// of these copies a payload and none can fail, so a caller reaching for one is asking
-/// about the connection rather than about a message.
+/// of these copies a payload and none can fail.
 
 import { CODEC_FAILURES, type CodecFailureName } from "./codec-status";
 import { callNative } from "./errors";
@@ -11,9 +10,8 @@ export function codecFailureCode(handle: bigint): number {
   return callNative(() => addon.codecFailureCode(handle));
 }
 
-/// Read rather than parsed off the close code, because the two are not one-to-one: a
-/// 1002 is a dozen different faults, so a caller with only the code cannot tell a peer's
-/// bad frame from its own misconfiguration.
+/// Read rather than parsed off the close code, because the two are not one-to-one: a 1002
+/// is a dozen different faults, so a code alone cannot name the caller's own misconfiguration.
 export function codecFailure(handle: bigint): CodecFailureName | null {
   const addon = loadAddon();
   const ordinal = callNative(() => addon.codecFailure(handle));
@@ -30,9 +28,8 @@ export function codecRole(handle: bigint): number {
   return callNative(() => addon.codecRole(handle));
 }
 
-/// Read back rather than echoed from the option, because the only way to know the limit
-/// in force is to ask the thing enforcing it, and a `maxPayload` of 0 is `ws`'s "no
-/// limit", translated to the ceiling on the way in.
+/// Read back rather than echoed from the option, because the only way to know the limit in
+/// force is to ask the thing enforcing it: a `maxPayload` of 0 is `ws`'s "no limit".
 export function codecCeilings(handle: bigint): { maxPayload: number; maxFragments: number } | null {
   const addon = loadAddon();
   const ceilings: [number, number] | null = callNative(() => addon.codecCeilings(handle));

@@ -4,9 +4,9 @@
 import { expect, test } from "vitest";
 import { commentViolations } from "../../scripts/comment-budget.mjs";
 
-function violationsOf(source: string): string[] {
+function violationsOf(source: string, name = "sample.ts"): string[] {
   const violations: string[] = [];
-  commentViolations("sample.ts", source, violations);
+  commentViolations(name, source, violations);
   return violations;
 }
 
@@ -28,7 +28,14 @@ test("a file inside the budget is not flagged", () => {
 });
 
 test("a run of comment lines is capped", () => {
-  const source = [...Array.from({ length: 12 }, (_, i) => `// ${i}`), "let a = 1;"].join("\n");
+  // Code lines are spread through it so the density budget is not what fires: this test
+  // is about adjacency, and a violation of both at once would not say which one did it.
+  // Twelve consecutive comment lines, then enough code that the density budget is not
+  // what fires: this test is about adjacency, and both firing at once would not say which.
+  const source = [
+    ...Array.from({ length: 12 }, (_, i) => `// ${i}`),
+    ...Array.from({ length: 40 }, (_, i) => `const v${i} = ${i};`),
+  ].join("\n");
   expect(violationsOf(source)).toHaveLength(1);
   expect(violationsOf(source)[0]).toContain("consecutive comment lines");
 });
@@ -50,10 +57,50 @@ test("a file inside the ratio is not flagged", () => {
 });
 
 test("a small file is capped in absolute terms, not by ratio", () => {
-  // 9 code lines and 18 comment lines: a ratio of 2.0 that a documented six-function
-  // module cannot avoid, so the absolute cap is what judges a file this size.
-  expect(violationsOf(burst(9, 2))).toEqual([]);
-  expect(violationsOf(burst(9, 3))[0]).toContain("-line file exceeds");
+  // Nine code lines and 18 comment lines is a ratio of 2.0, which a module of
+  // declarations cannot avoid, so a band judges it: the floor is a module doc, the
+  // ceiling stops a short file becoming an essay.
+  expect(violationsOf(burst(9, 0))).toEqual([]);
+  expect(violationsOf(burst(9, 1))[0]).toContain("-code-line file exceeds");
+  expect(violationsOf(burst(9, 2))[0]).toContain("-code-line file exceeds");
+});
+
+test("a small file still gets a module doc", () => {
+  // Two declarations and a five-line module doc. The floor exists for this, because the
+  // density ratio would allow one comment line and the file would have to be unreadable.
+  const source = [
+    "// one",
+    "// two",
+    "// three",
+    "// four",
+    "// five",
+    "const a = 1;",
+    "const b = 2;",
+  ].join("\n");
+  expect(violationsOf(source)).toEqual([]);
+});
+
+test("a Zig capacity table is judged by shape, not by ratio", () => {
+  // Every code line declares a constant and every constant has one line of reason. That
+  // is the rule's own example of a comment worth having, and a ratio would push a
+  // capacity's explanation out rather than the prose around it.
+  const table = Array.from({ length: 7 }, (_, i) => [
+    `/// capacity ${i} and why`,
+    `pub const c${i} = ${i};`,
+  ])
+    .flat()
+    .join("\n");
+  expect(violationsOf(table, "capacities.zig")).toEqual([]);
+  expect(violationsOf("/// one\npub const a = 1;", "capacities.zig")).toEqual([]);
+  const mixed = [
+    "/// why",
+    "pub const a = 1;",
+    "/// what it does",
+    "pub fn f() void {}",
+    ...Array.from({ length: 6 }, (_, i) => `/// more ${i}`),
+  ].join("\n");
+  expect(violationsOf(mixed, "capacities.zig").length).toBeGreaterThan(0);
+  expect(violationsOf(table, "table.ts").length).toBeGreaterThan(0);
 });
 
 test("a block comment counts as a run", () => {
@@ -93,6 +140,11 @@ test("a comment marker inside a string is not a comment", () => {
 test("a blank line ends a run", () => {
   // Two items each carrying a doc comment are not one module essay, so the cap counts a
   // run of adjacency rather than a total.
-  const spaced = Array.from({ length: 8 }, (_, i) => `// ${i}\n\n`).join("\n");
+  // Eight one-line comments, each separated by a blank line, then the code. Adjacent
+  // would be a run of eight and fail, which is the point.
+  const spaced = [
+    ...Array.from({ length: 8 }, (_, i) => `// ${i}\n`),
+    ...Array.from({ length: 40 }, (_, i) => `const v${i} = ${i};`),
+  ].join("\n");
   expect(violationsOf(spaced)).toEqual([]);
 });

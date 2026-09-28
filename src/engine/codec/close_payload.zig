@@ -1,10 +1,8 @@
-//! How a close payload splits into the code and reason an event carries. Only a close
-//! payload splits: a ping or a pong carries its bytes whole.
+//! How a close payload splits into the code and reason an event carries.
 
 const std = @import("std");
 
-/// An empty close payload is valid and means "no status"; `ws` reports 1005 for a close
-/// that arrived with no code.
+/// An empty close payload is valid and means "no status", which `ws` reports as 1005.
 pub fn close_code(payload: []const u8) u16 {
     if (payload.len < 2) return 0;
     return std.mem.readInt(u16, payload[0..2][0..2], .big);
@@ -24,8 +22,8 @@ pub fn has_valid_code(payload: []const u8) bool {
     return is_valid_close_code(code);
 }
 
-/// The codes RFC 6455 section 7.4.1 and the IANA registry permit. Spelled out because
-/// `zslay`'s copy is private and answers only "valid" or "protocol error".
+/// `zslay`'s copy of the permitted codes is private and answers only "valid" or "protocol
+/// error", so RFC 6455 section 7.4.1 and the IANA registry are spelled out here.
 pub fn is_valid_close_code(code: u16) bool {
     return (code >= 1000 and code <= 1003) or
         (code >= 1007 and code <= 1014) or

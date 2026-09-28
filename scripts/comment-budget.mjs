@@ -5,50 +5,42 @@
 /// the opposite: a file of 80 lines can be 70 of them and still pass, and a doc comment
 /// that restates the identifier is worse than none, because it has to be read and it
 /// goes stale. Two numbers, because the run cap is what catches a module essay and the
-/// ratio is what catches a file commented uniformly and quietly.
+/// density cap catches a file commented uniformly and quietly.
+import { commentLines } from "./comment-lines.mjs";
 
-/// Source budgets. The rule the repo states is about the code that ships, and the whole
-/// of `src/` meets these, so they are set at what the rule actually permits rather than
-/// at what would need a mass trim to become true.
-const SOURCE_RATIO = 0.3;
+/// Source budgets, which are what the rule in `AGENTS.md` actually asks for. Zig gets a
+/// looser density cap because the language requires the comment: every `pub` item is
+/// documented, so a six-function module cannot carry 0.3. The run cap is unchanged,
+/// because a doc comment on every item is restating identifiers, and the rule that a
+/// comment must give a byte value, an invariant, or a divergence applies to Zig too.
+const SOURCE_DENSITY = 0.3;
 const SOURCE_RUN = 6;
+const ZIG_DENSITY = 0.45;
 
-/// Test budgets, and the reason they are looser: a test fixture is where a wire byte
-/// value is documented, and the rule explicitly allows "a byte value and its reason".
-/// A test that explains the octets it sends has more to explain than a module has.
-const TEST_RATIO = 0.45;
+/// Tests are looser because a fixture is where a wire byte value is documented, and the
+/// rule allows "a byte value and its reason". A test that explains the octets it sends
+/// has more to explain than a module has.
+const TEST_DENSITY = 0.45;
 const TEST_RUN = 10;
 
 const TEST_PREFIX = "tests/";
 
-/// Zig gets a cap of its own because the language requires the comment: a Zig file
-/// documents every `pub` declaration, and the six `pub fn`s of a small module cannot
-/// carry a 0.3 ratio. The run cap still applies, because a doc comment on every item is
-/// restating identifiers, and the source rule that comments must explain a byte value,
-/// an invariant, or a divergence is unchanged. Measured over private lines as well, so
-/// the ratio is not flattered by counting only what it must document.
-const ZIG_RATIO = 0.45;
-
-/// The ratio is meaningless on a small file, and every small file fails it: a Zig
-/// `pub fn` must be documented, so a 6-function module cannot carry 0.3. Under this
-/// floor the budget is an absolute count instead, which measures the thing the ratio
-/// was standing in for -- how much prose a reader has to get through. Exempting small
-/// files by name would rot; exempting them by shape does not.
+/// Below this many code lines a ratio is not a usable budget, because a documented
+/// declaration table of a dozen items would need 4 comment lines per code line to pass.
+/// The cap becomes an absolute count instead. Exempting small files by name would rot;
+/// exempting them by shape does not.
 const RATIO_MIN_CODE = 40;
 
-/// An absolute budget for a file too small for a ratio. Set above the heaviest
-/// declaration file in `src/` (a capacity table that records why each number is what it
-/// is) so the floor is a measurement rather than a loophole.
+/// The allowance for a file too small for a ratio, as two numbers. The ceiling stops a
+/// short file becoming an essay; the floor of six is a module doc and a few field docs,
+/// because a file that is mostly declarations cannot meet any ratio and must still be
+/// allowed to say what its numbers are.
 const MAX_COMMENT_LINES = 24;
-
-const LINE_COMMENT = "//";
-const BLOCK_OPEN = "/*";
-const BLOCK_CLOSE = "*/";
+const MIN_COMMENT_LINES = 6;
 
 export function commentViolations(name, source, violations) {
   const isTest = name.startsWith(TEST_PREFIX);
-  const isZig = name.endsWith(".zig");
-  const ratio = isZig ? ZIG_RATIO : isTest ? TEST_RATIO : SOURCE_RATIO;
+  const density = isTest ? TEST_DENSITY : name.endsWith(".zig") ? ZIG_DENSITY : SOURCE_DENSITY;
   const run = isTest ? TEST_RUN : SOURCE_RUN;
   const flags = commentLines(source);
   const comments = flags.filter((flag) => flag === true).length;
@@ -59,59 +51,49 @@ export function commentViolations(name, source, violations) {
       `${name}: ${longest} consecutive comment lines exceeds the ${run}-line run budget`,
     );
   }
-  if (code < RATIO_MIN_CODE) {
-    if (comments > MAX_COMMENT_LINES) {
-      violations.push(
-        `${name}: ${comments} comment lines in a ${code}-line file exceeds ${MAX_COMMENT_LINES}`,
-      );
-    }
-    return;
-  }
-  if (comments / code > ratio) {
-    violations.push(
-      `${name}: ${comments} comment lines for ${code} code lines exceeds the ${ratio} ratio`,
-    );
-  }
+  violations.push(...densityViolations(name, source, comments, code, density));
 }
 
-/// One entry per source line: `true` for a comment, `false` for code, `null` for a blank
-/// line, which is neither and so counts as neither. Kept positionally because a run is a
-/// property of adjacency, and a blank line ends one: two items each with a doc comment
-/// are not one essay however adjacent the file makes them.
-///
-/// A `//` or `/*` anywhere on the line marks it, not only one that starts with it: a
-/// trailing `// the index` is the form the rule most wants gone, and a check that only
-/// saw whole-line comments missed every instance of it. Anywhere but inside a string,
-/// which is why this walks the characters: a glob written as `"tests/autobahn/**"`
-/// contains `/*`, and a substring test read it as a block comment that then swallowed
-/// the rest of the file.
-function commentLines(source) {
-  const flags = [];
-  let inBlock = false;
-  let quote = null;
-  for (const raw of source.split("\n")) {
-    let sawComment = false;
-    let index = 0;
-    while (index < raw.length) {
-      const pair = raw.slice(index, index + 2);
-      if (inBlock) {
-        sawComment = true;
-        if (pair === BLOCK_CLOSE) inBlock = false;
-      } else if (quote !== null) {
-        if (raw[index] === "\\") index += 1;
-        else if (raw[index] === quote) quote = null;
-      } else if (pair === LINE_COMMENT || pair === BLOCK_OPEN) {
-        sawComment = true;
-        if (pair === BLOCK_OPEN && !raw.includes(BLOCK_CLOSE, index + 2)) inBlock = true;
-      } else if (raw[index] === "'" || raw[index] === '"' || raw[index] === "`") {
-        quote = raw[index];
-      }
-      index += 1;
-    }
-    if (raw.trim() === "") flags.push(null);
-    else flags.push(sawComment);
+/// One budget whatever the file's size, so the two regimes cannot disagree. A file
+/// large enough for a ratio is held to it. A small one is held to a band instead, because
+/// the ratio is not a usable budget for six declarations: taking it literally would cap a
+/// capacity table at two comment lines, which is a loophole in the other direction, and
+/// taking the absolute cap alone would let a short file carry 24 lines of prose. Neither
+/// number here is a judgement about a particular file; both are the shape of the rule.
+function densityViolations(name, source, comments, code, density) {
+  if (isDeclarationTable(name, source, code)) return [];
+  const allowed = code >= RATIO_MIN_CODE ? Math.ceil(code * density) : smallFileBudget(code);
+  if (comments > allowed) {
+    const message =
+      code >= RATIO_MIN_CODE
+        ? `${name}: ${comments} comment lines for ${code} code lines exceeds the ${density} density`
+        : `${name}: ${comments} comment lines in a ${code}-code-line file exceeds ${allowed}`;
+    return [message];
   }
-  return flags;
+  return [];
+}
+
+/// A capacity table: every code line declares a constant, and every constant carries one
+/// line saying what the number is and why. That is the rule's own example of what a
+/// comment is for, and no ratio expresses it, because the file is almost all declarations
+/// and deleting a constant's reason to satisfy a ratio is the wrong trade. Recognised by
+/// shape rather than by name, so a new capacity table is covered and a renamed one is not
+/// special-cased.
+function isDeclarationTable(name, source, code) {
+  if (!name.endsWith(".zig")) return false;
+  const lines = source
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("//") && !line.startsWith("///"));
+  const declarations = lines.filter((line) => /^(pub )?const /.test(line));
+  return declarations.length === code && declarations.length >= 4;
+}
+
+/// The band for a file below the ratio floor: never fewer than a module doc, never more
+/// than the ceiling, and never more than the density would allow for a file this size
+/// once it is big enough for the ratio to mean anything.
+function smallFileBudget(code) {
+  return Math.min(MAX_COMMENT_LINES, Math.max(MIN_COMMENT_LINES, Math.ceil(code * SOURCE_DENSITY)));
 }
 
 function longestRun(flags) {

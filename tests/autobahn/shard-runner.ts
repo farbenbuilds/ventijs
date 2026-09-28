@@ -9,10 +9,9 @@ import type { ShardResult } from "./shard-reports.ts";
 
 /// Writes each shard's `fuzzingclient.json` before anything is started.
 ///
-/// The pinned `wstest` exposes no case-selection flag: `-s` is the only lever,
-/// and the suite runs one server at a time, so N concurrent shards need N spec
-/// files. Generating them keeps the union checkable by the gate instead of
-/// leaving N committed configurations to fall out of sync with each other.
+/// The pinned `wstest` exposes no case-selection flag but `-s`, and the suite runs one server
+/// at a time, so N concurrent shards need N spec files; generating them keeps the union
+/// checkable by the gate instead of leaving N committed configurations to fall out of sync.
 function prepare(shard: Shard): void {
   mkdirSync(shardReportsDir(shard.id), { recursive: true });
   writeShardSpec(shardSpecPath(shard.id), shardSpec(shard));
@@ -20,16 +19,13 @@ function prepare(shard: Shard): void {
 
 /// Runs every shard's fuzzing client concurrently and collects what each wrote.
 ///
-/// All containers are force-removed before this returns, on every path, so a
-/// cancelled or failed run cannot leave one holding a report directory. The
-/// streams are inherited rather than prefixed, which is what sharding gives up:
-/// N Python tracebacks interleave in one log, so the failure message carries the
-/// shard's name and identity instead of its output.
+/// All containers are force-removed before this returns, on every path, so a cancelled or
+/// failed run cannot leave one holding a report directory. The streams are inherited rather
+/// than prefixed, which is what sharding gives up: N Python tracebacks interleave in one log.
 export async function runShards(shards: readonly Shard[]): Promise<readonly ShardResult[]> {
   for (const shard of shards) prepare(shard);
-  // Settled, not raced: a shard whose report will not parse must not discard the
-  // other shards' evidence. A rejected read becomes a failed shard the failure
-  // message names, and the gate still holds the union to the mode's totals.
+  // Settled, not raced: a shard whose report will not parse must not discard the other
+  // shards' evidence, so a rejected read becomes a failed shard the failure message names.
   const settled = await Promise.allSettled(
     shards.map(async (shard) => {
       const name = shardContainerName(shard.id);

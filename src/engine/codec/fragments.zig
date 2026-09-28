@@ -1,15 +1,13 @@
-//! The fragment boundaries of the message being reassembled. **The count is the bound, not
-//! the byte total**: the number of pieces is what a peer controls, and exceeding it is a
-//! refusal rather than a growth.
+//! The fragment boundaries of the message being reassembled. **The count is the bound, not the
+//! byte total**: the number of pieces is what a peer controls, and exceeding it is a refusal.
 
 const growth = @import("growth.zig");
 
-/// Interior *end* positions of one message in progress, ascending. A message of N pieces
-/// records N-1: the last runs to the end of the buffer, whose length the caller already has.
+/// Interior *end* positions of one message in progress, ascending; N pieces record N-1 ends.
 pub const ends_are = "interior";
 
-/// Boundaries reserved before a message is fragmented: sixteen is a chat-sized fragment
-/// count and 64 bytes, so an unfragmented connection costs 64 bytes, not 64 KiB.
+/// Boundaries reserved before a message is fragmented: sixteen is a chat-sized count and 64
+/// bytes, so an unfragmented connection costs 64 bytes rather than 64 KiB.
 pub const initial_boundaries = 16;
 
 pub const fragments = struct {
@@ -22,8 +20,7 @@ pub const fragments = struct {
         self.count = 0;
     }
 
-    /// Records where a piece ended, or reports too many pieces for the bound. A `u32`
-    /// because a boundary is an offset into a `u32`-checked `maxPayload`; both faults close 1008.
+    /// Records where a piece ended, or reports too many pieces for the bound; both faults 1008.
     pub fn note(self: *fragments, end: usize, bound: usize) error{ TooManyFragments, OutOfMemory }!void {
         if (self.count >= bound) return error.TooManyFragments;
         if (self.count == self.ends_.items.len) {
@@ -38,7 +35,7 @@ pub const fragments = struct {
         return self.ends_.window(self.count);
     }
 
-    /// Forgets the boundaries, keeping the allocation: a peer that fragments one message will likely fragment the next.
+    /// Keeps the allocation: a peer that fragments one message will likely fragment the next.
     pub fn clear(self: *fragments) void {
         self.count = 0;
     }

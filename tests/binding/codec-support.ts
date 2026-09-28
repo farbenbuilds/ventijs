@@ -1,12 +1,10 @@
 //! Codec fixtures shared by the binding suites. The defaults are the compiled ceilings, not
-//! `ws`'s, so the "over the capacity" cases are the smallest over-limit payloads available
-//! rather than a 100 MiB allocation.
+//! `ws`'s, so the "over the capacity" cases are the smallest over-limit payloads available.
 
 import { CODEC_ROLE, createCodec, type CodecOptions } from "../../src/binding/codec";
 
 /// The `maxPayload` the binding suites share: 64 KiB, not `codecLimits().maxPayloadBytes`,
-/// which is now the boundary's 32-bit width and would need a four-gigabyte allocation to
-/// reach. A suite at 64 KiB and a codec at `ws`'s 100 MiB default cost the same at rest.
+/// which is now the boundary's 32-bit width and would need a four-gigabyte allocation.
 export const DEFAULT_MAX_PAYLOAD = 64 * 1024;
 
 /// `ws`'s default, and the smallest value every framing suite can exercise the bound against.

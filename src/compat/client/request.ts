@@ -17,8 +17,8 @@ export function expectedAccept(key: string): string {
     .digest("base64");
 }
 
-/// RFC 6455 section 4.1 asks for a 16-byte nonce, and it makes the handshake a proof of
-/// a live endpoint rather than a cache replay.
+/// RFC 6455 section 4.1 asks for a 16-byte nonce, which makes the handshake a proof of a live
+/// endpoint rather than a cache replay.
 export function newKey(): string {
   return randomBytes(16).toString("base64");
 }
@@ -47,7 +47,7 @@ export function buildRequest(
     Upgrade: "websocket",
   };
   if (protocols.length > 0) headers["Sec-WebSocket-Protocol"] = protocols.join(",");
-  // The offer, not a negotiation. RFC 7692 section 7.1.1.1: a server that does not answer
+  // The offer, not a negotiation: RFC 7692 section 7.1.1.1, a server that does not answer
   // sends uncompressed frames, a normal connection either way.
   const extension = offer(options.perMessageDeflate);
   if (extension !== undefined) headers["Sec-WebSocket-Extensions"] = extension;
@@ -60,17 +60,16 @@ export function buildRequest(
   const credentials = address.auth ?? carriedAuth;
   if (credentials !== undefined) {
     // A header, not `http.request`'s `auth`, which is applied after the caller's own and
-    // would replace an explicit `Authorization`. `ws` does the same, so the redirect path
-    // can strip it.
+    // would replace an explicit `Authorization`. `ws` does the same, so the redirect can strip it.
     withCaller.authorization = `Basic ${Buffer.from(credentials, "utf8").toString("base64")}`;
   }
   return {
     key,
     headers: withCaller,
     request: {
-      // `hostname`, not `host`, which here is the name to resolve: `host:port` would ask
-      // for a host *named* `127.0.0.1:42989`. `Host` is explicit below because Node drops
-      // the port when it is the scheme's default and `ws` never does.
+      // `hostname`, not `host`, which here is the name to resolve: `host:port` would ask for a
+      // host *named* `127.0.0.1:42989`. `Host` is explicit below because Node drops the port
+      // when it is the scheme's default and `ws` never does.
       hostname: address.host,
       port: address.port,
       path: address.path,
@@ -91,8 +90,8 @@ function transportOptions(address: ClientAddress): RequestOptions {
   return { servername: address.host, rejectUnauthorized: true };
 }
 
-/// A domain socket has no authority to name and `http.request` sends the path as `Host`.
-/// Inventing `localhost` would put a routable name the caller never configured there.
+/// A domain socket has no authority to name and `http.request` sends the path as `Host`;
+/// inventing `localhost` would put a routable name the caller never configured there.
 function hostHeader(address: ClientAddress): string {
   if (address.socketPath !== undefined) return address.socketPath;
   const bracketed = address.host.includes(":") ? `[${address.host}]` : address.host;

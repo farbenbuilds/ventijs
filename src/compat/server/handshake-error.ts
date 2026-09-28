@@ -1,15 +1,11 @@
 import type { Duplex } from "node:stream";
 
-/// The socket error handler that belongs to the handshake phase. `handleUpgrade` attaches
-/// one before it validates anything, because a socket that fails mid-handshake has to be
-/// destroyed rather than leaked, and `completeUpgrade` removes it once the 101 is
-/// written: from there the adopted socket owns its own error handling, and a leftover
-/// handler that only destroys would race the terminal latch and discard the close code.
-
-// A per-socket closure, so the reference stored on the socket is the reference
-// `removeListener` matches. A shared function would need `this` to find its socket, which
-// the repository's anti-OOP rule bans, and a structurally equal replacement is not
-// removed at all.
+/// The socket error handler that belongs to the handshake phase. `handleUpgrade` attaches one
+/// before validating anything, because a socket failing mid-handshake must be destroyed rather
+/// than leaked; `completeUpgrade` removes it after the 101, so no leftover handler that only
+/// destroys can race the terminal latch and discard the close code. A per-socket closure, so
+/// the reference stored on the socket is the one `removeListener` matches: a shared function
+/// would need `this` to find its socket, which the anti-OOP rule bans.
 const HANDSHAKE_ERROR = Symbol("ventijs.handshakeError");
 
 type HandshakeSocket = Duplex & { [HANDSHAKE_ERROR]?: () => void };

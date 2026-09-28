@@ -1,9 +1,7 @@
-/// A response that was not a 101 and not a redirect: the caller's to handle. A redirect
-/// is an answer this client acts on; anything else is one it hands over, because only the
+/// A response that was not a 101 and not a redirect: the caller's to handle, because only the
 /// application knows whether a 401 with a challenge, a 403 from a proxy, and a 200 from
-/// something that is not a WebSocket server are three problems or one. `ws` only aborts
-/// when nothing is listening; aborting unconditionally made `unexpected-response`
-/// observable only as a notification of a teardown.
+/// something that is not a WebSocket server are three problems or one. `ws` only aborts when
+/// nothing is listening; aborting unconditionally made `unexpected-response` a teardown notice.
 
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { emitEvent } from "../events/emitter";
