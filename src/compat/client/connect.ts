@@ -25,8 +25,9 @@ export type Attempt = {
   /// holding one made `close()` destroy a socket rather than cancel a request.
   transport: Socket | null;
   handshake: Handshake;
-  /// The original address, not the previous hop, so a chain that wanders off `wss:` is
-  /// refused at its first downgrade wherever that falls.
+  /// The address of the hop in flight, which is also the one the next hop is refused against:
+  /// `redirect.ts` runs the downgrade check on every hop, so a chain that wanders off `wss:`
+  /// is refused at its first downgrade wherever in the chain that falls.
   address: ClientAddress;
   /// Kept while a redirect stays on the same host and dropped when it does not: a
   /// `Location` carries no credentials, so dropping it silently un-authenticates.
