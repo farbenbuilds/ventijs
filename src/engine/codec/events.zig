@@ -1,130 +1,103 @@
-//! The event vocabulary a decoded frame turns into.
-//!
-//! The engine's own `WebSocket` resolves frames into three actions: answer a
-//! ping, note a close, or hand a message to the application. The codec needs the
-//! same three plus a few the transport does not care about, so the mapping from a
-//! completed frame to something the caller can observe is written down once here
-//! rather than inline in the state machine.
+//! The event vocabulary a decoded frame turns into. The engine's own `WebSocket` resolves a
+//! frame into three actions -- answer a ping, note a close, hand a message over -- and the
+//! codec needs the same three plus a few the transport does not care about.
 
 const zslay = @import("zslay");
 
-/// What a completed frame means to the caller.
-///
-/// `text` and `binary` are the two halves of a reassembled data message, and
-/// `ping`, `pong`, and `close` are the control frames, which RFC 6455 section 5.5
-/// permits to be interleaved between the fragments of a data message. The
-/// ordinals are the ABI: `src/binding/codec.ts` carries the matching table, so
-/// they must keep this order.
+/// RFC 6455 section 5.5 lets a peer interleave a control frame between the fragments of
+/// one message, which is why the three control opcodes are separate kinds. The ordinals
+/// are the ABI: `src/binding/codec-status.ts` carries the matching table, keep this order.
 pub const Kind = enum(u8) {
     text = 0,
     binary = 1,
     ping = 2,
     pong = 3,
     close = 4,
-    /// A frame the codec refused. The connection is finished at that point, but the
-    /// event is still queued so a caller has one place to learn why rather than
-    /// having to correlate a close code with a timestamp.
+    /// A frame the codec refused, still queued so a caller has one place to learn why.
     rejected = 5,
-    /// The continuation half of a fragmented outbound message, which is what a
-    /// caller produces by sending with `fin: false` and then again. Absent until a
-    /// caller could actually fragment: `ws` documents `send`'s `fin` option, a
-    /// peer that receives `text FIN=1` after `text FIN=0` reads two complete
-    /// messages rather than one, and the facade had no way to write the opcode
-    /// RFC 6455 requires here.
-    ///
-    /// Last in the enum so the ordinals above stay where they are: they are the
-    /// ABI that `src/binding/codec.ts` carries as a table.
+    /// The continuation half of a fragmented outbound message. Last, so the ordinals keep their values.
     continuation = 6,
 };
 
-/// Why a frame could not be accepted, kept apart from `zslay`'s error set so the
-/// mapping to a close code is stated in one place rather than at each call site.
+/// One member per condition `ws` names in a `WS_ERR_*` code, plus two of its own. The
+/// members are the vocabulary the boundary reports as an ordinal, so
+/// `src/binding/codec-status.ts` carries the matching table and the order is the ABI.
 pub const Failure = enum(u8) {
     protocol_error,
-    unexpected_opcode,
-    reserved_bits,
+    expected_fin,
+    expected_mask,
+    invalid_close_code,
+    invalid_control_payload_length,
+    invalid_opcode,
     invalid_utf8,
-    message_too_large,
-    fragmented_message_too_large,
-    /// More pieces in one message than the compiled fragment bound allows.
-    ///
-    /// Its own member rather than `protocol_error` because the close code is
-    /// different: every frame was well formed, so this is 1008 (a policy violation)
-    /// and not 1002 (a protocol error). `ws` closes 1008 for `maxFragments` too, and
-    /// a peer that cannot tell the two apart cannot tell a misconfiguration from a
-    /// malformed stream.
-    too_many_fragments,
-    /// A compressed message that is not a DEFLATE stream. Appended rather than folded
-    /// into `invalid_utf8`, which carries the same 1007, because the two are different
-    /// faults and one of them is a compression negotiation that went wrong.
+    unexpected_mask,
+    unexpected_rsv_1,
+    unexpected_rsv_2_3,
+    too_many_buffered_parts,
+    unsupported_data_payload_length,
+    unsupported_message_length,
+    /// The one fault with no `ws` equivalent: a compressed payload that is not a DEFLATE
+    /// stream, which `ws` reports as a 1007 with no code.
     invalid_compressed_data,
+    /// A `generateMask` callback left a buffer that is not four bytes, so there is no key to
+    /// mask with. A caller's own mistake, reported on the send callback, so a peer never sees
+    /// this close code.
+    invalid_mask,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
-///
-/// The distinction that matters is 1002 against 1007: a frame that violates the framing
-/// is a protocol error, and a well-formed frame carrying invalid UTF-8 or undecodable
-/// compressed data is an invalid payload. Collapsing both to 1002 would pass a suite
-/// that only checks "an error close happened" and fail one that checks the code.
+/// A frame that violates the framing is a 1002 protocol error; a well-formed frame
+/// carrying invalid UTF-8 or undecodable compressed data is a 1007 invalid payload.
 pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
-        .message_too_large, .fragmented_message_too_large => CLOSE_MESSAGE_TOO_BIG,
+        .unsupported_message_length, .unsupported_data_payload_length => CLOSE_MESSAGE_TOO_BIG,
         .invalid_utf8, .invalid_compressed_data => CLOSE_INVALID_PAYLOAD,
-        .too_many_fragments => CLOSE_POLICY_VIOLATION,
-        .protocol_error, .unexpected_opcode, .reserved_bits => CLOSE_PROTOCOL_ERROR,
+        .too_many_buffered_parts => CLOSE_POLICY_VIOLATION,
+        .protocol_error,
+        .expected_fin,
+        .expected_mask,
+        .invalid_close_code,
+        .invalid_control_payload_length,
+        .invalid_opcode,
+        .unexpected_mask,
+        .unexpected_rsv_1,
+        .unexpected_rsv_2_3,
+        .invalid_mask,
+        => CLOSE_PROTOCOL_ERROR,
     };
 }
 
-/// The ordinal the FFI reports a failure as, so the boundary does not restate this
-/// enum's order and drift from it. Zero is never produced, because a caller has to
-/// be able to say "no failure".
+/// The ordinal the FFI reports a failure as, so the boundary need not restate this enum's
+/// order and drift from it. Zero is never produced: a caller must be able to say "no failure".
 pub fn failure_ordinal(failure: Failure) u8 {
     return @intFromEnum(failure) + 1;
 }
 
-/// The highest `Kind` ordinal, which is what the boundary checks a JavaScript ordinal
-/// against.
-///
-/// Named as the last member on purpose. The previous bound was written against
-/// `rejected`, so adding a kind after it produced a kind the boundary refused to send:
-/// the refusal was a correct `unexpected_opcode` for an ordinal it considered out of
-/// range, and the only symptom was a `send` that reported a protocol error for a frame
-/// the caller had explicitly asked for.
+/// The highest `Kind` ordinal, which is what the boundary checks against; keep it last.
 pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
 
-/// The human-readable reason, for a message the caller can log or send. This is the only
-/// part a peer ever sees.
-pub fn describe(failure: Failure) []const u8 {
-    return switch (failure) {
-        .invalid_utf8 => "Invalid UTF-8",
-        .invalid_compressed_data => "Invalid compressed data",
-        .message_too_large, .fragmented_message_too_large => "Message too large",
-        .too_many_fragments => "Too many message fragments",
-        .protocol_error, .unexpected_opcode, .reserved_bits => "Protocol error",
-    };
-}
-
-/// Whether an opcode may carry a payload of more than 125 bytes.
 pub fn is_control(opcode: zslay.Opcode) bool {
     return opcode.is_control();
 }
 
-/// Maps a parse failure onto this vocabulary, so the close code is decided in one
-/// place rather than at each call site.
-///
-/// The parameter is `anyerror` rather than `zslay.Error` because each step infers
-/// its own error set from the expressions it can actually reach, and Zig does not
-/// widen an inferred set to a declared one at a call. The default arm is the
-/// policy rather than a gap: an error the codec has no specific reason for is a
-/// protocol error as far as the peer is concerned, and 1002 with "Protocol error"
-/// is the honest description of a frame it could not accept.
+/// Maps a parse failure onto this vocabulary, so the close code is decided in one place. The
+/// default arm is the policy, not a gap: an error the codec cannot name is a protocol error to
+/// the peer. The parameter is `anyerror` because Zig will not widen an inferred set to a
+/// declared one at a call.
 pub fn classify(err: anyerror) Failure {
     return switch (err) {
-        error.PayloadTooLarge => .message_too_large,
+        error.PayloadTooLarge => .unsupported_message_length,
         error.InvalidUtf8 => .invalid_utf8,
-        error.InvalidOpcode => .unexpected_opcode,
-        error.TooManyFragments => .too_many_fragments,
+        error.InvalidOpcode => .invalid_opcode,
+        error.TooManyFragments => .too_many_buffered_parts,
         error.CorruptPayload => .invalid_compressed_data,
+        error.PayloadNotMasked => .expected_mask,
+        error.PayloadMasked => .unexpected_mask,
+        // The parser's ceiling on a declared length, not `maxPayload`: conflating the
+        // two reported a size limit for a length no peer could have sent.
+        error.InvalidLength => .unsupported_data_payload_length,
+        error.InvalidCloseCode => .invalid_close_code,
+        error.InvalidControlPayloadLength => .invalid_control_payload_length,
         else => .protocol_error,
     };
 }
@@ -134,17 +107,12 @@ const CLOSE_INVALID_PAYLOAD: u16 = 1007;
 const CLOSE_POLICY_VIOLATION: u16 = 1008;
 const CLOSE_PROTOCOL_ERROR: u16 = 1002;
 
-/// What one completed frame meant.
-///
-/// `payload` borrows the receive state this was decoded into, so it is valid until the
-/// next payload is taken. The FFI layer copies it into a Node-owned `Buffer` within
-/// the call that reads it, which is what keeps engine memory unreachable from
-/// JavaScript.
+/// `payload` borrows the receive state this was decoded into, so it is valid until the next
+/// payload is taken. The FFI layer copies it into a Node-owned `Buffer` within the call that
+/// reads it, which is what keeps engine memory unreachable from JavaScript.
 pub const Decoded = struct {
     kind: Kind,
-    /// Close code for a `close` frame, 0 otherwise.
     code: u16 = 0,
     payload: []const u8 = &.{},
-    /// Why a `rejected` frame was refused.
     failure: Failure = .protocol_error,
 };

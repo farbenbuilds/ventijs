@@ -1,15 +1,7 @@
-//! A soak, and what it is for.
-//!
-//! A leak in a socket library is not a bug a unit test finds, because every unit test
-//! exits while its sockets are still live. The claim that matters in production is
-//! narrower and checkable: a process that opens and closes many connections must end
-//! with the resources it started with, and a peer that stops reading must cost the
-//! writer a bounded queue rather than unbounded memory.
-//!
-//! So the measurements here are the ones a leak would move: the codec table's live
-//! count, the transport's open handles, and a socket's own accounting. The counts are
-//! the engine's and the runtime's rather than the facade's, because the facade's are
-//! the thing under suspicion.
+//! A leak in a socket library is not a bug a unit test finds, because every unit test exits
+//! while its sockets are still live. The checkable claim is narrower: a process that opens and
+//! closes many connections must end with the resources it started with. The counts read are the
+//! engine's and the runtime's, not the facade's, because the facade's are under suspicion.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "../../../src/index";
@@ -17,13 +9,8 @@ import { codecLimits } from "../../../src/binding/codec";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
 import { openWithPeer, waitFor } from "./client-support";
 
-/// The codec table's live count, read through a slot that has to be free.
-///
-/// There is no "how many codecs are live" accessor, and adding one for a test would be
-/// an API that exists only for tests. What is observable is the *consequence*: with the
-/// table full, `createCodec` fails. So the leak check is a round trip: if every codec a
-/// soak opened was released, the table is as empty as it started, and one more codec can
-/// still be created afterwards.
+/// There is no "how many codecs are live" accessor, and adding one for a test would be a
+/// test-only API, so the leak check is a round trip: with the table full, `createCodec` fails.
 function canStillCreateCodecs(count: number): boolean {
   const handles: bigint[] = [];
   try {
@@ -55,9 +42,7 @@ test(
   async () => {
     const capacity = codecLimits().messageBytes;
     expect(capacity).toBeGreaterThan(0);
-    // A soak that used a fraction of the table and then a check that the whole table is
-    // still available: a socket that leaked its codec would show up as a table that no
-    // longer fits.
+    // A socket that leaked its codec would show up as a table that no longer fits.
     const before = canStillCreateCodecs(64);
     expect(before).toBe(true);
 
@@ -75,8 +60,7 @@ test(
       }
     }
 
-    // The table is a process-wide constant, so a codec per connection that outlived its
-    // socket would have taken `rounds` of them out of a fixed budget.
+    // The table is a process-wide constant, so a codec per connection that outlived its socket would have taken `rounds` of them.
     expect(canStillCreateCodecs(64)).toBe(true);
   },
 );
@@ -85,8 +69,7 @@ test(
   "a server under a burst of connections keeps serving",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // Concurrency, not just repetition: several sockets at once is where a shared codec
-    // table and a per-socket queue are most likely to interfere.
+    // Concurrency, not just repetition: several sockets at once is where a shared codec table interferes.
     const server = new WebSocketServer({ port: 0 });
     await new Promise<void>((resolve) => {
       server.once("listening", () => resolve());
@@ -96,8 +79,7 @@ test(
     const accepted: WebSocket[] = [];
     server.on("connection", (socket) => {
       accepted.push(socket);
-      // The echo is what makes the independence check meaningful: a message has to come
-      // back on the socket that sent it and no other.
+      // The echo is what makes the independence check meaningful.
       socket.on("message", (data) => socket.send(data));
     });
     try {
@@ -111,8 +93,7 @@ test(
         );
       }
       await waitFor(() => accepted.length === sockets.length);
-      // Every socket gets its own echo, which is what proves they are independent rather
-      // than one connection's frames arriving on another's.
+      // Every socket gets its own echo, which is what proves they are independent.
       const heard = new Set<string>();
       for (const socket of sockets) {
         socket.on("message", (data) => heard.add(data.toString()));

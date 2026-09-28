@@ -14,6 +14,12 @@ import { defineConfig } from "tsdown";
 /// build, including a build to a different output directory, which is why the
 /// `outDir` below is not parameterised: a build whose `exports` depends on where it
 /// wrote its output is a build that can produce a wrong map.
+///
+/// The repository's own sources import siblings with explicit `.ts` specifiers, which is
+/// what Node's native type stripping needs at runtime and what `allowImportingTsExtensions`
+/// in `tsconfig.json` permits. That is a repository-wide choice rather than a bundle
+/// setting, and it has to be on for the two harnesses under `tests/autobahn/` and
+/// `bench/`, which run `.ts` under plain `node` with no loader shim.
 export default defineConfig({
   dts: {
     generator: "tsgo",

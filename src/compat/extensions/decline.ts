@@ -1,9 +1,5 @@
-//! Whether an offer is one this server cannot answer.
-//!
-//! Split out of `deflate.zig` because this is the one half of a server's decision that is
-//! a predicate over two values rather than a single rule, and a predicate is exactly the
-//! thing that has to be readable without scrolling past three other functions to see what
-//! it returns.
+/// Whether an offer is one this server cannot answer: a predicate over two values, which
+/// has to be readable without scrolling past three other functions.
 
 import type { NormalizedPerMessageDeflate } from "../../types/options";
 import { WINDOW_BITS, type Normalized } from "./params";
@@ -18,9 +14,9 @@ export function declines(options: NormalizedPerMessageDeflate, offer: Normalized
   ) {
     return true;
   }
-  // A client that named no window will not accept a server that names one, and
-  // `ws` refuses to answer one that did. The valueless form is the opposite: it is a
-  // client asking to be given one, which is why only `undefined` is tested here.
+  // A client that named no window will not accept a server that names one, and `ws`
+  // refuses to answer one that did. The valueless form is the opposite: a client asking
+  // to be given one, which is why only `undefined` is tested here.
   if (
     typeof options.clientMaxWindowBits === "number" &&
     offer.client_max_window_bits === undefined

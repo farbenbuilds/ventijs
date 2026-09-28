@@ -7,15 +7,14 @@ import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
 import { closeCodeOf } from "./close-code";
 import { toCloseReason } from "./close-reason";
 import { armCloseTimeout, closeFramed } from "./codec-close";
-import { bufferedAmountOf } from "./payload";
 import { closeFailure } from "./close-failure";
 
 const EMPTY = Buffer.alloc(0);
 
 export function finishConnection(state: SocketState, code: number, reason: Buffer): void {
   if (state.readyState === CLOSED) return;
-  // Dropped here because this is the only path to `CLOSED`, and a deadline that
-  // outlived its socket would keep the process alive for no reason.
+  // Dropped because this is the only path to `CLOSED`, and a deadline that outlived its
+  // socket would keep the process alive for nothing.
   if (state.closeTimer !== null) {
     clearTimeout(state.closeTimer);
     state.closeTimer = null;
@@ -26,12 +25,10 @@ export function finishConnection(state: SocketState, code: number, reason: Buffe
   emitEvent(state, "close", code, reason);
 }
 
-/// Reports a failure and closes, matching `ws`'s `abortHandshake`: it latches
-/// `CLOSING`, emits `error`, and only then emits `close`, so a listener reading
-/// `readyState` during `error` sees `CLOSING` and a second failure produces no
-/// second event. Reached by a `close` or `terminate` while still `CONNECTING`.
-///
-/// A send failure does not come here. See `reportWithoutClosing`.
+/// Reports a failure and closes, matching `ws`'s `abortHandshake`: it latches `CLOSING`,
+/// emits `error`, then `close`, so a listener reading `readyState` during `error` sees
+/// `CLOSING` and a second failure produces no second event. A send failure does not come
+/// here; see `reportWithoutClosing`.
 export function failConnection(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
   if (!state.errorEmitted) {
@@ -48,19 +45,11 @@ export function failConnection(state: SocketState, error: Error): void {
   finishConnection(state, CLOSE_ABNORMAL, EMPTY);
 }
 
-/// Emits `error` once and leaves the socket exactly as it was.
-///
-/// `ws` is silent for a failed send: the write error reaches the caller's
-/// callback, and the socket's own listener destroys the transport without
-/// emitting on the `WebSocket`. A ventijs send on a socket with no callback
-/// therefore has nothing to observe at all, and silence was the previous
-/// behaviour here.
-///
-/// This is a deliberate divergence and it is narrow on purpose. It emits, because
-/// a caller that cannot pass a callback would otherwise learn nothing; and it does
-/// **not** close, because the condition it reports is a missing implementation
-/// rather than a fault of the connection, so tearing the socket down would cost
-/// the caller a live connection for a bug in the library.
+/// Emits `error` once and leaves the socket as it was. A deliberate divergence from
+/// `ws`, which is silent for a failed send: the write error reaches the caller's callback
+/// and a send with no callback has nothing to observe. It emits, because such a caller
+/// would otherwise learn nothing, and it does **not** close, because the condition it
+/// reports is a missing implementation rather than a fault of the connection.
 export function reportWithoutClosing(state: SocketState, error: Error): void {
   if (state.errorEmitted) return;
   if (state.readyState === CLOSED) return;
@@ -81,16 +70,12 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
     return;
   }
   if (state.readyState === CLOSING) return;
-  // The latch precedes validation because `ws` latches `CLOSING` before it
-  // validates: a close it refuses still leaves the socket closing, so a second
-  // close is a no-op rather than a second attempt. Validating first left every
-  // refused close on an `OPEN` socket that would accept it again.
+  // The latch precedes validation because `ws` latches `CLOSING` first: a refused close
+  // still leaves the socket closing, so a second close is a no-op, not a second attempt.
   state.readyState = CLOSING;
-  // An absent code stays absent all the way to the wire. `ws` writes an empty close
-  // payload for `close()` and its peer reports 1005, "no status received"; substituting
-  // 1000 here asserted a normal shutdown the caller never asked for and hid 1005 from
-  // both ends. The socket's own `closeCode` stays 1006 until a frame supplies one,
-  // because until then nothing has been received.
+  // An absent code stays absent to the wire. `ws` writes an empty close payload and its
+  // peer reports 1005, "no status received"; substituting 1000 asserted a shutdown the
+  // caller never asked for. `closeCode` stays 1006 until a frame supplies one.
   const closeCode = closeCodeOf(code);
   const closeReason = toCloseReason(reason);
   if (state.codec !== null) {
@@ -105,15 +90,13 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   const status = closeSocket(
     state.attachment.server,
     state.attachment.connection,
-    // The engine's own close always carries a code, so the codec's absent-code rule
-    // does not reach it. This route is not reachable from the public surface today;
-    // the clamp is here so a caller that does reach it gets a real code.
+    // The engine's close always carries a code, so the absent-code rule does not reach
+    // it. Unreachable from the public surface today; the clamp gives a real code anyway.
     closeCode ?? CLOSE_NORMAL,
     closeReason,
   );
   if (status === "ok") {
     state.closeFrameSent = true;
-    state.bufferedAmount = bufferedAmountOf(state);
     return;
   }
   if (status === "closing" || status === "closed") {
@@ -123,24 +106,15 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   failConnection(state, closeFailure(status));
 }
 
-/// Completes a close on a socket with no native attachment.
-///
-/// The latch above has already moved the socket to `CLOSING`, so this path must
-/// always reach `CLOSED` on its own. Returning without doing anything stranded
-/// the socket at `CLOSING` for the life of the process: no close frame went out,
-/// the transport stayed open, and nothing else could complete the socket, because
-/// the transport's own `close` event is the only other door out. A caller that
-/// called `close()` and then read `readyState` saw a socket that would never close
-/// again, with no error and no event to explain it.
-///
-/// Until the Zig frame codec owns the upgrade route there is no close frame to write, so
-/// the transport is destroyed and the socket finishes through the transport's `close`
-/// event. The socket then reports `1006`, which is what a close whose handshake never
-/// completed deserves.
+/// Completes a close on a socket with no native attachment. The latch above has already
+/// moved the socket to `CLOSING`, so this path must always reach `CLOSED` on its own:
+/// returning early strands it at `CLOSING` for the life of the process, with no close
+/// frame, an open transport, and no other door out but the transport's own `close`
+/// event. Until the Zig frame codec owns the upgrade route there is no frame to write,
+/// so the transport is destroyed and the socket reports `1006`.
 function closeUnattached(state: SocketState): void {
-  // The handshake is cancelled first, so a request in flight stops before the socket
-  // reports `close`: otherwise the socket closes while its request is still going to
-  // put a connection on the wire that nothing would ever read.
+  // Cancelled first, so a request in flight stops before `close` reports: otherwise the
+  // socket closes while its request is still going to put a connection on the wire.
   state.cancelHandshake?.();
   if (state.transport === null) {
     finishConnection(state, CLOSE_ABNORMAL, EMPTY);

@@ -16,6 +16,8 @@ Status legend:
 - `partial` - exists in a limited form; the row names what is missing.
 - `todo` - planned, not implemented.
 - `deferred` - deliberately out of scope until the named prerequisite lands.
+- `unreachable` - no counterpart by construction; the row states the architecture
+  that removes it.
 
 uWebSockets.js is design inspiration only. None of its API is a public surface
 of ventijs.
@@ -61,62 +63,16 @@ of ventijs.
 
 ### Where messages flow today
 
-The engine carries a full RFC 6455 message round trip. `src/engine/server/connections.zig`
-registers a `message` callback, the parsed payload is copied into the server's
-inbound ring, and `src/engine/ffi/socket_pump.zig` moves staged outbound payloads
-onto the wire through the engine's cluster inbox. `tests/binding/socket-echo.test.ts`
-proves a text round trip, a binary round trip with the opcode preserved, a burst
-inside the inbound budget, and the drop accounting beyond it.
-`tests/autobahn/target.ts` is a reference echo over the same path, and
-`pnpm bench` measures it against `ws`.
-
-The reason is now settled and written down as
-[ADR 0001](docs/adr/0001-transport-and-framing-ownership.md). The pinned engine
-cannot adopt an already-accepted socket: its `WebSocket` holds a
-`*TcpConnection` whose buffers are carved from a startup slab the engine owns,
-`upgrade` is called from exactly one place in the whole tree, its own HTTP
-request dispatcher, and the C ABI exports nothing that takes a socket or a
-descriptor. A drop-in `ws` replacement has to keep Node's transport anyway,
-because `noServer`, `server`, `handleUpgrade`, `shouldHandle`, and the whole
-client half are Node's HTTP upgrade and `net`/`tls` surface. So the decision is
-to split transport from framing: Node owns the socket, and a pure Zig frame codec
-behind a Node-API handle owns parsing, masking, UTF-8, fragmentation, control
-frames, and backpressure, which is what `AGENTS.md` already says Zig owns.
-
-The codec has landed, and the upgrade route runs on it. `src/engine/codec/**` is a
-pure parser and formatter: it never sees a socket, allocates nothing on the message
-path, and takes its header parsing, encoding, and masking from the same `zslay`
-the engine route uses, so the two routes onto the wire agree by construction rather
-than by inspection. `src/engine/ffi/codec_*.zig` is the boundary, and
-`src/compat/socket/codec-*.ts` is the route: the transport's bytes go into a
-server-role codec and its events come out as the facade's, while `send`, `ping`,
-`pong`, and `close` frame through it on the way out.
-
-The upgrade route's earlier defects are fixed rather than papered over, and the
-route works. `close()` reaches `CLOSED` instead of stranding the socket at
-`CLOSING` (`closeUnattached` in `src/compat/socket/lifecycle.ts`), a transport
-failure reaches the socket as `error` rather than a silent `close(1006)`, a
-multi-byte typed array puts every byte it holds on the wire rather than one byte
-per element, `close(code, reason)` measures before it dispatches on the type so
-the error class matches `ws`, and `bufferedAmount` no longer grows without bound
-on a route with nothing to drain it.
-
-The client is the other half of that decision. `new WebSocket(address)` opens a
-`http.ClientRequest`, checks every field of the 101 rather than its status, and hands
-the socket to a codec opened in the _client_ role, because a client masks and a server
-must not. `src/compat/client/` splits the handshake into the decisions it is made of —
-the address, the subprotocols, the request options, the response, the redirect, the
-extension negotiation — so each is one thing to read and one thing to test. The client's
-suites run a real `ws` server as the peer in both directions, the mirror of the
-upgrade route's suites.
-
-`http.request` rather than a hand-written request line, because the three client-only
-events are its events. `ws` emits `upgrade` before validating the 101, `redirect` with
-the next hop's request created but not yet sent, and `unexpected-response` with the
-request and the response; a client that owns its own socket has no request object to
-hand a caller, so all three carried a URL and a status instead. The rejection checks,
-the subprotocol set, the key and digest, and the address parser are this codebase's
-own and are tested against a peer that answers by hand.
+Node owns the transport and a pure Zig frame codec owns the framing; the split is
+recorded as [ADR 0001](docs/adr/0001-transport-and-framing-ownership.md). The engine
+carries its own RFC 6455 round trip for the Autobahn and benchmark routes
+(`tests/binding/socket-echo.test.ts`), and the upgrade route runs on the codec
+through `src/engine/ffi/codec_*.zig` and `src/compat/socket/codec-*.ts`. The client
+is the other half of the same decision: `new WebSocket(address)` opens an
+`http.ClientRequest`, checks every field of the 101 rather than its status, and
+hands the socket to a codec opened in the client role, because a client masks and a
+server must not. `http.request` rather than a hand-written request line, because the
+three client-only events are its events.
 
 ## Engine capacity limits
 
@@ -140,137 +96,102 @@ connections would need 12.5 GiB, and a peer that never sends a message must not
 cost anything.
 
 `message_capacity` was raised from 32 KiB to 64 KiB, the suite's largest group-1
-payload, which converts the six group-1 cases the engine route was failing with 1009. The cost is about 22 MB per live server, because the message slab, the write
-queue, the RFC 7692 scratch, the cluster inbox, and both staging rings all scale
-with it. The harness derives its capacity model from
-`engineLimits().messageBytes` rather than restating the number, so raising the
-constant moves the model with it.
+payload, which is what the six group-1 cases were failing on. The cost is about
+22 MB per live server, because the message slab, the write queue, the RFC 7692
+scratch, the cluster inbox, and both staging rings all scale with it. The harness
+derives its capacity model from `engineLimits().messageBytes` rather than
+restating the number, so raising the constant moves the model with it.
 
 `engineLimits` reports the compiled capacities to JavaScript so the promise these
-rows make is checkable rather than restated. A hardcoded TypeScript copy is how
-the cap came to be 64 KiB in the engine while a test still asserted 32 KiB and
-passed. The derivation cut the selection from 301 cases to 128 by dropping only
-what the compiled cap genuinely cannot hold.
+rows make is checkable rather than restated. A hardcoded TypeScript copy is how the
+cap came to be 64 KiB in the engine while a test still asserted 32 KiB and passed.
 
 `pnpm bench` refuses a payload above the ceiling instead of comparing absent
 against present, and `tests/autobahn/` reports capacity-blocked cases as
 `skipped-capacity` rather than folding them into a pass or a failure.
 
+## Shared with the engine
+
+Neither of these is a ventijs gap; both are the pinned `uWebZockets` build's
+behaviour, and declining is the answer the RFC allows.
+
+| Behaviour                                                    | Why it is not a gap                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 7692 context takeover is declined                        | The engine has none either. `compress_message` is a one-shot `libdeflate_deflate_compress` over a whole buffer with no retained history (`zig-pkg/uWebZockets-*/src/ws/deflate.zig:104`), and the 9-to-14-bit window path calls `deflateReset` per message (`zig-pkg/uWebZockets-*/src/ws/deflate.zig:231`), which discards the window. The engine answers `server_no_context_takeover; client_no_context_takeover` unconditionally in its own handshake (`zig-pkg/uWebZockets-*/src/ws/handshake.zig:117`). Declining is legal under RFC 7692 section 7.1.1.1 and costs compression ratio, not correctness |
+| A compressed message sent in fragments goes out uncompressed | The engine has no fragmented-send API, so it cannot produce one either. RFC 7692 needs a sync flush at each fragment boundary, which one-shot libdeflate cannot emit, so the codec declines at `may_compress` (`src/engine/codec/rsv1.zig:39`, reached from `src/engine/codec/deflate.zig:40`) and at `mayCompress` (`src/compat/socket/codec-send.ts:71`). The receive side does read one, so a `ws` peer interoperates in both directions                                                                                                                                                                 |
+
+Declining takeover even when a peer offers it is what guarantees every message is
+independently inflatable.
+
+`finishRequest` and `generateMask` are implemented and pinned by
+`tests/compat/client/client-request-hooks.test.ts`: `finishRequest` runs on the first
+dial and on every redirect hop with the caller owning `request.end()`, and
+`generateMask` supplies the key the encoder puts on the wire, from four bytes that
+live on the socket state so the per-frame call allocates nothing.
+
 ## What is still outstanding
 
-Nothing in the `ws` surface is unimplemented. What is left is narrower than the rows
-this table used to hold, and each item names the change rather than the effort.
-
-| Gap                                        | What is missing                                                      | Where                             | Cost                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------ | -------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 7692 context takeover                  | A streaming compressor, so a window can be carried between messages. | `src/engine/codec/deflate.zig`    | The engine's `compression_stream` is one-shot by construction, and its window is always 15 bits. A window below 15 is therefore declined during negotiation rather than accepted and ignored. `ws` accepts one because its zlib is streaming. A one message's worth of ratio is the whole cost. |
-| Compressed fragmented messages, outbound   | A compressed message split across frames goes out uncompressed.      | `src/compat/socket/codec-send.ts` | RFC 7692 compresses a fragmented message with a sync flush at each boundary, which one-shot libdeflate cannot emit. The receive side does read one, so a `ws` peer interoperates in both directions; only this side's compression ratio is lower.                                               |
-| `finishRequest` on a refused client socket | The request handle `ws` leaves on `WebSocket._req`.                  | `src/compat/client/dial.ts`       | Typed as `http.ClientRequest` and reachable, but not on the public surface, because the vendored `@types/ws` does not declare it. Declaring it would mean publishing a member the published types do not have.                                                                                  |
-
-The `wss:` to `ws:` redirect downgrade, `maxRedirects`, `followRedirects`, the
-credential-stripping rule, and the three handshake refusals on the client route
-are all `ws`'s, and all tested against a peer that answers by hand.
+| Surface                      | What is missing                                                                                                                                                                                                                                             | Where                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Client redirects             | The `wss:` to `ws:` downgrade (`src/compat/client/redirect.ts:68`) and the hop limit (`src/compat/client/redirect.ts:48`) are implemented and have no test. Following, refusing, and the credential-stripping rule are tested against a hand-answering peer | `tests/compat/client/client-redirect*.test.ts` |
+| `origin`, `handshakeTimeout` | Both are read and applied; neither has a behavioural test                                                                                                                                                                                                   | `src/compat/client/{request,dial}.ts`          |
 
 ## RFC 6455 conformance
 
-The gate is a regression gate, not an exclusion list. `tests/autobahn/baseline.json`
-records the cases the engine is known to fail; anything failing outside that list
-fails the run, and a listed case that starts passing is reported and fails the run
-until the list is shortened, so the list can only shrink.
+The gate is a regression gate over the cases `tests/autobahn/baseline.json` lists.
+A failure outside the list fails the run, and a listed case that starts passing is
+reported and fails the run until the list is shortened. Drift is only ever reported
+for a listed id, so the gate constrains the listed cases and nothing else: a case
+that was never listed and starts passing produces no violation, and no baseline
+needs regenerating for it. A listed case that a protocol fix moves does need a
+regenerated baseline, which takes one recorded run of the digest-pinned suite on a
+Docker-capable host.
 
-**Current state, from `autobahn.yml` run 36297620675:** the 301-case framing
-selection produced 44 capacity-blocked cases and **251 of 257 evaluated cases
-passing, 6 failing.** The previous recording had 248 of 257 passing and 9 failing;
-the first run, on commit `47bfc68`, had 160 of 389 passing and 229 failing.
+**Current state, from `.github/workflows/autobahn.yml` run 36338412316, recorded in
+`tests/autobahn/baseline.json`:** 260 of 268 evaluated framing cases passing, 7
+non-strict, 8 failed, 33 capacity-blocked.
 
-| Group  | Failing | What the report says                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1      | 6       | `1.1.6`-`1.1.8` and `1.2.6`-`1.2.8` close with 1009 where the suite expects an echo. 1009 is the engine's own message cap, so the cap is either below these payloads or applied where the suite does not expect one. The rest of the group is conformant.                                                                                                                                                                                         |
-| 5      | 2       | `5.19` and `5.20` fail with a clean close and no remote close code: the frame is delivered and the connection is healthy, so this is about the reassembled message.                                                                                                                                                                                                                                                                               |
-| 7      | 1       | `7.1.1` expects an echo and a normal close, and the fuzzing client ends the case with `killAfter(1)` rather than a close frame. An earlier version of this row claimed the close path maps an invalid close reason onto 1001; that case has no close reason in it, and the engine's 1007 mapping for invalid UTF-8 is present and correct. Observed alongside 5.19 and 5.20, which are also echo cases, so the outbound echo path is the suspect. |
-| 12, 13 | 132     | Carried over. `permessage-deflate` is normalised and never negotiated, and a framing run does not select those groups.                                                                                                                                                                                                                                                                                                                            |
+| Group  | Failing | What the report says                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 5      | 2       | `5.19` and `5.20` fail with a clean close and no remote close code, so the frame is delivered and the connection is healthy. Neither reproduces on the current build across 28 stress runs, so the recorded run is older than the build                                                                                                                                                                                                                                       |
+| 7      | 1       | `7.1.1` expects an echo and a normal close. The data loss is fixed: a message staged in the same read as a peer close is delivered, and `tests/binding/socket-close-race.test.ts` fails on the previous build and passes on this one. The case still fails for a different reason, because the engine has already closed the transport by the time the echo is written, so the echo cannot be sent, and refusing to write to a closed connection is correct rather than a gap |
+| 9      | 8       | Rate rather than conformance: each case sends 1000 messages as fast as the peer will take them, and the suite marks the case failed when the agent cannot sustain the rate. The boundary is the payload size, not the message cap, because group 1's 65536-byte cases pass. The inbound ring holds 64 messages and the Node main thread drains it, so a burst outruns the consumer                                                                                            |
+| 12, 13 | 132     | `permessage_deflate` is now genuinely wired on the engine route: `RawConfig.permessage_deflate` in `src/engine/server/options.zig:46` and `.compression = .permessage_deflate` in `src/engine/server/connections.zig:18`. They are still listed, and the next recorded run is what decides                                                                                                                                                                                    |
 
-**Four of the five causes this table used to record do not survive a reading of
-the pinned engine, and the recorded run is what proved it.** The incremental UTF-8
-decoder, fragment reassembly, the 1007 rejection, the close handshake, and the
-per-message deflate codec are all present and correct in the pinned
-`uWebZockets` tree, and the engine's own Autobahn target enables the extension on
-the same route ventijs uses:
+`permessage_deflate` crosses `NativeServerConfig` in `src/binding/native.ts`,
+`RawConfig` and `Limits` in `src/engine/server/options.zig` carry it, and
+`attach_route` registers the compression. The pinned engine's own Autobahn target
+enables it on the same route:
 
 ```zig
-// zig-pkg/uWebZockets-1.7.0-.../tests/autobahn/main.zig
+// zig-pkg/uWebZockets-1.7.0-.../tests/autobahn/main.zig:19
 _ = try app.ws("/", .{
     .message = echo_message,
-    .compression = .permessage_deflate,      // the line ventijs omits
+    .compression = .permessage_deflate,
     .max_frame_size = max_message_size,
 });
 ```
 
-against
-
 ```zig
-// src/engine/server/connections.zig
+// src/engine/server/connections.zig:25
 _ = try app.ws(target.config.path_slice(), .{
     .open = Trampoline.open,
     .message = Trampoline.message,
     .close = Trampoline.close,
+    .compression = compression,
     .max_frame_size = target.config.limits.max_frame_bytes,
     .max_message_size = target.config.limits.max_message_bytes,
 });
 ```
 
-`WsBehavior.compression` defaults to `.disabled`, and `WebSocket.send` compresses
-once `permessage_deflate` is negotiated, so the outbound hop was never the
-obstacle either. Groups 12 and 13 were UNIMPLEMENTED for want of one struct field
-on that route registration, plus the option reaching Zig, and both now exist:
-`permessage_deflate` crosses `NativeServerConfig` in `src/binding/native.ts`,
-`RawConfig` and `Limits` in `src/engine/server/options.zig` carry it, and
-`attach_route` registers the compression. A `ws` client that offers the extension
-is answered with a negotiated `permessage-deflate` and a compressed message
-round-trips.
+`ServerConfig.compression_stride` is called from `layout_offsets`
+unconditionally, so the engine reserved the paired deflate scratch for every
+configuration and enabling the extension turns that dead slab into function at no
+additional memory.
 
-The engine already reserved the paired deflate scratch for every configuration,
-because `ServerConfig.compression_stride` is called from `layout_offsets`
-unconditionally, so at 32 KiB the engine was holding 9.14 MiB per server in
-scratch it never touched. Enabling the extension turns that dead slab into
-function at no additional memory, which is why the extension and the message cap
-are the same piece of work rather than two.
-
-The 86 cases in groups 12 and 13 are still listed in `tests/autobahn/baseline.json`
-because the baseline can only be re-recorded by a run of the digest-pinned suite.
-The gate is written to fail on a listed case that now passes, so that run is what
-shortens the list.
-
-**None of that can land yet, and the reason is structural rather than a matter of
-effort.** The gate fails a run whose `baseline.json` lists a case that now passes,
-so a protocol fix _must_ ship with a regenerated baseline, and the baseline can
-only be recorded by the digest-pinned suite. That image is a frozen Python 2.7 /
-PyPy build, so it needs Docker, and the case set is only meaningful against that
-exact digest. A PyPI install is not a substitute: the published package is a
-broken Python 2 relic, and a `2to3` port of the `v25.10.1` source dies in the first
-case file on `str` versus `bytes` payload semantics, which is exactly where
-fidelity would be lost.
-
-So the roadmap for these rows is written down and mechanical, and each needs one
-Docker-capable host and one recorded run:
-
-| Gap    | What is missing                                                                                                                                                                                | Where                                   |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 1      | `message_capacity` is 32 KiB and the payloads are 64 KiB. Settled: it is the former, and the check is `zslay`'s own `max_frame_len`                                                            | `src/engine/server/capacities.zig`      |
-| 5      | Whatever the two fragment-boundary cases disagree about, once one case report says. Reassembly and interleaved control frames were traced and are correct, so the suspect is the outbound echo | one recorded per-case report settles it |
-| 7      | The same outbound echo path as group 5, reached through a different report code                                                                                                                | one recorded per-case report settles it |
-| 12, 13 | Implemented. The baseline still lists them because only a recorded run may shorten it                                                                                                          | `tests/autobahn/baseline.json`          |
-
-### Why the suite used to take 35 minutes
-
-Because it was failing. The report's per-case `duration` sums to 12 seconds across
-all 301 cases and never came close to the 2100s the suite step used to take,
-because the field spans `caseStart` at `onOpen` to `caseEnd` at `connectionLost`
-and so excludes the TCP connect and the opening handshake the client does per
-case. What the 2100s was: 229 failing cases waiting on the client's
-close-handshake timeout. Fixing the engine removed the timeouts, and the suite
-step is now 14s. `CI_CD_PIPELINE.md` has the step timings and what the remaining
-175s of build implies.
+A PyPI install of the suite is not a substitute for the digest-pinned image: the
+published package is a broken Python 2 relic, and a `2to3` port of the `v25.10.1`
+source dies in the first case file on `str` versus `bytes` payload semantics.
 
 ## WebSocketServer
 
@@ -311,15 +232,22 @@ step is now 14s. `CI_CD_PIPELINE.md` has the step timings and what the remaining
 ## Error shape policy
 
 ventijs throws `Error` instances that keep the `ws` constructor (`TypeError`,
-`RangeError`, `SyntaxError`) and message text wherever `ws` defines one, and
-adds a stable `ERR_*` code from `src/types/errors.ts` to every error. `ws` uses
-`WS_ERR_*` codes internally and leaves many thrown errors uncoded. This
-additive divergence follows the repository rule that errors carry a stable
-string code; the compat factories must pin the class, message, and code of
-every thrown error with tests as they land. The facade pins `ERR_BACKPRESSURE`
-for a full staging ring, `ERR_SOCKET_NOT_OPEN` for sends before `open`, the
-close-code and close-reason codes for `close()`, and `ERR_PROTOCOL` for
-`wsClientError`; `tests/compat/socket/socket.test.ts`, `tests/compat/server/upgrade-policy.test.ts` assert them.
+`RangeError`, `SyntaxError`) and message text wherever `ws` defines one, and adds
+a stable `code` to every error, from `src/types/errors.ts`. The `WS_ERR_*` half of
+that union is `ws`'s, and a refused frame now carries one: the codec's
+classification crosses the boundary as an ordinal and `ws`'s code, constructor, and
+message come out the other side (`src/compat/socket/refusal-table.ts`). The `ERR_*`
+half is additive and answers what `ws` reports uncoded;
+[compliance-error-codes.md](docs/compliance-error-codes.md) tracks all twelve
+`WS_ERR_*` codes and both environment variables. `tests/compat/socket/socket.test.ts`
+and `tests/compat/server/upgrade-policy.test.ts` assert the `ERR_*` codes,
+`tests/compat/socket/refusal-codes.test.ts` and
+`tests/compat/socket/refusal-payload-codes.test.ts` the `WS_ERR_*` ones.
+
+One `WS_ERR_*` condition is only half reachable, and that is the engine rather than a
+divergence: `WS_ERR_TOO_MANY_BUFFERED_PARTS` covers both `maxFragments` and
+`maxBufferedChunks` in `ws`, and only the first is a bound ventijs has, because the
+codec holds at most one read's un-decoded tail against `ws`'s default of 262144.
 
 `close(code, reason)` matches `ws` for every argument shape. Two behaviours
 differ and both are deliberate:
@@ -333,31 +261,26 @@ differ and both are deliberate:
 - `reason === null` is treated as an absent reason. `ws` rejects it with a
   V8-internal `TypeError` from reading `.length` off it.
 
-`src/compat/socket/close-reason.ts` refuses a reason that is neither a string
-nor a `Uint8Array` once it carries data, which is the fix for the uninitialized
-memory disclosure advisory GHSA-58qx-3vcg-4xpx: a differently typed array
-reports a smaller element count than its `byteLength`, so accepting one would
-size a close frame from bytes that are never written. One note on that advisory:
-`ws` 8.21.3 refuses the argument at `sender.js:207`, so the framing above describes
-the pre-8.20.1 code path rather than a hazard a caller can still reach.
+`src/compat/socket/close-reason.ts` refuses a reason that is neither a string nor a
+`Uint8Array` once it carries data: a differently typed array reports a smaller
+element count than its `byteLength`, so accepting one would size a close frame from
+bytes that are never written (GHSA-58qx-3vcg-4xpx). `ws` 8.21.3 refuses the
+argument at `sender.js:207`, so this describes the pre-8.20.1 code path.
 `tests/conformance/close.conformance.test.ts` pins the argument handling and
 `tests/protocol/close-codes.test.ts` the predicates.
 
 A send is reported the way `ws` reports it, which is a split rather than one rule.
 A send on a socket that is not `OPEN` goes to `sendAfterClose`: the bytes are
-accounted, the callback is told, and nothing else happens, because a caller
-sending during a close in progress cannot tell a teardown from a fault. A send
-that failed on an _open_ socket goes to `emitErrorAndClose`: `CLOSING` is latched,
-`error` is emitted once, and the socket then closes. That is the only path that
-emits, and it is the only one a caller with no callback has anything to observe.
+accounted, the callback is told, and nothing else happens. A send that failed on an
+_open_ socket goes to `emitErrorAndClose`: `CLOSING` is latched, `error` is emitted
+once, and the socket then closes, which is the only path that emits.
 `tests/conformance/send-after-close.conformance.test.ts` compares the first half
 against `ws` and `tests/compat/socket/send-reporting.test.ts` pins both.
 
-`terminate()` latches `CLOSING` before it destroys, so a terminated socket is
-observably closing until the transport's `close` event finishes it, and a
-`close` or `terminate` while still `CONNECTING` emits `error` with `WebSocket was
-closed before the connection was established` before the 1006 `close`, matching
-`ws`'s `abortHandshake`. `tests/compat/socket/lifecycle.test.ts` covers both.
+`terminate()` latches `CLOSING` before it destroys, and a `close` or `terminate`
+while still `CONNECTING` emits `error` with `WebSocket was closed before the
+connection was established` before the 1006 `close`, matching `ws`'s
+`abortHandshake`. `tests/compat/socket/lifecycle.test.ts` covers both.
 
 The handshake is hardened beyond `ws` in five places, and all five are
 deliberate:
@@ -373,9 +296,8 @@ deliberate:
   there, which escapes as an `uncaughtException` and writes nothing to the socket.
   This is a strict improvement, but a consumer relying on `ws` not throwing for a
   valid input would see a difference.
-- The socket's handshake-phase `error` handler is removed once the 101 is written.
-  `ws` removes it, and leaving it attached put a second handler on every upgraded
-  socket that destroyed without latching.
+- The socket's handshake-phase `error` handler is removed once the 101 is written,
+  which `ws` also does.
 
 `tests/compat/server/upgrade*.test.ts` and
 `tests/compat/server/options-parity.test.ts` cover these.
@@ -416,6 +338,9 @@ superset rather than a mismatch:
 | `tests/conformance/{close-latch,control,send-after-close}.conformance.test.ts`                   | Latching, control-frame validation, and send-after-close compared against `ws`, ready state included on both the throwing and non-throwing paths | done   |
 | `tests/conformance/stream.conformance.test.ts`                                                   | Duplex adapter behavior compared against `ws`                                                                                                    | done   |
 | `tests/conformance/close.conformance.test.ts`                                                    | `close(code, reason)` argument handling compared against `ws`                                                                                    | done   |
+| `tests/compat/socket/refusal-codes.test.ts`, `tests/compat/socket/refusal-payload-codes.test.ts` | The `WS_ERR_*` code, constructor, message, and close code of a refused frame, over real frames                                                   | done   |
+| `tests/compat/client/client-request-hooks.test.ts`                                               | `finishRequest` per hop and `generateMask` proven by the bytes on the wire                                                                       | done   |
+| `tests/binding/socket-close-race.test.ts`                                                        | A message staged in the same engine read as a peer close still reaches the application                                                           | done   |
 | `tests/tooling/oxlint-plugin.test.ts`                                                            | Anti-OOP, enum, and emoji lint rules                                                                                                             | done   |
 | `tests/types/**`                                                                                 | Compile-time public surface, every event-map entry, state records                                                                                | done   |
 | `tests/declarations/**`                                                                          | Built declarations through the package `exports` map                                                                                             | done   |

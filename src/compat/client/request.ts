@@ -1,16 +1,6 @@
-/// The opening handshake, as `http.RequestOptions`.
-///
-/// Split out of `dial.ts` because the request is one decision -- which URL, which
-/// headers, which transport -- and the request *lifecycle* is another. The previous
-/// route built a request line and a header block as bytes and read them back off a
-/// socket it had opened itself, which is the whole reason `upgrade`,
-/// `unexpected-response`, and `redirect` had no `ClientRequest` to hand a caller:
-/// there was no request object, only a socket and some bytes.
-///
-/// **The header order is still fixed**, and `tests/conformance/` still compares two
-/// handshakes field by field. `http.request` writes the headers in the order the object
-/// enumerates them, so the order is a property of this function rather than of the
-/// library underneath it.
+/// The opening handshake, as `http.RequestOptions`. Header order is fixed and
+/// `tests/conformance/` compares two handshakes field by field, so it is a property of
+/// this function, not of the library that enumerates it.
 
 import type { RequestOptions } from "node:https";
 import { createHash, randomBytes } from "node:crypto";
@@ -21,16 +11,14 @@ import type { ClientAddress } from "./address";
 /// RFC 6455 section 1.3: the constant the accept digest is derived from.
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/// The accept value a server must echo for this key.
 export function expectedAccept(key: string): string {
   return createHash("sha1")
     .update(key + GUID)
     .digest("base64");
 }
 
-/// A fresh key: 16 random bytes, base64-encoded. RFC 6455 section 4.1 asks for a
-/// nonce of 16 bytes, and it is what makes the handshake a proof the peer is a live
-/// endpoint rather than a cache replaying a response.
+/// RFC 6455 section 4.1 asks for a 16-byte nonce, which makes the handshake a proof of a live
+/// endpoint rather than a cache replay.
 export function newKey(): string {
   return randomBytes(16).toString("base64");
 }
@@ -38,16 +26,13 @@ export function newKey(): string {
 export type Handshake = {
   readonly key: string;
   readonly headers: Readonly<Record<string, string>>;
-  /// The options the request module is called with, minus the ones it fills in itself.
-  /// Typed as the `https` options because that is the wider of the two, so the TLS
-  /// fields are name-checked rather than smuggled through as an index signature.
+  /// The options the request module is called with, minus the ones it fills in. Typed as
+  /// the wider of the two so TLS fields are name-checked, not smuggled as an index type.
   readonly request: RequestOptions;
 };
 
-/// Builds the opening request.
-///
-/// `carriedAuth` is credentials forwarded from an earlier hop, because a redirect's
-/// `Location` names a URL and not the credentials a caller put in the one they dialled.
+/// `carriedAuth` is credentials from an earlier hop: a redirect's `Location` names a URL
+/// and not the credentials dialled.
 export function buildRequest(
   address: ClientAddress,
   options: NormalizedClientOptions,
@@ -62,9 +47,8 @@ export function buildRequest(
     Upgrade: "websocket",
   };
   if (protocols.length > 0) headers["Sec-WebSocket-Protocol"] = protocols.join(",");
-  // The offer, not the negotiation. RFC 7692 section 7.1.1.1: a client asks, and a
-  // server that does not answer sends uncompressed frames, which is a normal connection
-  // rather than a degraded one.
+  // The offer, not a negotiation: RFC 7692 section 7.1.1.1, a server that does not answer
+  // sends uncompressed frames, a normal connection either way.
   const extension = offer(options.perMessageDeflate);
   if (extension !== undefined) headers["Sec-WebSocket-Extensions"] = extension;
   if (options.origin !== undefined) {
@@ -75,52 +59,39 @@ export function buildRequest(
   const withCaller = { ...headers, ...lowerCased(options.headers) };
   const credentials = address.auth ?? carriedAuth;
   if (credentials !== undefined) {
-    // Written as a header rather than through `http.request`'s `auth` option because
-    // `auth` is applied after the caller's own headers, so a caller who set
-    // `Authorization` explicitly would have it replaced. `ws` puts it in the headers
-    // for the same reason, and the redirect path can then strip it, which it could not
-    // do to a value `http.request` owns.
+    // A header, not `http.request`'s `auth`, which is applied after the caller's own and
+    // would replace an explicit `Authorization`. `ws` does the same, so the redirect can strip it.
     withCaller.authorization = `Basic ${Buffer.from(credentials, "utf8").toString("base64")}`;
   }
   return {
     key,
     headers: withCaller,
     request: {
-      // `hostname`, not `host`: in `http.request`'s options `host` is the name to
-      // resolve, and passing `host:port` there asks for a host *named* `127.0.0.1:42989`.
-      // The `Host` header is written explicitly below instead, because Node omits the
-      // port when it is the scheme's default and `ws` never does.
+      // `hostname`, not `host`, which here is the name to resolve: `host:port` would ask for a
+      // host *named* `127.0.0.1:42989`. `Host` is explicit below because Node drops the port
+      // when it is the scheme's default and `ws` never does.
       hostname: address.host,
       port: address.port,
       path: address.path,
       method: "GET",
       headers: { host: hostHeader(address), ...withCaller },
-      // Node would otherwise add its own `Host`, and the caller's has to win because
-      // `ws` sends the URL's authority verbatim.
+      // The caller's must win, because `ws` sends the URL's authority verbatim.
       setHost: false,
       ...transportOptions(address),
     },
   };
 }
 
-/// The transport half of the options, which is the only place TLS is chosen.
-///
-/// `ws` makes the same choice from the scheme, and the certificate is verified against
-/// Node's default CA set exactly as `ws` leaves it: a drop-in that skipped verification
-/// would accept every certificate a proxy presented, which is the one behaviour a caller
-/// cannot detect from the outside. `rejectUnauthorized` is stated rather than inherited
-/// because the default has changed between Node majors, and a drop-in must not move with
-/// it.
+/// The only place TLS is chosen. `rejectUnauthorized` is stated rather than inherited
+/// because the default has moved between Node majors and a drop-in must not move too.
 function transportOptions(address: ClientAddress): RequestOptions {
   if (address.socketPath !== undefined) return { socketPath: address.socketPath };
   if (!address.secure) return {};
   return { servername: address.host, rejectUnauthorized: true };
 }
 
-/// A domain socket has no authority to name, and `http.request` over `socketPath` sends
-/// the path as the `Host` header. Inventing `localhost` would put a name in the handshake
-/// that the peer never asked for, and a name a server routes on is a name a caller did
-/// not configure.
+/// A domain socket has no authority to name and `http.request` sends the path as `Host`;
+/// inventing `localhost` would put a routable name the caller never configured there.
 function hostHeader(address: ClientAddress): string {
   if (address.socketPath !== undefined) return address.socketPath;
   const bracketed = address.host.includes(":") ? `[${address.host}]` : address.host;

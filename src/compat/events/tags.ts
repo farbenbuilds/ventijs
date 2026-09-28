@@ -3,14 +3,12 @@ import { subscribe, unsubscribeMatching } from "./registry";
 
 const MAX_WRAPPER_DEPTH = 3;
 
-/// Brand for DOM listener wrappers. The emitter layer must never treat one as
-/// a user handler: `ws` keeps `removeListener`/`listeners` disjoint from the
-/// `addEventListener` surface.
+/// The emitter layer must never treat a wrapper as a user handler: `ws` keeps
+/// `removeListener`/`listeners` disjoint from the `addEventListener` surface.
 export const DOM_WRAPPER = Symbol("ventijs.domWrapper");
 
-/// A wrapper is a function carrying the original handler on `listener`, which
-/// is Node's introspection contract. DOM wrappers add the `DOM_WRAPPER` brand
-/// and an `attribute` flag for the `on*` accessors.
+/// A function carrying the original handler on `listener`, which is Node's introspection
+/// contract. DOM wrappers add the `DOM_WRAPPER` brand and an `attribute` flag.
 export type TaggedHandler = Handler<readonly unknown[]> & {
   listener?: unknown;
   attribute?: boolean;
@@ -21,9 +19,8 @@ export function asTagged(entry: unknown): TaggedHandler {
   return entry as TaggedHandler;
 }
 
-/// Resolves a registry entry to the handler the user passed in, unwrapping
-/// the `once` and DOM layers. The walk is bounded: only this module ever sets
-/// `listener`, and a user function cannot extend the chain.
+/// The walk is bounded: only this module ever sets `listener`, and a user function cannot
+/// extend the chain.
 export function originalOf(entry: unknown): unknown {
   let current: unknown = entry;
   for (let depth = 0; depth < MAX_WRAPPER_DEPTH; depth += 1) {

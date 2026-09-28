@@ -4,19 +4,16 @@ import type { CaseReport } from "./report-index.ts";
 import { isTolerated } from "./report-index.ts";
 
 export type BaselineDrift = {
-  /// Baseline entries the run did not reproduce. A case can drop out of the
-  /// suite between two runs, and that is not a regression.
+  /// Baseline entries the run did not reproduce; a case can drop out between two runs.
   readonly stale: readonly string[];
-  /// Baseline entries the run now passes. These are the work queue, and they
-  /// are reported so a fix cannot be left behind in `baseline.json`.
+  /// Baseline entries the run now passes: the work queue, reported so a finished case cannot
+  /// be left behind in `baseline.json`.
   readonly fixed: readonly string[];
 };
 
-/// Compares the committed known-failure list against a run, in both directions.
-///
-/// Only a failure outside the list is fatal. A list entry that now passes is
-/// reported rather than ignored, so the list shrinks as the engine improves and
-/// nobody can leave a finished case sitting in it.
+/// Compares the committed known-failure list against a run, in both directions. Only a failure
+/// outside the list is fatal; an entry that now passes is reported rather than ignored, so the
+/// list shrinks as the engine improves and nobody can leave a finished case sitting in it.
 export function baselineDrift(cases: readonly CaseReport[], mode: ModeCounts): BaselineDrift {
   const stale: string[] = [];
   const fixed: string[] = [];

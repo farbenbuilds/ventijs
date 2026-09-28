@@ -1,17 +1,14 @@
-//! Outbound transitions over one socket record.
-//!
-//! Every function assumes the caller holds the record's lock and has already
-//! checked the generation. The record carries the generation on each staged
-//! payload, so a drain can drop a record whose connection was recycled while
-//! the operation was in flight.
+//! Outbound transitions over one socket record. Every function assumes the caller holds
+//! the record's lock and has checked the generation; each staged payload carries that
+//! generation, so a drain can drop a record whose connection was recycled in flight.
 
 const std = @import("std");
 const payload = @import("payload.zig");
 const status = @import("status.zig");
 
-/// One connection record. The engine thread resets it on open and closes it on
-/// finish; the Node main thread runs the transitions in this module. The lock
-/// serializes the two, so every field below is safe to touch while held.
+/// One connection record. The lock serializes the engine thread's reset and close
+/// against the main thread's transitions here, so every field is safe to touch
+/// while held.
 pub const Slot = struct {
     state: std.atomic.Value(status.State) = .init(.open),
     terminal: std.atomic.Value(bool) = .init(false),

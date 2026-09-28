@@ -1,15 +1,18 @@
-import type { PerMessageDeflateOptions, ServerOptions } from "./ws";
+import type {
+  ClientOptions,
+  FinishRequestCallback,
+  PerMessageDeflateOptions,
+  ServerOptions,
+} from "./ws";
 
 export type ZlibDeflateOptions = PerMessageDeflateOptions["zlibDeflateOptions"];
 
 export type ZlibInflateOptions = PerMessageDeflateOptions["zlibInflateOptions"];
 
-/// A negotiated window size, or `false` to refuse one.
-///
 /// `false` is in the type because `ws` compares against it at runtime, in both
 /// directions, and a caller reaching its options through an untyped object can set it.
-/// `@types/ws` declares only a number, so this is a wider type than the vendored
-/// declarations and a narrower one than the runtime.
+/// `@types/ws` declares only a number, so this is wider than the vendored declarations
+/// and narrower than the runtime.
 export type WindowBitsOption = number | false | undefined;
 
 export type NormalizedPerMessageDeflate = {
@@ -34,14 +37,12 @@ export type NormalizedServerOptions = {
   readonly allowSynchronousEvents: boolean;
   readonly autoPong: boolean;
   readonly maxPayload: number;
-  /// The most fragments one message may be split into. `ws` documents it and
-  /// defaults it, but `@types/ws` declares it on neither record, so it is read
-  /// rather than declared here for the same reason `closeTimeout` is.
+  /// `ws` documents and defaults this, but `@types/ws` declares it on neither record.
   readonly maxFragments: number;
   readonly skipUTF8Validation: boolean;
   readonly perMessageDeflate: false | NormalizedPerMessageDeflate;
-  /// Milliseconds a close handshake may stay unfinished. Zero means no deadline,
-  /// which is a caller's choice and not the default.
+  /// Milliseconds a close handshake may stay unfinished. Zero is a caller's choice, not
+  /// the default.
   readonly closeTimeout: number;
   readonly verifyClient: ServerOptions["verifyClient"] | null;
   readonly handleProtocols: ServerOptions["handleProtocols"] | null;
@@ -54,16 +55,19 @@ export type NormalizedClientOptions = {
   readonly maxRedirects: number;
   readonly handshakeTimeout: number | undefined;
   readonly maxPayload: number;
-  /// See the server record: documented and defaulted by `ws`, absent from
-  /// `@types/ws`.
+  /// See the server record.
   readonly maxFragments: number;
   readonly skipUTF8Validation: boolean;
   readonly allowSynchronousEvents: boolean;
   readonly autoPong: boolean;
   readonly perMessageDeflate: false | NormalizedPerMessageDeflate;
-  /// Milliseconds a close handshake may stay unfinished. Zero means no deadline,
-  /// which is a caller's choice and not the default.
+  /// Milliseconds a close handshake may stay unfinished. Zero is a caller's choice, not
+  /// the default.
   readonly closeTimeout: number;
   readonly origin: string | undefined;
   readonly headers: Readonly<Record<string, string>> | undefined;
+  /// `ws`'s `finishRequest`: the caller owns the `end()`. Declared by `@types/ws`, so
+  /// unlike `maxFragments` a typed caller reaches it without a cast.
+  readonly finishRequest: FinishRequestCallback | undefined;
+  readonly generateMask: ClientOptions["generateMask"];
 };

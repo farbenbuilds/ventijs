@@ -1,11 +1,7 @@
-//! The frame codec: one instance per WebSocket connection, driven by the Node stream
-//! that owns the socket.
-//!
-//! `docs/adr/0001-transport-and-framing-ownership.md` records why the framing is here
-//! and the transport is not. This is a parser and a formatter: it never sees a socket,
-//! and it allocates only when a message outgrows the floor it started at. Header
-//! parsing, encoding, and masking all come from the same `zslay` the engine route
-//! uses, so the two routes onto the wire agree by construction.
+//! The frame codec: one instance per WebSocket connection, driven by the Node stream that
+//! owns the socket. It never sees one, and allocates only when a message outgrows its
+//! floor; header parsing, encoding, and masking come from the same `zslay` the engine
+//! route uses, so the two routes onto the wire agree by construction.
 
 const zslay = @import("zslay");
 const capacities = @import("capacities.zig");
@@ -27,11 +23,9 @@ pub const Outcome = result.Outcome;
 pub const FeedResult = result.FeedResult;
 pub const Error = error{ CodecTableFull, InvalidMessageCap, InvalidCapacity, OutOfMemory };
 
-/// A frame codec for one connection.
-///
-/// The two ceilings are runtime and the buffers grow to reach them; `control_slots`
-/// stays comptime, because a control payload is 125 bytes against a buffer that can be
-/// 100 MiB.
+/// A frame codec for one connection. The two ceilings are runtime and the buffers grow
+/// to reach them; `control_slots` stays comptime, because a control payload is 125 bytes
+/// against a buffer that can be 100 MiB.
 pub fn codec(comptime control_slots: usize) type {
     if (control_slots == 0) @compileError("codec needs at least one control slot");
 
@@ -50,11 +44,9 @@ pub fn codec(comptime control_slots: usize) type {
         /// boundary's return, leaving no room for the offset.
         resume_offset: usize = 0,
 
-        /// Builds a codec for one role from a trusted limits record, so the table
-        /// validates once and every route to a codec is checked once. A ceiling the codec
-        /// cannot enforce is a configuration error and not a 1009: a peer did nothing
-        /// wrong, and closing it for a limit the application chose looks, from the
-        /// peer's side, like a bug in the library.
+        /// A ceiling the codec cannot enforce is a configuration error and not a 1009: a
+        /// peer did nothing wrong, and closing it for a limit the application chose looks,
+        /// from the peer's side, like a bug in the library.
         pub fn init(role: zslay.EndpointRole, trusted: limits.Limits) Error!Self {
             var self: Self = .{
                 .rx = try inbound.receive().init(role, trusted, capacities.message_floor),
@@ -79,12 +71,9 @@ pub fn codec(comptime control_slots: usize) type {
             return self.rx.parts.ends();
         }
 
-        /// Folds `input` into the codec, stopping when the input runs out, the queue
-        /// fills, or a frame is refused.
-        ///
-        /// `input` is scratch and is unmasked in place, which saves a copy of every byte
-        /// a client sends. The cost is that a caller hands over a buffer nothing else
-        /// reads and never re-feeds the same bytes: they are plaintext after.
+        /// Folds `input` into the codec, stopping when the input runs out, the queue fills,
+        /// or a frame is refused. `input` is scratch and is unmasked in place; see
+        /// `ingest.zig`.
         pub fn feed(self: *Self, input: []const u8) FeedResult {
             return self.note(driver.feed(Self, self, input));
         }
@@ -99,7 +88,6 @@ pub fn codec(comptime control_slots: usize) type {
             return self.tx.encode(kind, fin, payload, compress);
         }
 
-        /// Latches a failure and reports it as an event where there is room.
         pub fn refuse(self: *Self, failure: Failure) FeedResult {
             return self.note(driver.refuse(Self, self, failure));
         }
@@ -109,7 +97,7 @@ pub fn codec(comptime control_slots: usize) type {
             self.resume_offset = folded.consumed;
             return folded;
         }
-        /// Events waiting to be taken, including one already selected.
+
         pub fn pending(self: *const Self) usize {
             return self.events.pending();
         }
@@ -136,6 +124,7 @@ pub fn codec(comptime control_slots: usize) type {
             const failure = self.failure orelse return 0;
             return events.close_code_for(failure);
         }
+
         /// Where the last fold stopped, for a caller resuming a partial input.
         pub fn resume_at(self: *const Self) usize {
             return self.resume_offset;

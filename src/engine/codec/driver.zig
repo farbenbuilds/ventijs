@@ -1,25 +1,17 @@
 //! The feed loop: bytes in, decoded events queued, bytes consumed reported.
 //!
-//! A free function over the codec rather than a method on it, because the loop is a
-//! state machine in its own right and the codec is the state it advances. It reads better
-//! here than as a hundred-line method: every `advance_rx` action with what each one
-//! does, and nothing else in the file.
-//!
-//! Every iteration must make progress or return. The parser advances on every path
-//! through the loop, and a path that cannot advance returns, which is what keeps a full
-//! queue or a refused frame from becoming a spin.
+//! A free function over the codec rather than a method on it, because the loop is a state
+//! machine in its own right and the codec is the state it advances. Every iteration makes
+//! progress or returns, which is what keeps a full queue or a refused frame from spinning.
 
 const zslay = @import("zslay");
 const events = @import("events.zig");
+const header = @import("header.zig");
 const result = @import("feed_result.zig");
 const inbound = @import("receive.zig");
 
-/// Runs the loop over one input, reporting what it did.
-///
 /// `Comptime Codec` is the instantiated codec type, passed rather than imported so this
-/// module does not depend on the codec and the codec does not depend on this. The two
-/// are mutually recursive through that parameter, which is why the result type is named
-/// here rather than inside the codec.
+/// module does not depend on the codec and the codec does not depend on this.
 pub fn feed(comptime Codec: type, peer: *Codec, input: []const u8) result.FeedResult {
     if (peer.failure != null) return .{ .consumed = 0, .outcome = .failed };
 
@@ -48,9 +40,8 @@ pub fn feed(comptime Codec: type, peer: *Codec, input: []const u8) result.FeedRe
         }
     }
 
-    // A frame that ended exactly on the last byte has a turn left, and the loop
-    // above has already consumed its input, so the tail drains here. A
-    // zero-length frame reaches the same place without ever entering the loop.
+    // A frame that ended exactly on the last byte has a turn left, and the loop above has
+    // already consumed its input, so the tail drains here.
     while (true) {
         const action = peer.rx.conn.advance_rx() catch |err| {
             return peer.refuse(events.classify(err));
@@ -65,42 +56,61 @@ pub fn feed(comptime Codec: type, peer: *Codec, input: []const u8) result.FeedRe
     return .{ .consumed = offset, .outcome = .ok };
 }
 
-/// Copies whatever the header still needs, decides its RSV1 bit, and returns how much
-/// it took. The offset is taken by value so the caller's `offset +=` is the only place
-/// the cursor moves.
+/// Both header decisions read the codec's own copy of the octets, because RSV1 may be
+/// cleared in it, a base header may arrive one octet at a time, and `zslay` parses the
+/// header on the next `advance_rx`.
 fn take_header(comptime Codec: type, peer: *Codec, input: []const u8, offset: usize) usize {
     const destination = peer.rx.conn.get_header_buffer();
     const count = @min(destination.len, input.len - offset);
     @memcpy(destination[0..count], input[offset..][0..count]);
-    // RSV1 is decided once, when its octet arrives, which is the only moment it can be:
-    // a header may be split across reads and the second starts at the length field. The
-    // failure is latched for the loop above to refuse; `rsv1.inspect` clears the bit
-    // either way, because `zslay` parses this header on the next `advance_rx`.
-    if (peer.rx.conn.header_bytes_read == 0) {
-        if (peer.rx.inspect_rsv1(&destination[0])) |failure| peer.failure = failure;
+    if (peer.rx.conn.header_bytes_read == 0 and peer.failure == null) {
+        // RSV2 and RSV3 are decided first, because a frame that sets them is refused
+        // whatever else it says and `ws` reports them first too. Deciding them before
+        // RSV1 rather than after is the only difference the two can make on a header
+        // that sets all three.
+        if (destination[0] & 0x30 != 0) peer.failure = .unexpected_rsv_2_3;
+        if (peer.failure == null) {
+            if (peer.rx.inspect_rsv1(&destination[0])) |failure| peer.failure = failure;
+        }
     }
     peer.rx.conn.advance_header_read(count) catch return 0;
+    if (peer.failure == null) inspect_header(Codec, peer);
     return count;
 }
 
-/// Whether the frame currently being read has somewhere to go, checked before the
-/// payload is copied rather than after. An event's payload is a slice into receive
-/// state, so a frame that copies its bytes in and then finds the queue full has already
-/// overwritten a queued event's payload.
+/// The faults `zslay` collapses into one error, read from the header it is holding. It
+/// reports a reserved bit, a fragmented control frame and an over-long control frame as one
+/// `ProtocolError`, and refuses a length over its ceiling before the application can read
+/// the number, so a frame nobody could have sent and a frame over `maxPayload` arrive as the
+/// same error. One pass per header, two comparisons each.
+fn inspect_header(comptime Codec: type, peer: *Codec) void {
+    const conn = &peer.rx.conn;
+    if (conn.header_bytes_read >= 2) {
+        const base = [2]u8{ conn.header_buf[0], conn.header_buf[1] };
+        peer.failure = header.base_failure(base, peer.rx.message_opcode != null);
+    }
+    if (peer.failure != null) return;
+    if (conn.header_bytes_read < conn.header_bytes_needed) return;
+    const declared = header.declared_length(conn.header_buf[0..conn.header_bytes_needed]) orelse return;
+    if (declared > header.max_safe_frame_len) peer.failure = .unsupported_data_payload_length;
+}
+
+/// Whether the frame being read has somewhere to go, checked before the payload is copied
+/// rather than after: an event's payload is a slice into receive state, so a frame that
+/// copies in and then finds the queue full has already overwritten a queued payload.
 fn room(comptime Codec: type, peer: *const Codec) bool {
     const decoded = peer.rx.conn.decoded_header orelse return false;
     const opcode: zslay.Opcode = @enumFromInt(decoded.header.opcode);
     if (opcode.is_control()) return peer.events.has_control_room();
-    // A continuation extends a message already being reassembled, so it does not
-    // need the message slot until the frame that finishes it.
+    // A continuation extends a message already being reassembled, so it does not need the
+    // message slot until the frame that finishes it.
     return peer.events.has_message_room() or opcode == .continuation;
 }
 
-/// What settling one completed frame did. `queued` includes a fragment with nothing to
-/// queue; either way the parser has moved on, so the loop is guaranteed to progress.
+/// `queued` includes a fragment with nothing to queue; either way the parser has moved on,
+/// so the loop is guaranteed to progress.
 const Settled = enum { queued, full, failed };
 
-/// Turns a completed frame into a queued event.
 fn settle(comptime Codec: type, peer: *Codec) Settled {
     const finished = peer.rx.finish() catch |err| {
         peer.failure = events.classify(err);
@@ -124,20 +134,16 @@ fn settle(comptime Codec: type, peer: *Codec) Settled {
     return .queued;
 }
 
-/// Latches a failure and reports it as an event where there is room. The parser is
-/// reset first, because a refused connection must not keep half a frame's state that a
-/// later call could resume from.
+/// Latches a failure and reports it as an event where there is room. The parser is reset
+/// first, because a refused connection must not keep half a frame's state a later call
+/// could resume from. The event is best effort: a full queue is exactly the case a latched
+/// failure is read through rather than through an event, and the payload stays empty because
+/// the reason is the ordinal the caller has to ask for anyway.
 pub fn refuse(comptime Codec: type, peer: *Codec, failure: events.Failure) result.FeedResult {
     peer.failure = failure;
     peer.rx.reset();
-    // Best effort: the queue may be full, which is exactly the case a latched
-    // failure is read through rather than through an event.
     if (peer.events.has_control_room()) {
-        peer.events.push_control(.{
-            .kind = .rejected,
-            .failure = failure,
-            .payload = events.describe(failure),
-        });
+        peer.events.push_control(.{ .kind = .rejected, .failure = failure });
     }
     return .{ .consumed = 0, .outcome = .failed };
 }

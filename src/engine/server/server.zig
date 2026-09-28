@@ -1,13 +1,9 @@
-//! Native server lifecycle: create, listen, close, finalize.
-//!
-//! Create and finalize run on the Node main thread and own every allocation.
-//! The engine event loop runs on its own thread, is started by `listen`, and
-//! is stopped through the cluster's threadsafe wakeup. The last event an
-//! engine thread emits is `server_closed`; finalize joins that thread and
-//! refuses to free anything while events are still queued, so a dispatch
-//! callback can never touch freed memory. An environment cleanup hook frees
-//! servers a worker never finalized, so terminating a worker cannot leak the
-//! engine thread or the instance.
+//! Native server lifecycle: create, listen, close, finalize. Create and finalize run on
+//! the Node main thread and own every allocation; the engine event loop runs on its own
+//! thread, is started by `listen`, and is stopped through the cluster's threadsafe wakeup.
+//! The last event an engine thread emits is `server_closed`, and finalize joins that
+//! thread and refuses to free anything while events are queued, so a dispatch callback
+//! cannot touch freed memory.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -90,11 +86,10 @@ pub fn close(target: *instance.Instance) !void {
 
 /// Joins the engine thread and releases every native resource.
 ///
-/// The join happens before the pending check: once the engine thread is gone
-/// no new event can be reserved, so `pending == 0` proves every queued
-/// dispatch has already run. JavaScript must wait for `server_closed` before
-/// calling finalize; finalizing early returns `EventsPending` instead of
-/// freeing memory a queued callback still references.
+/// The join happens before the pending check: once the engine thread is gone no new event
+/// can be reserved, so `pending == 0` proves every queued dispatch has already run.
+/// Finalizing early returns `EventsPending` rather than freeing memory a queued callback
+/// still references.
 pub fn finalize(target: *instance.Instance) !void {
     if (target.state.load(.acquire) != .closed) return error.ServerNotClosed;
     if (target.runner) |runner| {

@@ -1,14 +1,11 @@
 import type { VentiAddon } from "./addon.ts";
 
-/// Mutable echo state for one target process. The engine owns the listener; this
-/// record holds the connection the reply is staged through.
 export type EchoState = {
   handle: number;
   connection: bigint | null;
 };
 
-/// A connection handle is `generation << 32 | index`, the same packing
-/// `src/binding/handle.ts` performs.
+/// A connection handle is `generation << 32 | index`, the packing `src/binding/handle.ts` does.
 export function echoState(): EchoState {
   return { handle: 0, connection: null };
 }
@@ -17,14 +14,11 @@ export function pack(index: number, generation: number): bigint {
   return (BigInt(generation) << 32n) | BigInt(index);
 }
 
-/// The Autobahn echo contract, reduced to its essentials: reply to every message
-/// with the same opcode, and change nothing else. Anything smarter would make a
-/// fuzzing case pass or fail for a reason the report cannot name.
+/// Reply to every message with the same opcode and change nothing else: anything smarter makes a
+/// case pass or fail for a reason the report cannot name.
 ///
-/// The inbound ring is FIFO across the whole server, so this drains until it is
-/// empty rather than taking one message per wakeup: a coalesced wakeup would
-/// leave messages waiting for an event that never comes, and the suite would
-/// record a timeout rather than the protocol error it actually produced.
+/// The inbound ring is FIFO across the whole server, so this drains until empty: a coalesced
+/// wakeup would leave messages waiting for an event that never comes.
 export function reply(a: VentiAddon, state: EchoState): void {
   const connection = state.connection;
   if (connection === null) return;
@@ -37,14 +31,8 @@ export function reply(a: VentiAddon, state: EchoState): void {
   }
 }
 
-/// Drops the staged inbound records of a connection that has closed.
-///
-/// Every case in the suite opens a fresh connection, and `reply` drains eagerly,
-/// so a well-behaved run never leaves anything staged. A case that lost the race
-/// would, though, and its records would sit at the head of an inbound ring that is
-/// one strictly ordered FIFO across the whole server. Nothing could ever match
-/// them again, and the next case on a different connection would stall behind
-/// them and be recorded as a protocol failure it did not produce.
+/// A case that lost the race leaves records at the head of a strictly ordered FIFO, and nothing
+/// could match them.
 export function purge(a: VentiAddon, state: EchoState, index: number, generation: number): void {
   a.purgeSocketMessage(state.handle, index, generation);
 }

@@ -1,25 +1,18 @@
-//! Bounded outbound payload staging.
-//!
-//! JavaScript bytes are copied into engine-owned slots before a staging call
-//! returns, and only scalar record fields travel back out, so a JavaScript
-//! pointer is never retained and an engine pointer never escapes to
-//! JavaScript. The ring is fixed-capacity: exhaustion reports backpressure
-//! instead of growing memory, and an oversized payload is rejected before a
-//! byte is copied.
+//! Bounded outbound payload staging. JavaScript bytes are copied into engine-owned
+//! slots before a staging call returns and only scalar record fields travel back out,
+//! so a JavaScript pointer is never retained and an engine pointer never escapes.
 
 const std = @import("std");
 
-/// Payload category carried in a staged record. The engine drain maps these
-/// onto the zslay opcodes the framing path sends.
+/// Payload category; the engine drain maps these onto the zslay opcodes.
 pub const Kind = enum(u8) { text, binary, ping, pong, close };
 
-/// Failure of `stage`. Both cases become statuses at the boundary; neither
+/// Failure of `stage`; both cases become statuses at the boundary, and neither
 /// allocates.
 pub const Error = error{ PayloadTooLarge, QueueFull };
 
-/// One staged payload as the engine thread observes it. `bytes` borrows ring
-/// storage and is valid until `release`; it must never cross back to
-/// JavaScript.
+/// One staged payload. `bytes` borrows ring storage, is valid until `release`,
+/// and must never cross back to JavaScript.
 pub const View = struct {
     kind: Kind,
     index: u32,
@@ -28,9 +21,8 @@ pub const View = struct {
     sequence: u64,
 };
 
-/// Fixed-capacity structure-of-arrays ring. The Node main thread stages; the
-/// owning engine thread peeks and releases. Slot ownership transfers through
-/// the sequence word, so a producer never observes a partially written record.
+/// A fixed-capacity structure-of-arrays ring. Slot ownership transfers through the
+/// sequence word, so a producer never observes a partially written record.
 pub fn payload_ring(comptime slots: usize, comptime slot_bytes: usize) type {
     if (slots == 0) @compileError("payload ring needs at least one slot");
     if (!std.math.isPowerOfTwo(slots)) @compileError("payload ring slot count must be a power of two");
@@ -59,11 +51,11 @@ pub fn payload_ring(comptime slots: usize, comptime slot_bytes: usize) type {
             return out;
         }
 
-        /// Copies `data` into the next free slot. The source is read only for
-        /// the duration of this call, and the record is published with a
-        /// release store so the consumer sees it whole. The CAS loop
-        /// terminates because a failed swap reloads the producer position and
-        /// a success either returns `QueueFull` or claims the sequence.
+        /// Copies `data` into the next free slot. The source is read only for this
+        /// call and the record is published with a release store, so the consumer
+        /// sees it whole. The CAS loop terminates because a failed swap reloads the
+        /// producer position and a success either returns `QueueFull` or claims the
+        /// sequence.
         pub fn stage(
             ring: *Self,
             kind: Kind,
@@ -99,19 +91,18 @@ pub fn payload_ring(comptime slots: usize, comptime slot_bytes: usize) type {
             }
         }
 
-        /// Returns the oldest staged payload without consuming it, or null
-        /// when the ring is empty. Engine thread only; pair with `release`.
+        /// The oldest staged payload without consuming it, or null when the ring is
+        /// empty. Engine thread only; pair with `release`.
         pub fn peek(ring: *Self) ?View {
             const pos = ring.dequeue_pos.load(.monotonic);
             const sequence = ring.sequences[pos % slots].load(.acquire);
             const difference = @as(isize, @bitCast(sequence -% (pos +% 1)));
             if (difference < 0) return null;
             const slot = pos % slots;
-            // The stored length is the only thing that decides how much of a
-            // fixed-size slot is read, so it is clamped at the read site rather
-            // than trusted from the producer's earlier check. One `min` on a cold
-            // path buys a slice that is in bounds by construction, which is what
-            // a release build needs.
+            // The stored length is the only thing deciding how much of a fixed-size
+            // slot is read, so it is clamped here rather than trusted from the
+            // producer's earlier check: one `min` on a cold path buys a slice that
+            // is in bounds by construction, which is what a release build needs.
             const stored = ring.lengths[slot];
             const length: usize = @min(@as(usize, stored), slot_bytes);
             return .{
@@ -136,9 +127,8 @@ pub fn payload_ring(comptime slots: usize, comptime slot_bytes: usize) type {
             return enqueued -% dequeued;
         }
 
-        /// Stages rejected because the ring was full. One of the two reasons
-        /// `serverDroppedMessages` is non-zero; the other is a paused connection,
-        /// counted by `queues.count_dropped`.
+        /// Stages rejected because the ring was full; the other source of a
+        /// non-zero drop count is `queues.count_dropped`.
         pub fn dropped_count(ring: *const Self) u64 {
             return ring.dropped.load(.acquire);
         }

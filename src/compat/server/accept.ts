@@ -14,13 +14,10 @@ import { thresholdOf } from "../extensions/threshold";
 
 const UPGRADED = Symbol("ventijs.upgraded");
 
-/// A transport that already carried one upgrade response.
 type UpgradedSocket = Duplex & { readonly [UPGRADED]?: true };
 
 export type UpgradeCallback = (client: WebSocket, request: IncomingMessage) => void;
 
-/// Accepts a validated upgrade: builds the 101 response, instantiates the
-/// configured socket class, adopts the stream, and tracks the client.
 export function completeUpgrade(
   state: ServerState,
   request: IncomingMessage,
@@ -51,9 +48,8 @@ export function completeUpgrade(
     `Sec-WebSocket-Accept: ${socketAccept(key)}`,
   ];
   const negotiation = negotiateExtensions(state, request, socket);
-  // The socket may already carry a 400, and a 101 written after it is a
-  // `ERR_STREAM_WRITE_AFTER_END` on the caller's own upgrade rather than the refusal the
-  // peer was told about.
+  // The socket may already carry a 400, and a 101 written after it is an
+  // `ERR_STREAM_WRITE_AFTER_END` on the caller's own upgrade.
   if (negotiation.outcome === "refused") return;
   const extensions = negotiation.outcome === "accepted" ? negotiation.accepted : null;
   const SocketClass = state.options.WebSocket ?? state.webSocket;
@@ -66,39 +62,31 @@ export function completeUpgrade(
   detachHandshakeError(socket);
   socket.write(headers.concat("\r\n").join("\r\n"));
   void head;
-  // The negotiated values are published before the socket is opened, because opening
-  // is what emits `open`, and `ws` has already assigned
-  // `_protocol` by the time that event fires. An `open` listener, including an
-  // `onopen` attribute or a custom `WebSocket` class, otherwise observed an
-  // empty protocol on a connection the server had already selected one for.
+  // Published before the socket opens, because opening is what emits `open` and `ws` has
+  // assigned `_protocol` by then. An `open` listener otherwise saw an empty protocol on a
+  // connection the server had already selected one for.
   const acceptedState = socketStateOf(accepted);
   if (acceptedState !== undefined && protocol) acceptedState.protocol = protocol;
   if (acceptedState !== undefined) {
     acceptedState.closeTimeout = state.normalizedOptions.closeTimeout;
-    // `autoPong` is a server option and this is a server socket, so the server's choice
-    // is the socket's. It was read on the client route and nowhere else, which left
-    // `autoPong: false` answered anyway: the state default is `true` and nothing
-    // overwrote it, so a caller who said "I will answer pings myself" got a pong from
-    // the library anyway and its own answer was a second one.
+    // The server's choice is the socket's on a server socket. Unread, `autoPong: false`
+    // was answered anyway: the state default is `true`, so a caller who said "I will
+    // answer pings myself" got a pong from the library and a second one of its own.
     acceptedState.autoPong = state.normalizedOptions.autoPong;
-    // Both are per-socket decisions the server already made, and neither reached the
-    // socket: `allowSynchronousEvents` was normalized and never read, so a caller who
-    // set `false` saw every event on the read that produced it; `skipUTF8Validation`
-    // was normalized and never read, so a caller who trusts their own server got a
-    // hard 1007 on a payload `ws` would have delivered.
+    // Per-socket decisions the server already made. `allowSynchronousEvents` normalized
+    // and never read meant a caller who set `false` still saw every event on the read
+    // that produced it; `skipUTF8Validation` did the same, giving a caller who trusts
+    // their own server a hard 1007 on a payload `ws` would have delivered.
     acceptedState.allowSynchronousEvents = state.normalizedOptions.allowSynchronousEvents;
     acceptedState.validateUtf8 = !state.normalizedOptions.skipUTF8Validation;
-    // `maxPayload` and `maxFragments` are the two options that were normalized,
-    // reported on `server.options`, and then never read, so the compiled cap decided
-    // the real answer. They reach the codec here, before `attachSocket` opens it,
-    // because a codec's limits are fixed at creation and there is no call after that
-    // which could change them.
+    // Normalized, reported on `server.options`, and then never read, so the compiled cap
+    // decided the real answer. They reach the codec before `attachSocket` opens it,
+    // because a codec's limits are fixed at creation.
     acceptedState.maxPayload = state.normalizedOptions.maxPayload;
     acceptedState.maxFragments = state.normalizedOptions.maxFragments;
-    // The negotiation reaches the codec, not just the header. RSV1 means nothing without
-    // it, so a codec built for an uncompressed connection would refuse a compressed
-    // frame with 1002 -- which is why this is a connection property and not a send-time
-    // option.
+    // The negotiation reaches the codec, not just the header: RSV1 means nothing without
+    // it, so a codec built for an uncompressed connection refuses a compressed frame
+    // with 1002.
     acceptedState.compressible = extensions !== null;
     if (extensions) acceptedState.extensions = extensions.header;
     acceptedState.threshold = thresholdOf(state.normalizedOptions.perMessageDeflate);

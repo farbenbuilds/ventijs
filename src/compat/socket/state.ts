@@ -32,9 +32,8 @@ export function socketStateOf(socket: unknown): SocketState | undefined {
   return (socket as BrandedSocket)[SOCKET_STATE];
 }
 
-/// Builds the mutable record behind one socket. Defaults mirror `ws`: a
-/// server-side socket starts CONNECTING with the abnormal close code latched
-/// until a close frame or the transport supplies a better one.
+/// Defaults mirror `ws`: a server-side socket starts CONNECTING with the abnormal close
+/// code latched until a close frame or the transport supplies a better one.
 export function createSocketState(): SocketState {
   return {
     url: "",
@@ -42,7 +41,6 @@ export function createSocketState(): SocketState {
     extensions: "",
     binaryType: "nodebuffer",
     readyState: CONNECTING,
-    bufferedAmount: 0,
     isPaused: false,
     isServer: true,
     closeCode: 1006,
@@ -57,6 +55,7 @@ export function createSocketState(): SocketState {
     closeTimer: null,
     closeTimeout: DEFAULT_CLOSE_TIMEOUT,
     allowSynchronousEvents: true,
+    deliveryPaused: false,
     pendingInput: null,
     validateUtf8: true,
     maxPayload: DEFAULT_MAX_PAYLOAD,
@@ -65,6 +64,8 @@ export function createSocketState(): SocketState {
     compressible: false,
     threshold: 0,
     autoPong: true,
+    generateMask: null,
+    maskScratch: Buffer.alloc(4),
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,
     warned: new Set<string>(),

@@ -1,15 +1,7 @@
-/// Decides whether a push can skip the conformance suite.
-///
-/// GitHub evaluates a job's `paths` filter against the *whole pull request diff*,
-/// not the incremental push, so a branch that already touched the engine re-runs
-/// the suite on every later commit however unrelated that commit is. That is the
-/// waste this module removes: it compares the commit under test against the last
-/// one the suite actually ran on the same ref, not against the merge base, which
-/// is what `paths` already does.
-///
-/// The comparison is deliberately one-directional and fail-toward-running. Any
-/// condition this cannot resolve positively is answered `run`, because a
-/// conformance gate that silently stops running is worse than a slow one.
+/// Decides whether a push can skip the conformance suite. GitHub filters a job against the
+/// *whole pull request diff*, not the incremental push, so a branch that already touched the
+/// engine re-runs the suite on every later commit. This compares the commit under test against
+/// the last one the suite ran on the same ref, and fails toward running.
 export type DiffDecision = {
   readonly run: boolean;
   /// One line naming the last tested commit, or why there is none.
@@ -18,11 +10,8 @@ export type DiffDecision = {
   readonly changed: readonly string[];
 };
 
-/// Everything that can change RFC 6455 behaviour or how the suite is measured.
-///
-/// This is the union of the workflow's own `paths` filter and its harness tree,
-/// kept as data so the decision and the filter cannot drift apart silently: the
-/// test asserts the filter's entries are a subset of this set.
+/// Everything that can change RFC 6455 behaviour or how the suite is measured: the union of the
+/// workflow's `paths` filter and its harness tree, kept as data so the two cannot drift apart.
 export const ENGINE_PATHS: readonly string[] = [
   "**.zig",
   "build.zig",
@@ -36,20 +25,15 @@ export const ENGINE_PATHS: readonly string[] = [
   ".github/workflows/autobahn.yml",
 ];
 
-/// Matches one repository-relative path against the engine set.
-///
-/// `**.zig` is a suffix match, because GitHub's filter treats it that way and the
-/// point of the two agreeing is that a path the filter catches the gate catches
-/// too. `tests/autobahn/**` is a prefix match on a directory.
+/// `**.zig` is a suffix match and `tests/autobahn/**` a directory prefix, because GitHub's filter
+/// treats them that way and the point is that a path it catches, this gate catches too.
 export function isEnginePath(path: string): boolean {
   if (path.endsWith(".zig")) return true;
   return ENGINE_PATHS.includes(path) || path.startsWith("tests/autobahn/");
 }
 
-/// Whether a push may skip the suite.
-///
-/// `watermark` is the commit the suite last ran on this ref. `null` means there is
-/// no record, which is the first run on a branch and must always measure.
+/// `watermark` is the commit the suite last ran on this ref; `null` means the first run on a
+/// branch, which must always measure.
 export function decideRun(input: {
   readonly watermark: string | null;
   readonly changedPaths: readonly string[];

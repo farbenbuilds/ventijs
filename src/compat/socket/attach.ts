@@ -9,13 +9,13 @@ import { createError } from "../errors";
 import { CLOSED, CLOSING, OPEN } from "../ready-state";
 import { closeCodec, openCodec } from "./codec-handle";
 import { driveInbound } from "./codec-inbound";
-import { finishConnection } from "./lifecycle";
+import { failConnection, finishConnection } from "./lifecycle";
 import { failTransport } from "./transport";
 import { socketStateOf } from "./state";
 
-/// Adopts a generation-checked native connection. Socket operations then
-/// route through `src/binding/socket.ts`; the engine-thread drain that flushes
-/// the staging ring lands with the message pump.
+/// Adopts a generation-checked native connection, after which socket operations route
+/// through `src/binding/socket.ts`; the engine-thread drain that flushes the staging ring
+/// lands with the message pump.
 export function attachNativeSocket(
   socket: WebSocket,
   server: ServerHandle,
@@ -29,19 +29,13 @@ export function attachNativeSocket(
     );
   }
   state.attachment = { server, connection };
-  // A native connection is already established, so the socket is open the moment it
-  // is adopted; there is no handshake to wait for on this route.
+  // Already established, so the socket opens the moment it is adopted.
   openSocket(state);
 }
 
-/// Adopts an upgraded Node stream, opens its frame codec in the given role, opens the
-/// socket, and hands it whatever arrived with the handshake.
-///
-/// The codec is what reads the peer from here: the transport's bytes go into it and
-/// its events come out as the facade's, per
-/// `docs/adr/0001-transport-and-framing-ownership.md`. Before the codec existed this
-/// path dropped every inbound byte, which is a socket that accepts a connection and
-/// then never hears from it.
+/// Adopts an upgraded Node stream, opens its frame codec in the given role, opens the socket,
+/// and hands it whatever arrived with the handshake. The codec reads the peer from here, per
+/// `docs/adr/0001-transport-and-framing-ownership.md`.
 export function attachSocket(
   socket: WebSocket,
   transport: Duplex,
@@ -55,6 +49,24 @@ export function attachSocket(
       "ventijs: attachSocket requires a ventijs socket record",
     );
   }
+  // A stream that cannot be read or written is not a connection, and one reporting `OPEN`
+  // is permanently `OPEN` with nothing on the wire: every send reports success.
+  if (!transport.readable || !transport.writable) {
+    // Terminated rather than ignored: a socket left `CONNECTING` never moves again, and a
+    // caller awaiting `open` or `close` would wait for the life of the process. The report
+    // is deferred, because emitting `error` here would be synchronous and the caller has
+    // not had the chance to attach a listener, so Node would rethrow it as an uncaught
+    // exception instead of a socket failing. `ws` uses ERR_INVALID_STATE for the same fault.
+    const gone = createError(
+      "ERR_INVALID_STATE",
+      "ventijs: the transport was closed before the connection was established",
+    );
+    process.nextTick(() => {
+      failConnection(state, gone);
+    });
+    transport.destroy();
+    return;
+  }
   state.transport = transport;
   openCodec(state, role ?? CODEC_ROLE.server);
   transport.on("end", () => {
@@ -62,10 +74,9 @@ export function attachSocket(
     transport.end();
   });
   transport.on("error", (error: Error) => {
-    // Latch before destroying, matching `ws`'s socket error path: the terminal
-    // state is `CLOSING` from here, not `OPEN` on a dead transport. The destroy
-    // runs in `finally` so an unhandled `error` listener, which `emitEvent`
-    // throws on, cannot leave the transport open.
+    // Latch before destroying, matching `ws`: the terminal state is `CLOSING` from here, not
+    // `OPEN` on a dead transport. The destroy runs in `finally` so a throwing `emitEvent`
+    // cannot leave the transport open.
     try {
       failTransport(state, asCodedError(error));
     } finally {
@@ -73,38 +84,27 @@ export function attachSocket(
     }
   });
   transport.on("close", () => {
-    // The codec is released here rather than on the close event: the transport is
-    // gone, so nothing can read or write through it, and holding the slot until the
-    // event drains would leak one per connection under load.
+    // Released here rather than on the close event: the transport is gone, so holding the
+    // slot would leak one per connection.
     closeCodec(state);
     finishConnection(state, state.closeCode, state.closeReason);
   });
-  // The order here is the contract: the socket opens, and only then are the bytes
-  // that arrived with the upgrade handed to the codec. A peer that greets with a
-  // close frame in the same read as the handshake would otherwise see `close` before
-  // `open`, and a caller that reads the first event as "the connection is live" is
-  // looking at a socket that is already gone.
+  // The order is the contract: the socket opens, and only then are the bytes that came with
+  // the upgrade handed over, or a peer greeting with a close frame in the same read would
+  // see `close` before `open`.
   openSocket(state);
   driveInbound(state, transport, pending);
 }
 
-/// Opens the socket: `OPEN`, then `open`.
-///
-/// A server socket opens when the upgrade completes and a client socket opens when
-/// its handshake is accepted, and those are the only two moments `ws` opens on. It is
-/// private because the order relative to the codec's first read is this module's
-/// decision, not a caller's: a caller that opened the socket itself would have to
-/// know that ordering exists to get it right.
+/// Private because the order relative to the codec's first read is this module's decision,
+/// not a caller's: a caller opening the socket itself would have to know that ordering.
 function openSocket(state: SocketState): void {
   if (state.readyState === OPEN) return;
   state.readyState = OPEN;
   emitEvent(state, "open");
 }
 
-/// Node hands a stream `error` an `Error`, and a `net.Socket` error already
-/// carries the syscall code that makes it diagnosable. The guard exists so a
-/// non-`Error` thrown by a custom stream cannot reach `emitEvent` as a value
-/// the facade has no policy for.
+/// The guard stops a non-`Error` thrown by a custom stream reaching `emitEvent` untyped.
 function asCodedError(error: Error): Error {
   if (error instanceof Error) return error;
   return createError("ERR_PROTOCOL", `ventijs: the transport failed: ${String(error)}`);

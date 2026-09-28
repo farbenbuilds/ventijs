@@ -1,15 +1,7 @@
-//! `send`'s options on the wire, and what a peer makes of them.
-//!
-//! `binary` and `fin` were normalized, documented, type-checked, and then never read
-//! on any route a caller can reach. Both are *silently* wrong rather than absent,
-//! which is the worst shape for a compatibility library: `send(buffer, { binary:
-//! false })` put a binary frame on the wire where `ws` puts text, and `send(data, {
-//! fin: false })` framed a complete message with the `fin` bit set. An application
-//! written against ventijs passed its own tests and shipped a different protocol.
-//!
-//! The peer is a real `ws` client throughout, so every assertion is about how a
-//! conforming implementation reads the bytes rather than about ventijs reporting on
-//! itself. That is the only way "silently wrong on the wire" can be caught at all.
+//! `send`'s options on the wire. `binary` and `fin` were normalized, documented, and never read:
+//! `send(buffer, { binary: false })` put a binary frame on the wire where `ws` puts text, and
+//! `send(data, { fin: false })` framed a complete message with `fin` set. The peer is a real `ws`
+//! client throughout, so every assertion is about how a conforming implementation reads the bytes.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../binding/support";
@@ -37,8 +29,7 @@ test("the binary option chooses the opcode", { timeout: TEST_TIMEOUT_MS }, async
   try {
     const socket = await accepted;
     const seen = observe(client);
-    // Autodetected both ways, then overridden both ways: a Buffer with `binary: false`
-    // is a text frame, and a string with `binary: true` is a binary one.
+    // Autodetected both ways, then overridden both ways: a Buffer with `binary: false` is a text frame.
     socket.send("abc");
     socket.send("xyz", { binary: true });
     socket.send(Buffer.from("raw"), { binary: false });
@@ -56,12 +47,8 @@ test("the binary option chooses the opcode", { timeout: TEST_TIMEOUT_MS }, async
   }
 });
 
-/// `fin: false` opens a message and the next send continues it.
-///
-/// A caller that fragments has no other way to do it: the codec's `fin` parameter
-/// existed and was hardcoded, so a continuation frame was unreachable in both
-/// directions. RFC 6455 requires the continuation to carry opcode 0, and a peer that
-/// receives a second opcode-1 frame with `fin` set reads two complete messages.
+/// A caller that fragments has no other way to do it, and RFC 6455 requires the continuation to
+/// carry opcode 0: a second opcode-1 frame with `fin` set reads as two complete messages.
 test("the fin option fragments an outbound message", { timeout: TEST_TIMEOUT_MS }, async () => {
   const harness = await upgradeHarness();
   const accepted = nextSocket(harness.server);
@@ -75,8 +62,7 @@ test("the fin option fragments an outbound message", { timeout: TEST_TIMEOUT_MS 
     expect(seen).toEqual([]);
     socket.send("two", { fin: true });
     await waitFor(() => seen.length === 1);
-    // One message, whole, delivered once: the reassembly a peer does with a fragmented
-    // send, and which a `fin` that ignored would have broken in two.
+    // One message, whole, delivered once: the reassembly a peer does with a fragmented send.
     expect(seen).toEqual([{ text: "onetwo", binary: false }]);
   } finally {
     client.terminate();

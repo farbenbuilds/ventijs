@@ -2,9 +2,8 @@ import { Duplex } from "node:stream";
 import type { DuplexOptions } from "node:stream";
 import type { WebSocket } from "../types/ws";
 
-/// Wraps an open socket in a duplex stream, mirroring `ws` byte for byte:
-/// messages become readable chunks, writes become `send` calls, and destroy
-/// terminates the socket unless the socket itself raised the error.
+/// Mirroring `ws` byte for byte: messages become readable chunks, writes become `send`
+/// calls, and destroy terminates the socket unless the socket itself raised the error.
 export function createWebSocketStream(ws: WebSocket, options?: DuplexOptions): Duplex {
   let terminateOnDestroy = true;
   const duplex = new Duplex({
@@ -29,9 +28,9 @@ export function createWebSocketStream(ws: WebSocket, options?: DuplexOptions): D
   });
   ws.once("error", (error) => {
     if (duplex.destroyed) return;
-    // Prevent `ws.terminate()` from being called by `duplex._destroy()`: the
-    // close frame may still be in flight, and the error listener on the
-    // receiver already closes the connection.
+    // Prevents `ws.terminate()` from being called by `duplex._destroy()`: the close
+    // frame may still be in flight, and the error listener on the receiver already closes
+    // the connection.
     terminateOnDestroy = false;
     duplex.destroy(error);
   });

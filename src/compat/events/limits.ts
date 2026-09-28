@@ -2,18 +2,10 @@ import type { EmitterState, EventMap, EventName } from "../../types/events";
 import { createError } from "../errors";
 import { listenerCount } from "./registry";
 
-/// Raises Node's listener-leak warning when a registration passes the limit.
-///
-/// This is the one diagnostic that turns a listener leak into something visible,
-/// and it was inert: `maxListeners` was stored, validated, and reported by
-/// `getMaxListeners`, but nothing ever compared it to a count. A facade leaking a
-/// listener per connection was therefore completely silent, where both `ws` and
-/// Node warn.
-///
-/// The guard is `limit > 0`, so `setMaxListeners(0)` means unlimited exactly as
-/// it does in Node. The warning is raised once per event through `state.warned`,
-/// not once per registration, because a repeated warning for a single leak
-/// trains callers to ignore it.
+/// Raises Node's listener-leak warning when a registration passes the limit. The guard is
+/// `limit > 0`, so `setMaxListeners(0)` means unlimited exactly as it does in Node, and
+/// the warning fires once per event through `state.warned`, not once per registration,
+/// because a repeated warning for a single leak trains callers to ignore it.
 export function warnOnOverflow<E extends EventMap>(
   state: EmitterState<E>,
   event: EventName<E>,
@@ -27,9 +19,8 @@ export function warnOnOverflow<E extends EventMap>(
   process.emitWarning(createOverflowWarning(count, name, state.maxListeners));
 }
 
-/// Drops the leak flag so a listener removed and re-added past the limit warns
-/// again. Node resets the flag in `removeAllListeners` and in `setMaxListeners`,
-/// and so does this.
+/// Drops the leak flag so a listener removed and re-added past the limit warns again, as
+/// Node does in `removeAllListeners` and `setMaxListeners`.
 export function forgetWarning<E extends EventMap>(
   state: EmitterState<E>,
   event: EventName<E> | undefined,
@@ -51,11 +42,8 @@ function createOverflowWarning(count: number, event: string, limit: number): Err
 }
 
 /// Keeps Node's `validateNumber(n, 'n', 0)` contract, because `ws` delegates to
-/// `EventEmitter` and a caller that relies on the rejection sees a `TypeError`
-/// upstream and a silent `Infinity` here.
-///
-/// A fractional value is accepted, as Node accepts it: only a non-number and a
-/// negative or `NaN` count are refused.
+/// `EventEmitter` and a caller that relies on the rejection sees a `TypeError` upstream
+/// and a silent `Infinity` here. A fractional value is accepted, as Node accepts it.
 export function assertListenerLimit(count: number): number {
   if (typeof count !== "number") {
     throw createError(

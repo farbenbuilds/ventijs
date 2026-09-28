@@ -6,10 +6,9 @@ import { listenerView, onceWrapper, removeTagged } from "./tags";
 
 const ERROR_EVENT = "error";
 
-/// Dispatches one event. An unhandled `error` follows Node's policy: an
-/// `Error` argument is thrown as-is, anything else is wrapped with the
-/// original value on `context`. Both facades share this so the policy lives
-/// in one place.
+/// An unhandled `error` follows Node's policy: an `Error` argument is thrown as-is,
+/// anything else is wrapped with the original value on `context`. Both facades share this
+/// so the policy lives in one place.
 export function emitEvent<E extends EventMap, K extends EventName<E>>(
   state: EmitterState<E>,
   event: K,

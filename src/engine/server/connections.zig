@@ -1,15 +1,9 @@
-//! Engine WebSocket route wiring: comptime trampolines and connection events.
-//!
-//! Each server slot gets its own tiny callback set, so the engine ABI needs no
-//! user context. Handlers resolve the server through the instance table, map
-//! the engine connection to a slab slot, and emit through the callback
-//! channel. No other code runs on an engine thread.
-//!
-//! Outbound messages leave the engine through the cluster inbox. The Node main
-//! thread pushes a staged payload with `pump`, which wakes this engine thread;
-//! the engine then routes it to the socket subscribed to that connection's
-//! topic. Only text and binary can travel that way, because the topic
-//! publisher maps a message onto a text or binary opcode and nothing else.
+//! Engine WebSocket route wiring: comptime trampolines and connection events. Each
+//! server slot gets its own callback set, so the engine ABI needs no user context, and
+//! no code other than these handlers runs on an engine thread. Outbound messages leave
+//! through the cluster inbox: the Node main thread pushes a staged payload with `pump`,
+//! and the engine routes it to the socket subscribed to that connection's topic. Only
+//! text and binary travel that way, because the topic publisher maps a message to those.
 
 const uwz = @import("uWebZockets");
 const inbound = @import("inbound.zig");

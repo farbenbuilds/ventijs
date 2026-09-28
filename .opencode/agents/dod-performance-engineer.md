@@ -53,7 +53,11 @@ code that violates them.
 5. **Dependencies.** The published package imports only `napi-zig`,
    `uWebZockets`, and the standard library. Never add a dependency for a
    problem the standard library or the engine already solves.
-6. **Branching.** Before proposing or executing any code modification, create
+6. **Comments.** A capacity gets a comment saying why that number, in one or
+   two sentences. A layout choice gets one sentence. Nothing else, and no
+   narration of the code: the file's arithmetic is the documentation. Flag any
+   comment longer than the two sentences that justify it.
+7. **Branching.** Before proposing or executing any code modification, create
    and check out a dedicated branch from the default branch:
    `git fetch origin main && git switch -c <type>/<slug> origin/main`, where
    `<type>` is `feature`, `fix`, `test`, `refactor`, `docs`, or `chore`. Never

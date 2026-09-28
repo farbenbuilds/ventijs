@@ -14,13 +14,9 @@ import type { UpgradeCallback } from "./accept";
 
 const SERVER_BRAND = Symbol("ventijs.server");
 
-/// Loads the native addon, or throws with something the caller can act on.
-///
 /// A missing artifact thrown from a Node `upgrade` listener is an uncaught exception
 /// that takes the process down, with a message about `pnpm build:binding` that an
-/// installed consumer has neither the command nor the Zig source for. Thrown from the
-/// constructor it is an ordinary error the caller can catch, where they can still do
-/// something about it.
+/// installed consumer has neither the command nor the Zig source for.
 function requireAddon(): void {
   loadAddon();
 }
@@ -32,12 +28,10 @@ export function isServer(value: unknown): boolean {
   return (value as BrandedServer)[SERVER_BRAND] === true;
 }
 
-/// Builds the `ws`-shaped server record. The listener modes match upstream:
-/// an explicit `port` owns an HTTP server answering 426 to plain requests, `server`
-/// adopts the caller's, and `noServer` only accepts sockets passed to `handleUpgrade`.
-///
-/// The addon is loaded here, before anything is bound. Loading is lazy elsewhere so
-/// importing ventijs does not fail for a program that never opens a socket.
+/// Builds the `ws`-shaped server record. The listener modes match upstream: an explicit
+/// `port` owns an HTTP server answering 426 to plain requests, `server` adopts the
+/// caller's, and `noServer` only accepts sockets passed to `handleUpgrade`. The addon is
+/// loaded here, before anything is bound, because loading is lazy elsewhere.
 export function createWebSocketServer(
   socketClass: ServerSocketConstructor,
   options?: ServerOptions,
@@ -48,9 +42,8 @@ export function createWebSocketServer(
     allowSynchronousEvents: true,
     autoPong: true,
     // `ws` defaults these three and they are observable on `server.options`, but
-    // `@types/ws` declares none of them, so a consumer cannot name them without a
-    // cast. Matching `ws` means inheriting the same gap in the type, which is
-    // better than a runtime record that is a strict subset of the contract.
+    // `@types/ws` declares none, so matching `ws` means inheriting the same type gap
+    // rather than shipping a record that is a strict subset of the contract.
     maxBufferedChunks: 262144,
     maxFragments: 16384,
     closeTimeout: 30000,
@@ -69,20 +62,17 @@ export function createWebSocketServer(
     WebSocket: socketClass,
     ...options,
   } as ServerOptions;
-  // `ws` rewrites the shorthand `perMessageDeflate: true` to an options object
-  // on the public record, so `server.options.perMessageDeflate` is an object for
-  // a caller that enabled the extension and a boolean for one that did not.
+  // `ws` rewrites the shorthand `perMessageDeflate: true` to an options object on the
+  // public record.
   if (resolved.perMessageDeflate === true) resolved.perMessageDeflate = {};
   const normalized = normalizeServerOptions(resolved);
   const state: ServerState = {
     options: resolved,
     normalizedOptions: normalized,
     path: resolved.path ?? "",
-    // Truthiness, not `=== false`. `ws` gates tracking on `this.options.clientTracking`
-    // being truthy, so `null`, `0`, and `""` all disable it; `?? true` read those as
-    // absent and left tracking on, which put a `clients` set on the server where `ws`
-    // has none and made `close()` wait for clients in a case where `ws` emits on the
-    // next tick.
+    // Truthiness, not `=== false`: `ws` gates on `clientTracking` being truthy, so
+    // `null`, `0` and `""` all disable it. `?? true` read those as absent and left
+    // tracking on, which put a `clients` set where `ws` has none.
     clients: normalized.clientTracking ? new Set<WebSocket>() : undefined,
     webSocket: (resolved.WebSocket ?? socketClass) as ServerSocketConstructor,
     server: null,
@@ -121,11 +111,10 @@ export function createWebSocketServer(
     ...createEmitter(state),
     options: resolved,
     path: state.path,
-    // `ws` assigns `clients` only when `clientTracking` is truthy, so the key is
-    // absent rather than present-and-undefined. A caller that tests
-    // `"clients" in server`, enumerates `Object.keys`, or spreads the record sees the
-    // difference, and an empty set behaves differently again: `ws` reports `undefined`
-    // where an empty set would give a size of 0.
+    // `ws` assigns `clients` only when `clientTracking` is truthy, so the key is absent
+    // rather than present-and-undefined: a caller testing `"clients" in server`,
+    // enumerating `Object.keys`, or spreading the record sees the difference, and an
+    // empty set would report a size of 0 where `ws` reports `undefined`.
     ...(state.clients === undefined ? {} : { clients: state.clients }),
     address: () => addressOf(state),
     close: (closeCallback?: (error?: Error) => void): void => {

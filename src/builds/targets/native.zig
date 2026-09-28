@@ -1,16 +1,10 @@
 const std = @import("std");
 
-/// Compiles every C and C++ archive the engine links into the addon as
-/// position-independent code.
-///
-/// The addon is a shared library, but the engine builds its vendored BoringSSL,
-/// lsquic, libdeflate, and zlib archives as separate static libraries, and Zig
-/// compiles C sources non-PIC unless the owning module asks for it. A non-PIC
-/// archive cannot be linked into a shared object: the linker rejects absolute
-/// `R_X86_64_32` and `R_X86_64_32S` relocations and asks for `-fPIC`. The engine
-/// stopped accepting compiler overrides in v1.2.0, so the flag is applied to the
-/// archives through the build graph instead of through wrapper scripts.
-/// Removing this walk breaks the addon link.
+/// Compiles every C and C++ archive the engine links into the addon as position-independent
+/// code. The addon is a shared library but the engine builds its vendored BoringSSL,
+/// lsquic, libdeflate, and zlib archives as separate static libraries, and Zig compiles C
+/// non-PIC unless the owning module asks: the linker then rejects absolute `R_X86_64_32`
+/// relocations and asks for `-fPIC`. Removing this walk breaks the addon link.
 pub fn force_pic(engine_dep: *std.Build.Dependency) void {
     force_module_pic(engine_dep.module("uWebZockets"));
 }
@@ -27,9 +21,8 @@ fn force_module_pic(module: *std.Build.Module) void {
     }
 }
 
-/// Marks one compiled artifact as position independent. Zig and C++ sources are
-/// already position independent when they end up in a shared library, so only
-/// the presence of the flag is set; the linker decides the rest.
+/// Zig and C++ sources are already position independent when they end up in a shared library,
+/// so only the presence of the flag is set; the linker decides the rest.
 fn force_compile_pic(step: *std.Build.Step.Compile) void {
     const root = step.root_module;
     if (root.pic == null) root.pic = true;

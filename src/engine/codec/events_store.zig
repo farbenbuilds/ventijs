@@ -1,22 +1,7 @@
-//! The bounded store of decoded events waiting for the caller.
-//!
-//! Split out of the codec because the queue is where the codec's memory bound
-//! lives, and the reasoning behind that bound is not obvious from the struct that
-//! uses it. Two decisions are encoded here and nowhere else.
-//!
-//! **Control events are a ring, data messages are a single slot.** A control
-//! payload is capped at 125 bytes by RFC 6455 section 5.5, so a ring of them
-//! costs `slots * 125` bytes and a peer may legitimately interleave many into one
-//! read. A data message's payload is a slice into the receive state machine's
-//! single reassembly buffer, so two queued data messages would both point into it
-//! and the second would overwrite the first: a caller reading the first would
-//! read the second's bytes, with nothing to tell it apart. One slot is the only
-//! arrangement that cannot do that.
-//!
-//! **Control events are drained first.** A ping the caller has not answered has a
-//! deadline the rest of the queue does not, and section 5.5.2 requires a pong
-//! promptly, so delivering a large message ahead of it is the wrong order even
-//! though both orders are protocol-legal.
+//! The bounded store of decoded events waiting for the caller. **Control events are a
+//! ring, data messages are a single slot**: a data payload slices the receive state
+//! machine's one reassembly buffer, so two queued messages would alias. Controls drain
+//! first, because RFC 6455 section 5.5.2 requires a pong promptly.
 
 const std = @import("std");
 
@@ -30,13 +15,10 @@ pub fn event_store(comptime slots: usize) type {
     return struct {
         const Self = @This();
 
-        /// Each control slot owns its payload.
-        ///
-        /// The receive state machine writes a control payload into one shared
-        /// 125-byte buffer, so a `Decoded` alone would leave every queued control
-        /// event pointing at it and a peer sending two pings in one read would have
-        /// the first delivered as the second's bytes. One buffer per slot is what the
-        /// `slots * 125` in this module's own reasoning above assumes.
+        /// Each control slot owns its payload. The receive state machine writes control
+        /// payloads into one shared 125-byte buffer, so without a buffer per slot every
+        /// queued control event would point at it and two pings in one read would
+        /// deliver the first as the second's bytes.
         owned: [slots][inbound.control_capacity]u8 = undefined,
         /// Control events, oldest first, each pointing into its own `owned` slot.
         controls: [slots]Decoded = undefined,
@@ -61,25 +43,23 @@ pub fn event_store(comptime slots: usize) type {
             return self.count < slots;
         }
 
-        /// Whether a data message can be queued without overwriting the bytes of
-        /// one that is already waiting.
+        /// Whether a data message can be queued without overwriting the bytes of one
+        /// that is already waiting.
         pub fn has_message_room(self: *const Self) bool {
             return self.message == null;
         }
 
-        /// Queues a control event with a copy of its payload.
-        ///
-        /// The copy is a control frame's whole point: the receive buffer it came from
-        /// is reused by the next control frame, and a pong the caller has not written
-        /// yet must still be readable when it is.
+        /// The copy is a control frame's whole point: the receive buffer it came from is
+        /// reused by the next control frame, and a pong the caller has not written yet
+        /// must still be readable when it is.
         pub fn push_control(self: *Self, event: Decoded) void {
             const slot = (self.head + self.count) % slots;
             const buffer = &self.owned[slot];
             const length = @min(event.payload.len, buffer.len);
             // RFC 6455 section 5.5 caps a control payload at 125 bytes, which is the
-            // size of every slot, so a larger one can only be a bug in whatever
-            // produced it. Asserted rather than truncated: a silently shortened
-            // payload would be delivered as a valid frame with the wrong bytes.
+            // size of every slot, so a larger one can only be a bug in whatever produced
+            // it. Asserted rather than truncated: a silently shortened payload would be
+            // delivered as a valid frame with the wrong bytes.
             std.debug.assert(event.payload.len <= buffer.len);
             @memcpy(buffer[0..length], event.payload[0..length]);
             self.controls[slot] = .{
@@ -91,13 +71,9 @@ pub fn event_store(comptime slots: usize) type {
             self.count += 1;
         }
 
-        /// Selects the oldest event, or reports that there is none.
-        ///
-        /// Selection and taking are separate so the payload can be read between
-        /// them: the payload borrows receive state, and the caller has to copy it
-        /// out before the event is retired.
-        ///
-        /// **A close never overtakes a queued data message.** See `select` below.
+        /// Selection and taking are separate so the payload can be read between them:
+        /// the payload borrows receive state and the caller has to copy it out before
+        /// the event is retired.
         pub fn select(self: *Self) bool {
             if (self.message != null and self.count > 0 and self.controls[self.head].kind == .close) {
                 self.selected = true;
@@ -121,7 +97,6 @@ pub fn event_store(comptime slots: usize) type {
             return self.controls[self.head];
         }
 
-        /// Retires the selected event and frees its slot.
         pub fn take(self: *Self) void {
             if (!self.selected) return;
             self.selected = false;

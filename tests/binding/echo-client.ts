@@ -1,8 +1,8 @@
 import WebSocket from "ws";
 import type { Reply } from "./echo-support";
 
-/// Resolves once the peer has completed the handshake, so a test never calls
-/// `send()` while the socket is still CONNECTING.
+/// Resolves once the peer has completed the handshake, so a test never calls `send()` while
+/// the socket is still CONNECTING.
 export function opened(client: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
     client.once("open", () => {
@@ -12,8 +12,7 @@ export function opened(client: WebSocket): Promise<void> {
   });
 }
 
-/// Collects what the client receives, resolving once `expected` messages have
-/// arrived, or when the peer has closed, whichever comes first.
+/// Resolves with what arrived: `expected` messages, or the peer's close, whichever first.
 export function collect(client: WebSocket, expected: number): Promise<Reply[]> {
   return new Promise((resolve, reject) => {
     const received: Reply[] = [];
@@ -28,16 +27,14 @@ export function collect(client: WebSocket, expected: number): Promise<Reply[]> {
   });
 }
 
-/// Opens a client against the echo server, so a test body is only the part that
-/// is specific to it.
+/// A client on the echo server, so a test body is only its specific part.
 export function connect(port: number): WebSocket {
   return new WebSocket(`ws://127.0.0.1:${port}/`);
 }
 
-/// Holds the event loop so the engine thread can fill the inbound ring without
-/// the Node main thread draining it. The engine has no hook to stop reading a
-/// socket when its consumer falls behind, so occupying this side is the only
-/// way to reach the overflow deterministically instead of racing the scheduler.
+/// Occupies the main thread so the engine fills the inbound ring undrained. The engine
+/// cannot stop reading when its consumer falls behind, so this is the only deterministic
+/// way to reach the overflow.
 export function blockEventLoop(ms: number): void {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {

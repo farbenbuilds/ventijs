@@ -35,19 +35,18 @@ function buildServer(options?: unknown, callback?: unknown): WebSocketServerInst
   );
 }
 
-/// Function declarations are the `ws` classes' drop-in stand-ins: calling
-/// either with `new` returns the state record, and `Symbol.hasInstance` reads
-/// the record brand, so `instanceof` checks pass without a prototype chain.
+/// The `ws` classes' drop-in stand-ins: calling either with `new` returns the state record,
+/// and `Symbol.hasInstance` reads the record brand, so `instanceof` passes with no
+/// prototype chain.
 const WebSocket: SocketConstructor = buildSocket as unknown as SocketConstructor;
 type WebSocket = WebSocketInstance;
 const WebSocketServer: ServerConstructor = buildServer as unknown as ServerConstructor;
 type WebSocketServer = WebSocketServerInstance;
 
-/// Re-exports the qualified type surface (`WebSocket.RawData`,
-/// `WebSocket.ServerOptions`, ...) that `ws` consumers use. Type aliases do
-/// not carry a namespace, so the members are restated once here. Each alias
-/// resolves through the class namespace rather than the module's top-level
-/// alias, which keeps the bundled declarations free of self-references.
+/// Re-exports the qualified type surface (`WebSocket.RawData`, `WebSocket.ServerOptions`,
+/// ...) that `ws` consumers use. Type aliases carry no namespace, so the members are
+/// restated once here, each resolving through the class namespace rather than the
+/// module's top-level alias, which keeps the bundled declarations free of self-references.
 namespace WebSocket {
   export type RawData = ws.WebSocket.RawData;
   export type Data = ws.WebSocket.Data;

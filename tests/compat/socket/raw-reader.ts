@@ -1,28 +1,16 @@
-//! Reading exact byte counts off a raw socket, without losing the leftovers.
-//!
-//! Split out of `raw-peer.ts` because this is a stream concern and a frame is a protocol
-//! concern, and because the leftover buffer is state that has to be right in exactly one
-//! place: a reader that drops the bytes past the last frame boundary turns the next read
-//! into the middle of a frame, and the symptom is a test asserting on a header the peer
-//! never wrote.
+//! Reading exact byte counts off a raw socket, without losing the leftovers. The leftover buffer
+//! has to be right in exactly one place: dropping it makes the next read start mid-frame.
 
 import type { Socket } from "node:net";
 
-/// The bytes already read past the last frame boundary, per socket.
-///
-/// A TCP read is not aligned to a frame: one read can carry the tail of a length field
-/// and the whole of the payload behind it. Without somewhere to keep those leftovers
-/// they are dropped, and the next read starts mid-frame -- which surfaces as a test
-/// asserting on a header or a length the peer never wrote. A `WeakMap` rather than a
-/// property because the state belongs to the reader, not to the socket, and `net.Socket`
-/// is somebody else's type.
+/// A TCP read is not aligned to a frame: one read can carry the tail of a length field and the
+/// whole of the payload behind it. A `WeakMap` rather than a property because the state belongs
+/// to the reader, and `net.Socket` is somebody else's type.
 const LEFTOVER = new WeakMap<Socket, Buffer>();
 
 /// Reads exactly `count` bytes, or rejects on the timeout.
 ///
-/// Serves from the leftovers first, so a caller that has already read past the end of a
-/// field gets the rest of the stream rather than blocking for bytes that already
-/// arrived.
+/// Serves from the leftovers first, so a caller past the end of a field does not block for bytes that already arrived.
 export function read(socket: Socket, count: number): Promise<Buffer> {
   const buffered = LEFTOVER.get(socket);
   if (buffered !== undefined && buffered.length >= count) {

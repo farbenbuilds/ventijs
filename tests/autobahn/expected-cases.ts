@@ -1,6 +1,5 @@
-/// The Autobahn report contract: how many cases the pinned suite produces for
-/// groups 1-7 and 9-13, and which of them the pinned engine build cannot reach
-/// because of its compiled-in message capacity.
+/// The Autobahn report contract: how many cases the pinned suite produces for groups 1-7 and
+/// 9-13, and which of them the pinned engine build cannot reach because of its message capacity.
 ///
 export const CLOSURE_BEHAVIORS: ReadonlySet<string> = new Set([
   "OK",
@@ -17,17 +16,10 @@ export const CLOSURE_BEHAVIORS: ReadonlySet<string> = new Set([
 export const REFERENCE_CLOSURE_OK_CASES = 514;
 export const REFERENCE_CLOSURE_INFORMATIONAL_CASES = 3;
 
-/// The capacity half of the model lives in `capacity-model.ts` and the facts it reads in
-/// `case-sizes.ts`; both are re-exported here so the harness has one import for the
-/// contract. The cap is read out of the built addon rather than restated anywhere,
-/// because a restated copy is how the engine's cap and this arithmetic drift apart: the
-/// cap was raised from 32 KiB to 64 KiB once already and every literal kept asserting
-/// 32 KiB.
-
-// The capacity model and the suite's size facts, re-exported so the harness has one
-// import for the contract rather than three for its parts. `INBOUND_LIMIT_BYTES` is the
-// one number here that is read out of the built addon rather than written down, which is
-// why it is re-exported rather than recomputed.
+// The capacity model and the suite's size facts, re-exported so the harness has one import for
+// the contract. `INBOUND_LIMIT_BYTES` is the one number read out of the built addon rather than
+// written down: a restated copy is how the engine's cap and this arithmetic drift apart, and the
+// cap was raised from 32 KiB to 64 KiB once already with every literal still asserting 32 KiB.
 export { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
 export { TOTAL_CASES } from "./case-sizes.ts";
 export {

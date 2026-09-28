@@ -1,9 +1,6 @@
-//! Fragmentation tests for the frame codec.
-//!
-//! RFC 6455 section 5.4 makes a message a sequence of frames and section 5.5
-//! permits control frames to be interleaved between them. Both rules are easy to
-//! state and easy to get wrong, because a codec that reassembles eagerly delivers
-//! a partial message, and one that tracks the opcode per chunk loses it.
+//! Fragmentation tests. RFC 6455 5.4 makes a message a sequence of frames and 5.5 permits
+//! control frames interleaved between them. A codec that reassembles eagerly delivers a
+//! partial message; one that tracks the opcode per chunk loses it.
 
 const std = @import("std");
 const testing = std.testing;

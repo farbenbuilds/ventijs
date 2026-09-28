@@ -1,13 +1,9 @@
-//! Connection lifecycle vocabulary shared by the socket slab and its FFI.
-//!
-//! Operation names cross the ABI as camelCase strings and map onto
-//! `EngineStatus` in `src/types/status.ts`. Close-code acceptance mirrors
-//! `isValidStatusCode` in `src/protocol/close-codes.ts`.
+//! Connection lifecycle vocabulary shared by the socket slab and its FFI. Operation names
+//! cross the ABI as camelCase strings onto `EngineStatus`; close-code acceptance mirrors
+//! `isValidStatusCode`.
 
-/// Connection lifecycle as the compatibility layer observes it.
 pub const State = enum(u8) { open, closing, closed };
 
-/// Result of a per-connection operation.
 pub const Status = enum(u8) {
     ok,
     closing,
@@ -24,8 +20,7 @@ pub const Status = enum(u8) {
 /// RFC 6455 caps a close frame payload at 125 bytes, two of which are the code.
 pub const max_close_reason_bytes: usize = 123;
 
-/// Close codes `ws` accepts: the application range plus 1000-1014 minus the
-/// reserved codes.
+/// Close codes `ws` accepts: the application range plus 1000-1014 minus the reserved codes.
 pub fn valid_close_code(code: u16) bool {
     if (code >= 3000 and code <= 4999) return true;
     if (code < 1000 or code > 1014) return false;

@@ -1,21 +1,15 @@
-//! Bounded slot table binding context-free engine callbacks to their state.
-//!
-//! The engine callback ABI passes no user pointer, so each concurrent server
-//! owns a comptime trampoline set keyed by a slot in this table. Claims and
-//! retires are atomic; lookups happen on the engine thread with acquire
-//! ordering against the publish. Every handle carries a generation so a stale
-//! JavaScript handle resolves to null instead of a recycled server, and every
-//! slot records its owning environment so a lookup from another worker never
-//! dereferences a teardown-freed instance.
+//! Bounded slot table binding context-free engine callbacks to their state, since the
+//! engine callback ABI passes no user pointer. A handle carries a generation, so a stale
+//! JavaScript handle resolves to null rather than a recycled server.
 
 const std = @import("std");
 const napi = @import("napi-zig");
 
 const c = napi.c;
 
-/// Packed server handle: generation in the high bits, slot in the low byte.
-/// Returned to JavaScript as a `u40` number, well inside the safe-integer
-/// range, so a recycled slot cannot be addressed by a stale handle.
+/// Packed server handle: generation in the high bits, slot in the low byte. Returned to
+/// JavaScript as a `u40` number, well inside the safe-integer range, so a recycled slot
+/// cannot be addressed by a stale handle.
 pub const Handle = struct {
     slot: u8,
     generation: u32,
@@ -50,9 +44,8 @@ pub fn slot_table(comptime capacity: usize, comptime T: type) type {
             [_]std.atomic.Value(u32){std.atomic.Value(u32).init(0)} ** capacity,
         claimed: std.atomic.Value(u32) = .init(0),
 
-        /// Reserves the lowest free slot. The CAS loop terminates because
-        /// `claimed` only ever gains bits and the table has at most 32 of
-        /// them; every failed swap reloads the newest value.
+        /// Reserves the lowest free slot. The CAS loop terminates because `claimed` only
+        /// ever gains bits and the table has at most 32 of them.
         pub fn claim(table: *Self) !Handle {
             var current = table.claimed.load(.acquire);
             while (true) {
@@ -76,10 +69,9 @@ pub fn slot_table(comptime capacity: usize, comptime T: type) type {
             table.slots[handle.slot].store(item, .release);
         }
 
-        /// Resolves a handle, rejecting free slots, stale generations, and
-        /// handles owned by another environment. The environment is compared
-        /// before the instance pointer is loaded, so a worker cannot observe
-        /// an instance another worker is tearing down.
+        /// Rejects free slots, stale generations, and handles owned by another
+        /// environment. The environment is compared before the instance pointer is loaded,
+        /// so a worker cannot observe an instance another worker is tearing down.
         pub fn lookup(table: *Self, handle: Handle, env: c.napi_env) ?*T {
             if (handle.slot >= capacity) return null;
             if (table.generations[handle.slot].load(.acquire) != handle.generation) return null;
@@ -87,9 +79,8 @@ pub fn slot_table(comptime capacity: usize, comptime T: type) type {
             return table.slots[handle.slot].load(.acquire);
         }
 
-        /// Engine-thread lookup for a comptime trampoline slot. The slot is
-        /// trusted at compile time, so the generation and environment checks
-        /// are skipped.
+        /// Engine-thread lookup for a comptime trampoline slot, which is trusted at
+        /// compile time, so the generation and environment checks are skipped.
         pub fn lookup_slot(table: *Self, slot: u32) ?*T {
             if (slot >= capacity) return null;
             return table.slots[slot].load(.acquire);

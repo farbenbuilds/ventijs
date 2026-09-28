@@ -6,11 +6,9 @@ import type { Shard } from "./shard-plan.ts";
 
 /// The `fuzzingclient.json` document `wstest -m fuzzingclient -s` reads.
 ///
-/// `cases` is the only case-selection mechanism the pinned `wstest` exposes: it
-/// has no `--cases` flag, and the suite runs one server at a time, so a shard has
-/// to be expressed as its own spec file. One spec per shard is generated rather
-/// than committed, because a committed set would need N-way manual maintenance and
-/// the union of their case counts is the only thing the gate can check.
+/// `cases` is the only case-selection mechanism the pinned `wstest` exposes -- it has no
+/// `--cases` flag, and the suite runs one server at a time -- so a shard is its own spec file,
+/// generated rather than committed because the union of their counts is what the gate checks.
 export type ShardSpec = {
   readonly outdir: string;
   readonly servers: readonly { readonly agent: string; readonly url: string }[];

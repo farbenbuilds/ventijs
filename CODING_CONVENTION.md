@@ -17,8 +17,12 @@ exist to keep the codebase pure functional, data-oriented, and predictable.
   confined to the transport boundary.
 - **No emojis anywhere.** Not in code, comments, documentation, issue forms, or
   commit messages.
-- **Comments explain why, not how.** Document invariants, protocol edge cases,
-  and non-obvious performance decisions. Do not narrate the code.
+- **Comments say why, in one or two sentences.** An RFC section, a byte value
+  and its reason, a capacity and why that number, a deliberate divergence from
+  `ws`, an invariant that prevents a bug. Never a restatement of the identifier
+  or the signature, a narration of the next line, a module essay, or a
+  post-mortem of a fixed bug. `scripts/check-conventions.mjs` enforces a 0.45
+  comment-to-code ratio, a 10-line maximum run, and no `//!` in TypeScript.
 - **No new runtime dependencies.** The published package may import only
   `napi-zig` and `uWebZockets`. Everything else is a development tool.
 

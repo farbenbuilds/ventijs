@@ -1,55 +1,52 @@
 import type { Duplex } from "node:stream";
-import { codecFailureCode, codecFeedResume, feedCodec } from "../../binding/codec";
+import { codecFailure, codecFailureCode, codecFeedResume, feedCodec } from "../../binding/codec";
 import type { SocketState } from "../../types/socket";
-import { codecOf } from "./codec-handle";
+import { closeCodec, codecOf } from "./codec-handle";
 import { isDeliveryPaused } from "./codec-deferral";
-import { refuseByCodec } from "./codec-refusal";
+import { failureByCode, refuseByCodec } from "./codec-refusal";
 import { deliver, drainReleased } from "./codec-events";
+import { createError } from "../errors";
+import { CLOSED } from "../ready-state";
+import { failConnection } from "./lifecycle";
 
-/// Folds the transport's bytes into the socket's codec and delivers what comes out.
-/// `pending` is what arrived with the upgrade response, if anything did.
-///
-/// The codec is the only thing that knows what a frame is, per
-/// `docs/adr/0001-transport-and-framing-ownership.md`: this module moves bytes and
-/// never looks at an opcode or a length itself.
+/// Folds the transport's bytes into the socket's codec and delivers what comes out. `pending`
+/// is what arrived with the upgrade response; per the ADR this moves bytes, never reads a frame.
 export function driveInbound(state: SocketState, transport: Duplex, pending?: Buffer): void {
-  // The bytes that came with the upgrade response are fed before the listener goes on,
-  // because a read can deliver the response and the first frame together and the
-  // listener would otherwise take the newer bytes first. Ordering is observable: a
-  // peer that greets with a frame expects that frame first.
+  // Fed first: a read can deliver the response and the first frame together, and the
+  // listener would otherwise take the newer bytes first.
   if (pending !== undefined && pending.length > 0) ingest(state, pending);
   transport.on("data", (chunk: Buffer) => {
     ingest(state, chunk);
   });
 }
 
-/// Feeds one read and delivers everything it decoded.
-///
-/// A full queue stops the decoder rather than overwriting a queued payload, so the
-/// unconsumed tail is kept and re-fed once the caller has drained: pausing the
-/// transport here instead would deadlock a peer that only sends in response to
-/// something this socket has not written yet.
+/// Feeds one read and delivers what it decoded. A full queue stops the decoder rather than
+/// overwriting a queued payload, and the tail is re-fed once drained: pausing the transport
+/// here would deadlock a peer that only sends in response.
 export function ingest(state: SocketState, chunk: Buffer): void {
   const handle = codecOf(state);
   if (handle === null) return;
   if (state.pendingInput !== null) {
-    // A deferred delivery is still holding the bytes it has not decoded yet, and they
-    // came first. This chunk would decode out of order, so it is dropped rather than
-    // delivered as though the peer had sent it earlier.
+    // A deferred delivery holds earlier bytes, so this chunk would decode out of order.
     return;
   }
   let rest = chunk;
-  // Bounded by the input: every pass either consumes bytes or stops, and a refusal, a
-  // full queue, or a deferred delivery all end the loop.
   while (rest.length > 0) {
     const outcome = feedCodec(handle, rest);
-    deliver(state, () => {
-      resume(state);
-    });
+    // A throwing listener must not also cost the connection: an exception out of the dispatch
+    // loses the local `rest` and leaves the codec holding half a frame, which garbles the next
+    // message or refuses the connection for a fault the peer never committed.
+    try {
+      deliver(state, () => {
+        guardedResume(state);
+      });
+    } catch (error) {
+      failOnThrow(state, error);
+      throw error;
+    }
     if (outcome.kind === "failed") {
-      // The code the codec latched is the one the RFC assigns this refusal, and it
-      // is what both ends of the connection get to see.
-      refuseByCodec(state, codecFailureCode(handle));
+      // The codec latched why: the peer gets the close code, the application the `ws` error.
+      refuseByCodec(state, codecFailure(handle) ?? failureByCode(codecFailureCode(handle)));
       return;
     }
     if (outcome.kind === "stale-handle") return;
@@ -57,9 +54,7 @@ export function ingest(state: SocketState, chunk: Buffer): void {
     if (consumed <= 0) return;
     rest = rest.subarray(consumed);
     if (outcome.kind === "consumed") return;
-    // The decode stopped because the event store was full, and `deliver` has just
-    // emptied it -- unless the delivery paused, in which case the codec still holds an
-    // event and the tail is not ours to re-feed yet.
+    // The store was full and `deliver` has emptied it, unless the delivery paused.
     if (isDeliveryPaused(state)) {
       state.pendingInput = rest;
       return;
@@ -67,15 +62,36 @@ export function ingest(state: SocketState, chunk: Buffer): void {
   }
 }
 
-/// What a deferred delivery resumes with.
-///
-/// The pause is a *parse* pause, which is what `ws` does and what the option is for:
-/// the bytes behind the message the application has not heard about yet are not
-/// decoded until it has. That means the chunk the transport handed over has a tail
-/// this module still owns, and the tail has to be somewhere the resume can find it.
-/// `state.pendingInput` is that somewhere, and it holds at most one read -- Node's
-/// own high-water mark -- so the cost is bounded and only for a socket that asked for
-/// deferred events.
+/// Ends a connection whose dispatch threw, then lets the throw continue: what stops here
+/// is the corruption, not the application's own exception.
+function failOnThrow(state: SocketState, error: unknown): void {
+  if (state.readyState === CLOSED) return;
+  // The teardown is in a `finally` because `failConnection` emits `error` and an application
+  // listener may throw, which would leak the codec slot on this path.
+  try {
+    failConnection(
+      state,
+      error instanceof Error ? error : createError("ERR_PROTOCOL", String(error)),
+    );
+  } finally {
+    closeCodec(state);
+    state.transport?.destroy();
+  }
+}
+
+/// What a deferred delivery resumes with, through the same guard as the read that started
+/// it: a throw from a handler on a deferred socket arrives from a `setImmediate`.
+function guardedResume(state: SocketState): void {
+  try {
+    resume(state);
+  } catch (error) {
+    failOnThrow(state, error);
+    throw error;
+  }
+}
+
+/// What a deferred delivery resumes with. The pause is a *parse* pause, as in `ws`, so
+/// the tail needs a home the resume can find: `state.pendingInput`, at most one read.
 function resume(state: SocketState): void {
   drainReleased(state);
   const pending = state.pendingInput;

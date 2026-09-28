@@ -1,12 +1,6 @@
-//! What one `feed` call did with its input.
-//!
-//! Its own module because it is the boundary between the driver and the caller:
-//! the driver returns it, the codec re-exports it, and neither should have to
-//! import the other to name it.
+//! What one `feed` call did with its input, and why it stopped before consuming the rest.
 
-/// Why `feed` stopped before consuming its input.
 pub const Outcome = enum(u8) {
-    /// Every byte was consumed.
     ok = 0,
     /// The event queue is full. Drain it and feed the same input again.
     backpressure = 1,
@@ -14,11 +8,9 @@ pub const Outcome = enum(u8) {
     failed = 2,
 };
 
-/// A named type rather than an inline struct, because the driver and `refuse` both
-/// return one and two spellings of the same shape are two types in Zig.
+/// A named type rather than an inline struct, because the driver and `refuse` both return one.
 pub const FeedResult = struct {
-    /// Bytes taken from the input. Everything from here on has to be fed again,
-    /// and the caller still holds those bytes in the buffer it already owns.
+    /// Bytes taken from the input; everything from here on has to be fed again by the caller.
     consumed: usize,
     outcome: Outcome,
 };

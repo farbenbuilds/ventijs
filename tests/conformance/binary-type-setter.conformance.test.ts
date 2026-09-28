@@ -1,9 +1,7 @@
 //! `binaryType` read back, and the values that are not what the caller asked for.
 //!
-//! Split from `binary-type.conformance.test.ts` because these two are about the
-//! setter's contract rather than about what a listener receives: one is the
-//! round-trip, the other is that an unrecognised value is ignored. Both are the same
-//! shape of assertion -- the getter, not a message -- so they belong together.
+//! Split from `binary-type.conformance.test.ts` because both assert on the getter
+//! rather than on what a listener receives.
 
 import { expect, test } from "vitest";
 import { WebSocketServer, type WebSocket } from "../../src/index";

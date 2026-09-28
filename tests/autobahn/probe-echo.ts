@@ -1,4 +1,5 @@
 import { WebSocket as WsClient } from "ws";
+import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
 
 /// Measured facts about the target, gathered by dialling it with the pinned `ws`
 /// client. The suite is the authoritative conformance signal, but a suite run
@@ -35,10 +36,10 @@ type ProbeState = {
 const PROBE_TIMEOUT_MS = 2000;
 const TEXT_PAYLOAD = "ventijs-autobahn-probe";
 const BINARY_PAYLOAD = Buffer.from([0x00, 0xff, 0x10, 0x7f, 0x80, 0xfe]);
-/// Two payloads above the engine's `message_capacity`: the first the suite-sized
-/// case group 9.1 uses, the second the size group 9.3 uses. Both are far above
-/// the cap, and both must come back as a close rather than a silent hang.
-const OVER_LIMIT_BYTES = [64 * 1024, 4 * 1024 * 1024] as const;
+/// Whether an over-limit message comes back as a close rather than a silent hang, measured
+/// from outside. Both sizes derive from the compiled cap rather than restating it, so raising
+/// `message_capacity` moves the probe with it.
+const OVER_LIMIT_BYTES = [INBOUND_LIMIT_BYTES + 1, 4 * 1024 * 1024] as const;
 
 const NO_RESULT: ProbeOutcome = {
   opened: false,

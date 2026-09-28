@@ -3,10 +3,12 @@ import WebSocketValueDefault, {
   WebSocket as WebSocketValue,
   WebSocketServer as WebSocketServerValue,
   createWebSocketStream as createStream,
+  engineLimits as readEngineLimits,
 } from "ventijs";
 import type {
   AddressInfo,
   ClientOptions,
+  EngineLimits,
   CloseEvent,
   ErrorEvent,
   Event,
@@ -28,6 +30,7 @@ export type CreateConnection = NonNullable<ClientOptions["createConnection"]>;
 export type MessageHandler = (data: RawData, isBinary: boolean) => void;
 export type QualifiedRawData = WebSocket.RawData;
 export type QualifiedClientOptions = WebSocket.ClientOptions;
+export type Limits = EngineLimits;
 
 export const rawData: RawData = Buffer.from("payload");
 export const textData: WebSocket.Data = "payload";
@@ -72,6 +75,10 @@ export const server: WebSocketServer = new WebSocketServerValue({ noServer: true
 export const isSocket = (value: unknown): boolean => value instanceof WebSocketValue;
 export const isServer = (value: unknown): boolean => value instanceof WebSocketServerValue;
 export const stream = createStream(socket);
+// The compiled capacities, readable from the package entry rather than from a deep
+// import: a documented snippet that has to name an internal path is a snippet nobody runs.
+export const limits: EngineLimits = readEngineLimits();
+export const messageBytes: number = limits.messageBytes;
 
 // Negative cases: a widening regression would make these compile.
 // @ts-expect-error RawData is never a plain string

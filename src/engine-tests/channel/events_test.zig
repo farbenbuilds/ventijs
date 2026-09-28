@@ -11,12 +11,9 @@ test "events default the connection fields to zero" {
 }
 
 test "event kind tag names stay pinned to the binding vocabulary" {
-    // The bridge serializes a kind as `snakeToCamel(@tagName(tag))`, so the name
-    // crossing into JavaScript is the camelCase form of the tag below. Zig owns
-    // the tag and `napi-zig` owns the transform, so pinning the tag is what
-    // catches a rename that would break `EngineEventKind` in
-    // `src/binding/native.ts`. Pinning ordinals instead would have asserted
-    // something the wire never carries.
+    // The bridge serializes a kind as `snakeToCamel(@tagName(tag))`, so the name crossing
+    // into JavaScript is the camelCase form of the tag below. Pinning ordinals instead
+    // would assert something the wire never carries.
     const expected = [_][]const u8{
         "listening",
         "connection_open",

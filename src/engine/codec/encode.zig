@@ -1,15 +1,12 @@
-//! The transmit half of the frame codec: one complete frame, formatted.
-//!
-//! A codec encodes rather than streams, so this holds one formatted frame at a time and
-//! hands it over whole. The caller allocates the `Buffer` it copies into from the length
-//! this returns, which keeps the framing arithmetic out of TypeScript.
-//!
-//! The masking discipline is the part a peer can be attacked through, so it is decided
-//! here and nowhere else: a server must not mask, and a client must mask with a fresh
-//! key from the operating system for every frame.
+//! The transmit half of the frame codec: one complete frame, formatted. A codec encodes
+//! rather than streams, so it holds one frame at a time and the caller allocates the
+//! `Buffer` from the length returned here. Masking is decided here and nowhere else,
+//! because it is the part a peer can attack: a server must not mask, a client must mask
+//! with a fresh key, and that key is the engine's `websocket_mask` primitive.
 
 const std = @import("std");
 const zslay = @import("zslay");
+const uwz = @import("uWebZockets");
 const capacities = @import("capacities.zig");
 const events = @import("events.zig");
 const growth = @import("growth.zig");
@@ -34,9 +31,7 @@ pub fn transmit() type {
         /// Allocated only once a connection actually compresses something.
         compress: deflate.Compressor = .{},
 
-        /// The formatted frame waiting to be copied out. One slot because a caller
-        /// encodes, writes, and encodes again; a caller that needs to interleave two frames
-        /// has to drain this one first, which a single-threaded writer already follows.
+        /// One slot, because a caller encodes, writes, and encodes again.
         buffer: growth.buffer(u8) = .{},
         length: usize = 0,
         masked: bool = false,
@@ -56,29 +51,26 @@ pub fn transmit() type {
             self.compress.deinit();
         }
 
-        /// Formats one frame and returns its length.
-        ///
-        /// `compress` asks for the payload to be compressed and RSV1 set, and it is
-        /// honoured only for a complete data message: a control frame is never
-        /// compressed, and a fragmented message goes out uncompressed, because
-        /// per-frame deflate streams with no context between them are not something a
-        /// receiver can concatenate. RSV1 marks the *first* frame of a message, which
-        /// is why a fragment never carries it.
-        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool) outbound.Encoded {
-            const opcode = header.wire_opcode(kind) orelse return .{ .failed = .unexpected_opcode };
-            if (payload.len > self.max_message_bytes) return .{ .failed = .message_too_large };
+        /// `compress` asks for a compressed payload with RSV1 set, honoured only for a
+        /// complete data message: RSV1 marks the *first* frame of a message, and a per-frame
+        /// deflate stream with no context between frames is not something a receiver can
+        /// concatenate. `mask` is `ws`'s `generateMask`: the caller's own four bytes, or empty
+        /// to draw one from the operating system. A server never masks either way.
+        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8) outbound.Encoded {
+            const opcode = header.wire_opcode(kind) orelse return .{ .failed = .invalid_opcode };
+            if (payload.len > self.max_message_bytes) return .{ .failed = .unsupported_message_length };
             const control = opcode.is_control();
-            // RFC 6455 section 5.5: a control frame is capped at 125 bytes and
-            // must not be fragmented. Both are checked here so a caller cannot
-            // put an unframable frame on the wire.
-            if (control and (payload.len > control_capacity or !fin)) {
-                return .{ .failed = .protocol_error };
+            // RFC 6455 section 5.5: a control frame is capped at 125 bytes and must not
+            // be fragmented, so a caller cannot put an unframable frame on the wire.
+            if (control and payload.len > control_capacity) {
+                return .{ .failed = .invalid_control_payload_length };
             }
+            if (control and !fin) return .{ .failed = .expected_fin };
 
-            // Taken before anything is framed, which is what keeps the frame one
-            // contiguous buffer with one header. `ws` decides the same way, in its sender.
+            // Taken before anything is framed, which is what keeps the frame one contiguous
+            // buffer with one header. `ws` decides the same way, in its sender.
             const wire = deflate.wire(&self.compress, payload, self.max_message_bytes, control, fin, compress) catch
-                return .{ .failed = .message_too_large };
+                return .{ .failed = .unsupported_message_length };
 
             const masked = self.role == .client;
             const base: zslay.types.FrameHeader = .{
@@ -88,27 +80,31 @@ pub fn transmit() type {
                 .rsv3 = false,
                 .opcode = @intFromEnum(opcode),
                 .mask = masked,
-                // The framed payload, not `payload`: compression makes the two differ,
-                // and the compatibility byte makes them differ by one even when it does
-                // not. A length field describing bytes that were never written is a
-                // receiver that hangs waiting for the rest of the frame.
+                // The framed payload, not `payload`: compression makes the two differ, and the
+                // compatibility byte makes them differ by one even when it does not. A length
+                // field describing bytes that were never written is a receiver that hangs.
                 .payload_len = header.length_field(wire.bytes.len),
             };
 
             var key: ?zslay.MaskingKey = null;
             if (masked) {
-                var drawn: zslay.MaskingKey = undefined;
-                header.draw_masking_key(&drawn) catch return .{ .failed = .protocol_error };
-                key = drawn;
+                var chosen: zslay.MaskingKey = undefined;
+                if (mask.len == 0) {
+                    header.draw_masking_key(&chosen) catch return .{ .failed = .protocol_error };
+                } else {
+                    if (mask.len != chosen.len) return .{ .failed = .invalid_mask };
+                    @memcpy(&chosen, mask);
+                }
+                key = chosen;
             }
-            // One buffer for the whole frame, because the boundary hands JavaScript a
-            // single `Buffer` of it and a caller that stitched a header to a payload
-            // across an FFI call could get the header size wrong.
+            // One buffer for the whole frame, because the boundary hands JavaScript a single
+            // `Buffer` and a caller stitching a header to a payload across the boundary could
+            // get the header size wrong.
             const framed = std.math.add(usize, wire.bytes.len, header_capacity) catch {
-                return .{ .failed = .message_too_large };
+                return .{ .failed = .unsupported_message_length };
             };
             self.buffer.reserve(framed, self.max_message_bytes + header_capacity) catch {
-                return .{ .failed = .message_too_large };
+                return .{ .failed = .unsupported_message_length };
             };
             const written = zslay.frame.encode_header(
                 self.buffer.items[0..header_capacity],
@@ -121,7 +117,7 @@ pub fn transmit() type {
             // After the header and before the mask: RSV1 is in the first octet and the
             // mask covers the payload only.
             if (wire.compressed) rsv1.mark(self.buffer.items[0..written]);
-            if (key) |drawn| zslay.frame.mask(start, drawn, 0);
+            if (key) |drawn| uwz.websocket_mask.apply(start, drawn, 0);
             self.length = written + wire.bytes.len;
             self.masked = masked;
             return .{ .ok = self.length };
@@ -138,6 +134,5 @@ pub fn transmit() type {
     };
 }
 
-/// RFC 6455 section 5.5, mirrored from `receive.zig` so the transmit path depends on no
-/// module it does not need.
+/// RFC 6455 section 5.5, mirrored from `receive.zig` so this path depends on less.
 const control_capacity: usize = 125;

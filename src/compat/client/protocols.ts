@@ -3,11 +3,9 @@ import { createError } from "../errors";
 /// RFC 6455 section 11.3.4: a subprotocol is a token per RFC 7230.
 const TOKEN = /^[!#$%&'*+\-.^_`|~\dA-Za-z]+$/;
 
-/// The subprotocols to offer, validated and de-duplicated by position.
-///
-/// `ws` refuses the whole list rather than dropping what it does not understand,
-/// because a caller that asked for two protocols and silently got one has no way to
-/// notice: the server picks, the client never sees what it dropped.
+/// `ws` refuses the whole list rather than dropping what it does not understand, because
+/// a caller that asked for two protocols and silently got one has no way to notice: the
+/// server picks, the client never sees what it dropped.
 export function normalizeProtocols(protocols?: string | string[]): string[] {
   if (protocols === undefined) return [];
   const list = typeof protocols === "string" ? [protocols] : protocols;
@@ -32,7 +30,6 @@ export function normalizeProtocols(protocols?: string | string[]): string[] {
   return [...list];
 }
 
-/// The subprotocols the client offered, for the response to be checked against.
 export type ProtocolSet = ReadonlySet<string>;
 
 export function protocolSet(protocols: readonly string[]): ProtocolSet {
@@ -40,13 +37,10 @@ export function protocolSet(protocols: readonly string[]): ProtocolSet {
 }
 
 /// `new WebSocket(address, options)` is a declared overload, so the second argument is
-/// read before it is validated.
-///
-/// A non-array object in the subprotocol slot is promoted to the options slot, which is
-/// what `ws` does and what `@types/ws` declares. Passing it through instead reached
-/// `normalizeProtocols`, which refused an object as an invalid subprotocol: a documented,
-/// typed, routinely used signature threw a `SyntaxError` about subprotocols on every
-/// call. The promotion is why `new WebSocket(url, { handshakeTimeout })` is legal at all.
+/// read before it is validated: a non-array object in the subprotocol slot is promoted to
+/// the options slot, which is what `ws` does and what `@types/ws` declares. Passing it
+/// through instead refused an object as an invalid subprotocol, so a documented, typed
+/// signature threw on every call.
 export function promoteOptions<T>(
   protocols: string | string[] | undefined,
   options: T | undefined,
@@ -57,12 +51,9 @@ export function promoteOptions<T>(
   return { protocols: undefined, options: protocols as unknown as T };
 }
 
-/// The subprotocol check, kept beside the offer because it is the only part of the
-/// response the application can influence.
-///
 /// A server that picks nothing when the client offered something is a protocol error
-/// rather than a default: the client asked for a language or a subprotocol and would
-/// otherwise have no way to notice it got something else.
+/// rather than a default: the client asked for a subprotocol and would otherwise have no
+/// way to notice it got something else.
 export function protocolRejection(chosen: string | undefined, offered: ProtocolSet): string | null {
   if (chosen === undefined) {
     return offered.size > 0 ? "Server sent no subprotocol" : null;
