@@ -5,132 +5,123 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
-## [Unreleased]
+## [1.0.0-alpha] - unreleased
 
-Pre-alpha. No npm release exists. Every entry below is on `main` and has not shipped.
+The first versioned line. `ws` 8.21.3 and `@types/ws` 8.18.1 are the compatibility
+contract, and `docs/migrating.md` is the short version of where that contract holds and
+where it does not.
 
-### Added
-
-- CommonJS build alongside ESM, with `import` and `require` conditions in `exports` and
-  a `types` condition under each. `require("ventijs")` returns the `WebSocket` class
-  with the named exports attached, and `tests/declarations/consumer.cts` compiles a
-  CommonJS consumer through the `require` path so the condition cannot rot.
-- `docs/migrating.md`: the short version of where the `ws` contract holds and where it
-  does not, for a team deciding whether to switch.
-- The `continuation` frame kind, so `send`'s `fin` option fragments an outbound
-  message and a continuation carries opcode 0 as RFC 6455 section 5.4 requires.
-- `binaryType` is honoured on delivery: `arraybuffer`, `fragments`, and `blob` deliver
-  what they say, and `fragments` slices the codec's reassembly buffer at the piece
-  boundaries so the value still costs no copy beyond the reassembly.
-- `skipUTF8Validation` reaches the validator. The codec is the validator, so the option
-  is one flag at codec creation.
-- `allowSynchronousEvents` pauses the parse loop rather than buffering events, so a
-  `close` behind the messages in one read is delivered after them, as `ws` delivers it.
-- `maxFragments` is enforced against the compiled bound, and a peer exceeding it is
-  closed with 1008 rather than 1002.
-- `ws+unix:` client addresses: IPC over a UNIX domain socket or a Windows named pipe.
-- The compiled fragment bound is reported as `engineLimits().maxFragments`, so a caller
-  can read the number it is competing with.
-- `maxPayload` and `maxFragments` are enforced per connection on the codec route, at
-  the option's value, with `0` meaning no limit as in `ws`. Buffers start at 8 KiB, 1
-  KiB, and 64 bytes and grow into the connection's ceiling on demand, so a socket costs
-  roughly 9 KiB before it has sent anything rather than its whole 100 MiB allowance.
-  This drops the old fixed layout of about 132 KiB per connection.
-- `perMessageDeflate` on the codec route, end to end: the `Sec-WebSocket-Extensions`
-  handshake in both directions, `ws`'s `acceptAsServer` and `acceptAsClient`, the
-  threshold, and a libdeflate compressor and inflater on the engine's own
-  `compression_stream`. Both directions always answer
-  `server_no_context_takeover; client_no_context_takeover`, because that stream is
-  one-shot; a `*_max_window_bits` below 15 is declined rather than accepted and
-  ignored, which is the one place this differs from `ws`.
-- The client handshake runs on `http.ClientRequest`, so `upgrade`, `redirect`, and
-  `unexpected-response` carry `ws`'s payloads: the `IncomingMessage`, the next hop's
-  un-sent request, and the request and response. A caller can read a 401's challenge
-  and change a header on a hop that has not gone out.
-- `engineLimits().maxPayloadBytes` reports the codec's own ceiling, distinct from the
-  engine route's compiled `message_capacity`.
-- A missing native addon is reported from the `WebSocketServer` constructor, so the
-  failure is catchable rather than an uncaught exception inside a Node `upgrade`
-  listener, and the message names the platform.
-- `new WebSocket(address, options)`, the two-argument overload `@types/ws` declares.
-- `clientTracking` is a truthiness, matching `ws`, so `null`, `0`, and `""` disable it.
-- A CJS declaration consumer and a `tsconfig.dist-types.json` that can check one.
+Nothing is published to npm yet: the package ships one platform's compiled addon, so a
+`pnpm install` builds it. See the README.
 
 ### Fixed
 
-- The client never fired `close`. Every pre-101 failure set the ready state and emitted
-  nothing, so a `Promise` wrapper around `new WebSocket` hung for the life of the
-  process.
-- `send`'s `binary` option was ignored on every reachable route, putting a binary frame
-  on the wire where `ws` puts text.
-- `send`'s `fin` option was hardcoded, so a caller could not fragment a message at all.
-- `close()` with no code wrote 1000, asserting a normal shutdown the caller never
-  stated and making 1005 unobservable in both directions.
-- A code-less close frame reported 1006, which says the transport failed, about a
-  connection that ended by exactly the agreed handshake.
-- `closeTimeout: 0` was read as "no deadline" and held the transport and the codec slot
-  at `CLOSING` for the life of the process.
-- A `close` frame overtook a data message already queued behind it, dropping the
-  message. A peer that writes a message and a close in one read is how every application
-  says goodbye.
-- `autoPong: false` was answered anyway on server sockets, so a caller that said "I will
-  answer pings myself" got two pongs.
-- A 3xx that would not be followed surfaced as both `redirect` and
-  `unexpected-response`, and reported a hardcoded 302 rather than the status the peer
-  sent.
-- An `unexpected-response` listener could not take the refusal over, which made the
-  event a notification of a teardown rather than an offer.
-- A `redirect` listener could not prevent the cross-host credential strip, so the
-  per-hop header inspection the event exists for was impossible.
-- A control record the engine cannot carry stayed at the head of the outbound ring and
-  stopped outbound traffic for every connection on that server, permanently.
-- `codec_feed` unmasked in place under a `Buffer` the application owns. It reads and
-  leaves the caller's bytes alone now.
-- `codec_fragments` existed but was not exported from `lib.zig`, so the first read of a
-  message's fragment boundaries threw out of the native call.
-- The boundary's event-kind bound was written against `rejected`, so a kind added after
-  it was unsendable and `send` reported a protocol error for the frame the caller asked
-  for.
-- The outbound frame's length field described the caller's payload rather than the
-  framed one. With `perMessageDeflate` that is a length for bytes that were never
-  written, and the compatibility byte makes them differ even when nothing compresses.
-- The inbound inflater sliced the reassembly buffer at `maxPayload`, which holds a
-  floor rather than a ceiling, so a compressed message indexed an 8 KiB allocation at
-  100 MiB and panicked the process.
-- A redirect reused the first hop's request, so the second hop went to the first hop's
-  path: a redirect that loops back to itself until `maxRedirects`.
-- `close()` and `terminate()` on a `CONNECTING` client destroyed a socket that no
-  longer exists, so the request in flight kept going and put a connection on the wire
-  that nothing would read.
-- Every connection failed with `getaddrinfo ENOTFOUND 127.0.0.1:port`, because
-  `headers.host` was being read as the `Host` header when in `http.request`'s options
-  it is the name to resolve.
-- A socket destroyed while a read was in flight reported that read's error with no
-  listener, which is an uncaught exception in the caller's process.
+The seven entries below were all reported by a tracker row marked `done` while the
+behaviour it described was broken. Each is measured against a live `ws` peer, and each
+came with the test that could not have passed before.
 
-### Changed
+- **`allowSynchronousEvents: false` lost messages.** A read arriving while a deferred
+  delivery held earlier bytes was discarded outright, with no `error`, no `close` and no
+  counter. Twelve messages at one write each delivered three. The pause now keeps a
+  bounded queue of un-decoded reads, which is the queue `ws` keeps, and the resume drains
+  it in the order the peer sent them. Measured at 0, 1, 5 and 20 ms intervals on the
+  server and the client route, 12/12 on both implementations.
+- **`maxBufferedChunks` is enforced.** It was reported on `server.options` and read by
+  nobody, and the tracker called it `unreachable` on the reasoning that a single
+  retained read was already far below `ws`'s 262144. That described the code's shape
+  rather than the protocol's, and the reads it did not retain were dropped rather than
+  bounded. It now bounds the queue, and refuses at `ws`'s bound with
+  `WS_ERR_TOO_MANY_BUFFERED_PARTS` and a 1008.
+- **The `wss:` client dropped every TLS and `http.request` option.** `ca`, `cert`, `key`,
+  `pfx`, `passphrase`, `secureContext`, `rejectUnauthorized`, `checkServerIdentity`,
+  `servername`, `agent`, `createConnection`, `localAddress`, `family` and `lookup` were
+  all read by nobody, so a caller pinning an internal CA got a `self-signed certificate`
+  error naming the certificate they had just supplied, and a proxy hook or a connection
+  pool was unreachable. `@types/ws` types `ClientOptions` as extending
+  `SecureContextOptions` and the request options, and `ws` spreads the caller's object
+  into the request, so these keys are the contract rather than an implementation detail.
+- **The opening handshake had the wrong header precedence.** The library's upgrade headers
+  went _under_ the caller's, so a caller merging headers from a config object could set
+  `Connection: keep-alive` and produce a request that is not an upgrade. URL credentials
+  overwrote an explicit `Authorization`, silently downgrading a bearer token to basic
+  auth. `origin: ''` sent a header with an empty value. `handshakeTimeout: 0` armed a
+  timer rather than arming none, so the documented way of saying "no deadline" refused
+  the handshake on the next tick. All four now match `ws`.
+- **Two valid `perMessageDeflate` options were answered with a 400.**
+  `serverMaxWindowBits: 15` is the maximum legal value and the one this build emits, and
+  it was refused; `clientMaxWindowBits: 12` was read as a limit on this server when
+  RFC 7692 section 7.1.1.2 makes it the window the client will use. Both connect now, in
+  all four directions between the two implementations.
+- **`send` ignored three of its options.** `compress: false` compressed anyway, so a
+  caller shipping already-compressed payloads paid a deflate on both ends for nothing.
+  `mask: false` and `ping(data, false)` masked anyway on a client. `send(blob)` threw,
+  though `ws` accepts one and its own API reference lists it as a valid payload. A blob is
+  read asynchronously and the send after it waits behind the read, as `ws` orders it.
+- **`createWebSocketStream` diverged on two paths.** `{ readableObjectMode: true }`
+  pushed a Buffer where `ws` gives a string for a text message, so every line-protocol
+  pipeline built on it broke silently. `end()` resolved on the socket's `close` rather
+  than when the close frame was written. The conformance harness had been comparing both
+  implementations against a stub socket, so neither path was exercised by a test that
+  could fail; it now runs real servers on both legs.
 
-- `engineLimits` reports `maxFragments` and `maxPayloadBytes` alongside the existing
-  capacities.
-- The client opens its connection with `http.request` / `https.request` rather than
-  writing a request line onto a `net.Socket`, which removes three hand-written
-  modules and is what makes the three payload events possible.
-- The engine route's `message_capacity` is 64 KiB, the Autobahn suite's largest group-1
-  payload, so the six group-1 cases it was failing with 1009 are within reach. The
-  harness derives its capacity model from `engineLimits().messageBytes` rather than
-  restating the number, which is what let the constant move without invalidating it.
-- The codec is split by responsibility where it grew past the module budget: the byte
-  copy, the fragment bookkeeping, the event dispatch, the peer's close, the deferral
-  policy, and the handle table are each one module. `src/binding/codec.ts` splits the
-  same way, because the three directions through a codec have nothing in common but the
-  handle.
-- `pnpm build` runs `scripts/finalize-exports.mjs` after `tsdown`, because the bundler
-  regenerates `exports` on every build and did not write the `types` conditions.
+### Added
+
+- The `maxBufferedChunks` and `http.request`/TLS option surfaces now have tracker rows.
+  The first had none because it was believed unreachable; the second because it was
+  believed to be an implementation detail, which `@types/ws` says it is not.
+- `codec_encode` takes a `maskFrame` flag. The encoder decided masking from the
+  connection role alone, so honouring `send`'s `mask` option needed somewhere to put the
+  caller's choice. A server still refuses to mask, which was already the documented
+  position.
+- The engine's bound for a peer's `server_max_window_bits` is one module
+  (`src/compat/extensions/offer-window.ts`) rather than a branch inside the refusal
+  predicate, because it is a statement about the compressor and the predicate is a
+  statement about the negotiation.
+
+### Known divergences from `ws`
+
+Four, all deliberate, all recorded in `COMPATIBILITY.md` with the measurement behind them.
+
+- A `server_max_window_bits` below 15 in a client offer is declined. `ws` accepts it,
+  answers it, and then compresses at 15 regardless, so its header claims a window the
+  stream does not use.
+- A redirect from `wss:` to `ws:` is refused. `ws` follows the hop after stripping the
+  credentials, which is the behaviour of a client that will send a bearer token over a
+  plaintext connection because a server it trusts said so.
+- The close deadline and the two payload limits are validated where `ws` coerces, so a
+  value outside the range is a `RangeError` rather than a silently clamped limit.
+- A refused frame's message names the cause `ws` names. The refusal table has one entry
+  for `maxFragments` and `maxBufferedChunks`, so the `maxBufferedChunks` path reports
+  `Too many message fragments`.
+
+Two `ws` behaviours are also recorded as unreachable, with the architecture that removes
+them: `WS_NO_BUFFER_UTIL` and `WS_NO_UTF_8_VALIDATE` both guard an optional native npm
+module, and ventijs compiles no such module.
 
 ### Documentation
 
-- The README's status table and quick start describe the implementation rather than a
-  state several commits behind it.
-- `COMPATIBILITY.md`, `docs/compliance-api.md`, `docs/compliance.md`, and
-  `docs/compliance-error-codes.md` record the resolved rows and the corrections, and
-  name what is still outstanding.
+- `COMPATIBILITY.md`, `docs/compliance-api.md`, `docs/compliance.md` and
+  `docs/compliance-error-codes.md` record what actually happens, including the rows that
+  were wrong. A tracker that cites a file which does not exist is worse than no tracker,
+  so `tests/conformance/close-latch.conformance.test.ts`, which was cited as passing
+  evidence, is replaced by the test that exists.
+- The 64 KiB engine capacity is now stated with the measurement that settles what it
+  bounds. The public surface was asked to match `ws` here and already does: a 100 MiB
+  message and 300 concurrent connections both pass, and the 64 KiB is a property of the
+  engine's startup slab on a route no constructor reaches. Raising it to `ws`'s default
+  would cost 12.8 GiB per server at 128 connections.
+- `zslay` is named in `CODEBASE.md` as what it is: the first-party frame parser under
+  `receive.zig` and `encode.zig`, pinned in `build.zig.zon` to the same `farbenbuilds`
+  artifact the engine resolves, which is what makes the two routes agree on the wire by
+  construction.
+- `docs/compliance.md` gains the rule the stream stub exposed: a comparison is evidence
+  only if its reference leg can fail.
+
+## [Unreleased]
+
+## [0.0.0]
+
+Never published. The pre-alpha line, from the first commit to `e2add84`, has no release
+history: the public surface, the RFC 6455 codec, the µWebZockets engine route, the Autobahn
+harness, the conformance suite and the tracking documents were all built on `main` with no
+published version behind them.
