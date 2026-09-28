@@ -111,6 +111,11 @@ declarations through the package `exports` map; it needs `tsdown` output.
   state records.
 - Guard clauses and early returns; `switch` over nested `if`/`else` ladders.
 - Split by responsibility; keep source files near or below 150 lines.
+- Comments say why, in one or two sentences: an RFC section, a byte value and
+  its reason, a capacity, a deliberate divergence from `ws`, an invariant. No
+  restating the identifier, no narration, no module essays, no post-mortems of
+  fixed bugs, no `//!` in TypeScript. `scripts/check-conventions.mjs` enforces
+  the ratio and the run length.
 - Naming: TS files `kebab-case`, TS identifiers `camelCase`; Zig files,
   functions, and variables `snake_case`; Zig types `PascalCase`. Zig is
   formatted by `zig fmt` (4 spaces).

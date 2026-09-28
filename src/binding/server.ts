@@ -81,54 +81,35 @@ export function serverDroppedEvents(handle: ServerHandle): bigint {
   return callNative(() => addon.serverDroppedEvents(handle));
 }
 
-/// Inbound messages the engine parsed and then discarded before JavaScript could
-/// see them, from either of two causes.
-///
-/// This is a loss, not a backpressure signal: the peer delivered the frame and
-/// the engine framed it correctly, but there was nowhere to put the bytes. The
-/// engine's WebSocket behavior exposes no way to stop reading once a consumer
-/// falls behind, so the inbound ring is the only place a burst can be absorbed
-/// and its depth is the budget.
-///
-/// The second cause is a connection an application has paused. `ws.pause()`
-/// pauses the socket so the bytes stay in the kernel receive buffer, and the
-/// pinned engine has no per-connection read pause to do the same, so the frame is
-/// discarded instead. A paused connection is bounded to itself; a full ring is
-/// not. Both share this one counter because both are a peer outrunning the
-/// consumer, which is what the number is for, and because neither is observable
-/// from JavaScript otherwise.
-///
-/// A non-zero count means the application should be told rather than left to
-/// assume every frame arrived.
+/// A loss, not a backpressure signal: the peer delivered the frame and the engine framed
+/// it correctly, but there was nowhere to put the bytes. The engine's WebSocket
+/// behavior exposes no way to stop reading once a consumer falls behind, so the inbound
+/// ring is the only place a burst can be absorbed and its depth is the budget.
+
+// The second cause is a connection the application has paused. `ws.pause()` keeps the
+// bytes in the kernel receive buffer and the pinned engine has no per-connection read
+// pause, so the frame is discarded instead. Both causes share this one counter because
+// both are a peer outrunning the consumer, and neither is observable otherwise.
 export function serverDroppedMessages(handle: ServerHandle): bigint {
   assertServerHandle(handle);
   const addon = loadAddon();
   return callNative(() => addon.serverDroppedMessages(handle));
 }
 
-/// Staged payloads the engine refused after the pump had taken them off the
-/// outbound ring.
-///
-/// This is the outbound counterpart of `serverDroppedMessages`, and it exists
-/// because the outbound path had no honest answer. `pumpSocket` returns `ok` once
-/// the engine's inbox has accepted a payload, and the engine then discards it if
-/// the connection's write queue is full, so a caller that watched only the status
-/// saw success for bytes that were never sent. A non-zero count means exactly
-/// that, and the app should be told rather than left to assume every frame
-/// arrived.
+/// The outbound counterpart of `serverDroppedMessages`. `pumpSocket` returns `ok` once
+/// the engine's inbox has accepted a payload, and the engine then discards it if the
+/// connection's write queue is full, so a caller watching only the status saw success
+/// for bytes that were never sent.
 export function serverUndeliveredMessages(handle: ServerHandle): bigint {
   assertServerHandle(handle);
   const addon = loadAddon();
   return callNative(() => addon.serverUndeliveredMessages(handle));
 }
 
-/// The capacities the linked addon was compiled with.
-///
-/// Read from the addon rather than restated in TypeScript, because every one of
-/// them is a promise the compatibility layer has to keep and a restated copy is
-/// how the promise and the build drift apart. Nothing here is configurable at
-/// runtime: the engine bakes these into its application type and refuses a
-/// configuration that disagrees.
+/// Read from the addon rather than restated in TypeScript: a restated copy is how the
+/// promise and the build drift apart. Nothing here is configurable at runtime, because
+/// the engine bakes these into its application type and refuses a configuration that
+/// disagrees.
 export function engineLimits(): NativeEngineLimits {
   return loadAddon().engineLimits();
 }

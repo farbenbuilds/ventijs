@@ -2,13 +2,10 @@
 //!
 //! A compressed message's frames concatenate and are inflated once, at the final fragment,
 //! which is what `staged` is for -- inflating per frame would need a streaming inflate to
-//! carry state, and the engine's is one-shot.
-//!
-//! The compression flag lives here rather than in `receive.zig` because it is a property
-//! of *this* message: it is latched from the RSV1 bit of the first frame and forgotten
-//! when the message is delivered, while whether RSV1 may mean anything at all is a
-//! connection property and arrives as `compressible`.
-
+//! carry state, and the engine's is one-shot. The compression flag lives here because it is a
+//! property of *this* message: latched from the RSV1 bit of the first frame and forgotten
+//! when the message is delivered, while whether RSV1 may mean anything is a connection
+//! property that arrives as `compressible`.
 const std = @import("std");
 const uwz = @import("uWebZockets");
 const deflate = @import("deflate.zig");
@@ -17,15 +14,11 @@ const growth = @import("growth.zig");
 const capacities = @import("capacities.zig");
 const rsv1 = @import("rsv1.zig");
 
-/// Why a compressed message could not be inflated. `CorruptPayload` is a peer's bytes
-/// that are not the message they claimed to be, `TooLarge` is a message over `maxPayload`,
-/// and both become a `Failure` before they reach a caller.
+/// `CorruptPayload` is a peer's bytes that are not the message they claimed to be and
+/// `TooLarge` is a message over `maxPayload`; both become a `Failure` before a caller.
 pub const Error = deflate.Error;
-
-/// One message's compression state, and the one inflate that finishes it.
 pub const Message = struct {
-    /// Whether the message in progress arrived compressed, latched from the RSV1 bit of
-    /// its first frame.
+    /// Latched from the RSV1 bit of the message's first frame.
     compressed: bool = false,
     /// Whether the handshake negotiated `permessage-deflate`, so RSV1 may mean something.
     compressible: bool,
@@ -36,10 +29,9 @@ pub const Message = struct {
     /// the stream is opened once at the end, so the two cannot be the same memory.
     input: growth.buffer(u8) = .{},
     /// The libdeflate engine, built on the connection's first compressed message and reused
-    /// after it, so a peer that compresses every message does not malloc and free an
-    /// engine for each one.
+    /// after it, so a peer that compresses every message does not malloc and free an engine
+    /// for each one.
     stream: ?uwz.compression_stream.DecompressionStream = null,
-
     pub fn init(compressible: bool) Message {
         return .{ .compressible = compressible };
     }
@@ -55,14 +47,12 @@ pub const Message = struct {
         return self.compressed;
     }
 
-    /// Decides what a base header's RSV1 bit means, latching a compressed message and
-    /// clearing the bit so `zslay` will parse the header. A refusal is returned rather
-    /// than latched here, because the driver owns the refusal.
+    /// Latches a compressed message and clears the bit so `zslay` will parse the header. A
+    /// refusal is returned rather than latched: the driver owns the refusal.
     pub fn inspect(self: *Message, first: *u8) ?events.Failure {
         return rsv1.inspect(&self.compressed, first, self.compressible);
     }
 
-    /// Appends one frame's compressed payload to the message in progress.
     pub fn stage(self: *Message, chunk: []const u8, ceiling: usize) Error!void {
         self.staged.grow(chunk.len, ceiling) catch return error.TooLarge;
         @memcpy(self.staged.tail(chunk.len), chunk);
@@ -93,8 +83,8 @@ pub const Message = struct {
             if (stream.finish(out.items)) |plain| {
                 return plain;
             } else |err| switch (err) {
-                // Grow and retry rather than pre-checking the ceiling: libdeflate knows
-                // the inflated length and this does not, so asking it sizes the output once.
+                // Grow and retry rather than pre-checking the ceiling: libdeflate knows the
+                // inflated length and this does not, so asking it sizes the output once.
                 error.BufferTooSmall => {
                     const step = try std.math.mul(usize, out.items.len, 2);
                     out.reserve(@max(step, capacities.message_floor), ceiling) catch return error.TooLarge;
@@ -104,9 +94,8 @@ pub const Message = struct {
         }
     }
 
-    /// The engine, built on the first compressed message and rewound here. A rewind is
-    /// what a finished pass leaves behind: the borrow of `input`, which `reserve` may have
-    /// moved, the write cursor, and the closed flag.
+    /// A rewind is what a finished pass leaves behind: the borrow of `input`, which
+    /// `reserve` may have moved, the write cursor, and the closed flag.
     fn engine(self: *Message) Error!*uwz.compression_stream.DecompressionStream {
         if (self.stream) |*open| {
             open.input = self.input.items;

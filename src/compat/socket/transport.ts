@@ -7,31 +7,23 @@ import { failConnection, finishConnection } from "./lifecycle";
 
 const EMPTY = Buffer.alloc(0);
 
-/// Reports a terminal transport failure. The caller destroys the transport,
-/// which produces the `close` event that finishes the socket, so this latches
-/// `CLOSING` and emits without reaching `CLOSED` itself.
-///
-/// It deliberately ignores the `errorEmitted` latch that `failConnection` and
-/// `reportWithoutClosing` guard. That latch exists so a *recoverable* report,
-/// currently a failed send on a socket with no callback, cannot become a second
-/// `error` on a socket that is still healthy. A transport failure is the
-/// opposite: the connection is gone, it is the one event a caller with no
-/// callback has to observe, and suppressing it behind an unrelated earlier
-/// report is how a peer reset became a silent `close(1006)` with nothing in
-/// between. `ws` emits `error` for a socket-level failure regardless of
-/// `_errorEmitted` for the same reason.
+/// Reports a terminal transport failure. The caller destroys the transport, whose `close`
+/// event finishes the socket, so this latches `CLOSING` and emits without reaching
+/// `CLOSED` itself.
+
+// Deliberately ignores the `errorEmitted` latch `failConnection` guards, which exists so
+// a *recoverable* report cannot become a second `error` on a healthy socket. A transport
+// failure is the opposite: it is the one event a caller with no callback has to observe,
+// and `ws` emits `error` for a socket-level failure regardless of `_errorEmitted`.
 export function failTransport(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
   state.readyState = CLOSING;
   emitEvent(state, "error", error);
 }
 
-/// Forcibly closes the socket by destroying the transport.
-///
-/// The latch precedes the destroy, matching `ws`: a terminated socket is
-/// observably `CLOSING` until the transport's `close` event finishes it, and a
-/// socket left `OPEN` after `terminate()` is a second call's opportunity to send
-/// on a connection that is already gone.
+/// The latch precedes the destroy, matching `ws`: a terminated socket is observably
+/// `CLOSING` until the transport's `close` event finishes it, and a socket left `OPEN`
+/// is a second call's opportunity to send on a connection that is already gone.
 export function terminateConnection(state: SocketState): void {
   if (state.readyState === CLOSED) return;
   if (state.readyState === CONNECTING) {

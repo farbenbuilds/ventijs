@@ -5,8 +5,8 @@ import { codecLimits } from "../../binding/codec";
 import { closeTimeoutOf, invalidOption, normalizePerMessageDeflate } from "./shared";
 
 export function normalizeServerOptions(options?: ServerOptions): NormalizedServerOptions {
-  // ws copies own enumerable properties before reading, so inherited
-  // properties are ignored and each getter runs exactly once.
+  // `ws` copies own enumerable properties before reading, so inherited properties are
+  // ignored and each getter runs exactly once.
   const source = { ...options };
   const port = source.port ?? null;
   const server = source.server ?? null;
@@ -23,18 +23,15 @@ export function normalizeServerOptions(options?: ServerOptions): NormalizedServe
     path: source.path ?? null,
     server,
     noServer,
-    // Truthiness once the default is applied, matching `ws`, which gates tracking on
-    // `this.options.clientTracking` being truthy. `?? true` read `null` as absent and
-    // `0` and `""` as truthy, so every falsy value other than `false` left tracking
-    // on: the server grew a `clients` set where `ws` has none, and `close()` waited
-    // for connections in a case where `ws` emits on the next tick.
+    // Truthiness once the default is applied, as `ws` gates it. `?? true` read `null` as
+    // absent and `0` and `""` as truthy, so every falsy value other than `false` left
+    // tracking on and grew a `clients` set where `ws` has none.
     clientTracking: source.clientTracking === undefined ? true : Boolean(source.clientTracking),
     allowSynchronousEvents: source.allowSynchronousEvents ?? true,
     autoPong: source.autoPong ?? true,
     // Read against the addon's compiled ceilings, so an option above what the build
-    // supports is refused here by name rather than becoming a native ordinal at the
-    // first connection. The thunks are lazy: an option that was not set never loads the
-    // addon, so `new WebSocketServer({ port })` touches no native code here.
+    // supports is refused here by name rather than becoming a native ordinal at the first
+    // connection. The thunks are lazy, so `new WebSocketServer({ port })` loads no addon.
     maxPayload: maxPayloadOf(source, () => codecLimits().maxPayloadBytes),
     maxFragments: maxFragmentsOf(source, () => codecLimits().maxFragments),
     skipUTF8Validation: source.skipUTF8Validation ?? false,

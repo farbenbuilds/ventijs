@@ -1,10 +1,9 @@
 //! Read-boundary tests for the frame codec.
 //!
-//! A peer chooses how much arrives per read, and it chooses adversarially: a
-//! frame can be split anywhere, including inside its header, inside its masking
-//! key, and inside a multi-byte UTF-8 sequence. These tests put the same bytes
-//! through every split and require one answer, because "it worked in testing" on
-//! a frame that happened to arrive whole is not a property of the codec.
+//! A peer chooses how much arrives per read, and adversarially: a frame can be split
+//! anywhere, including inside its header, its masking key, and a multi-byte UTF-8 sequence.
+//! These put the same bytes through every split and require one answer, because "it worked
+//! in testing" on a frame that happened to arrive whole is not a property of the codec.
 
 const std = @import("std");
 const testing = std.testing;
@@ -30,9 +29,8 @@ test "a message split across reads decodes identically to the same frame whole" 
     try testing.expectEqual(codec.Outcome.ok, reference.feed(reference_frame).outcome);
     const expected = (try support.take_only(&reference)).payload;
 
-    // A fresh frame per split, because `feed` unmasks in place and a masked frame
-    // is only valid masked: re-feeding the same buffer would be feeding plaintext
-    // through a decoder that expects ciphertext.
+    // A fresh frame per split, because `feed` unmasks in place: re-feeding the same buffer
+    // would be feeding plaintext through a decoder that expects ciphertext.
     var split: usize = 1;
     while (split < reference_frame.len) : (split += 1) {
         var buffer: [256]u8 = undefined;
@@ -63,8 +61,8 @@ test "feeding a frame one byte at a time produces the same event" {
 }
 
 test "a multi-byte sequence split across fragments is valid" {
-    // The reason the UTF-8 state has to be carried across frames: a validator
-    // that checked each frame on its own would reject this message.
+    // The reason the UTF-8 state has to be carried across frames: a validator that checked
+    // each frame on its own would reject this message.
     var peer = support.server();
     var buffer: [64]u8 = undefined;
     const parts = [_]Frame{
@@ -79,9 +77,9 @@ test "a multi-byte sequence split across fragments is valid" {
 }
 
 test "a frame longer than the cap is refused rather than truncated" {
-    // `zslay` ends an over-long frame at `max_frame_len` and reports what it took as
-    // a complete frame, so a decoder that only checks the accumulated message would
-    // deliver a silently short message instead of refusing the frame.
+    // `zslay` ends an over-long frame at `max_frame_len` and reports what it took as a
+    // complete frame, so a decoder that only checks the accumulated message would deliver
+    // a silently short message instead of refusing the frame.
     const Small = codec.codec(2);
     var peer = Small.init(.server, trusted(16, 8)) catch unreachable;
     defer peer.deinit();

@@ -27,8 +27,7 @@ export function createErrorEvent(target: WebSocket, error: Error): ErrorEvent {
   return { type: "error", target, error, message: error.message };
 }
 
-/// Invokes a DOM listener with the socket as `this`; an object listener is
-/// handed to its `handleEvent` method, matching whatwg semantics.
+/// An object listener is handed to its `handleEvent` method, matching whatwg semantics.
 export function callListener(handler: unknown, target: unknown, event: unknown): void {
   if (typeof handler === "function") {
     Reflect.apply(handler, target, [event]);

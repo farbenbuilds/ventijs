@@ -1,5 +1,5 @@
 ---
-description: Read-only auditor for the anti-OOP, 150-line, naming, control-flow, and dependency rules. Use for pre-PR audits, refactor scoping, or when code smells of classes, nested conditionals, oversized modules, or dependency creep.
+description: Read-only auditor for the anti-OOP, 150-line, comment-budget, naming, control-flow, and dependency rules. Use for pre-PR audits, refactor scoping, or when code smells of classes, nested conditionals, oversized modules, restated comments, or dependency creep.
 mode: subagent
 permission:
   edit: deny
@@ -58,7 +58,15 @@ code that violates them.
 5. **Dependencies.** The published package imports only `napi-zig`,
    `uWebZockets`, and the Node/TypeScript standard library. No runtime
    dependency outside those two. `ws` is devDependency-only.
-6. **Branching.** Before proposing or executing any code modification, create
+6. **Comments.** One or two sentences, and only for what the code cannot say: an
+   RFC section, a byte value and its reason, a capacity, a deliberate
+   divergence from `ws`, an invariant. Flag any comment that restates the
+   identifier or signature, narrates the next line, opens with a module
+   essay, recounts a fixed bug, or uses `//!` in a TypeScript file. Beyond the
+   file a run lands in, run `node scripts/check-conventions.mjs` directly: the
+   gate's ratio and run budgets are the written number, and a comment that
+   merely says the right thing too often is a defect like any other.
+7. **Branching.** Before proposing or executing any code modification, create
    and check out a dedicated branch from the default branch:
    `git fetch origin main && git switch -c <type>/<slug> origin/main`, where
    `<type>` is `feature`, `fix`, `test`, `refactor`, `docs`, or `chore`. Never

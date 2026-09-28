@@ -1,9 +1,5 @@
 //! What a codec has to say about itself: the close code it latched, the failure, and
-//! the role it was built for.
-//!
-//! Split from `codec_io.zig` because these are questions about the connection rather
-//! than about a message, and none of them moves a payload. A caller that reaches for
-//! one of these is asking why a frame was refused, not asking for a frame.
+//! the role it was built for. None of these moves a payload.
 
 const napi = @import("napi-zig");
 const abi = @import("codec_abi.zig");
@@ -16,7 +12,7 @@ pub fn codec_failure_code(env: napi.Env, handle: u64) !abi.Count {
     return peer.failure_code();
 }
 
-/// The failure ordinal a refused frame produced, or 0 while healthy.
+/// The failure ordinal a refused frame produced, offset by one so 0 can mean healthy.
 pub fn codec_failure(env: napi.Env, handle: u64) !abi.Count {
     _ = env;
     const peer = handles.resolve(handle) orelse return 0;
@@ -36,11 +32,8 @@ pub fn codec_role(env: napi.Env, handle: u64) !abi.Count {
 }
 
 /// The per-connection ceilings a codec enforces, as `[maxPayload, maxFragments]`, or
-/// null once the handle is stale.
-///
-/// One crossing rather than two, because a caller that set a limit and wants to confirm
-/// it is in force wants both halves of the answer together, and a pair is what the
-/// codec's `limits.Limits` record is in the first place.
+/// null once the handle is stale. One crossing rather than two, because a caller that
+/// set a limit and wants to confirm it wants both halves of the answer together.
 pub fn codec_ceilings(env: napi.Env, handle: u64) !?napi.Val {
     if (handles.resolve(handle) == null) return null;
     const ceilings = handles.ceilings_of(handle);

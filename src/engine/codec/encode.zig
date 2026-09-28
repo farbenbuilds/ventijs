@@ -1,13 +1,11 @@
-//! The transmit half of the frame codec: one complete frame, formatted.
+//! The transmit half of the frame codec: one complete frame, formatted. A codec encodes
+//! rather than streams, so this holds one frame at a time and the caller allocates the
+//! `Buffer` it copies into from the length returned here.
 //!
-//! A codec encodes rather than streams, so this holds one formatted frame at a time and
-//! hands it over whole. The caller allocates the `Buffer` it copies into from the length
-//! this returns, which keeps the framing arithmetic out of TypeScript.
-//!
-//! The masking discipline is the part a peer can be attacked through, so it is decided
-//! here and nowhere else: a server must not mask, and a client must mask with a fresh
-//! key per frame. The mask is the engine's `websocket_mask`, the primitive the engine
-//! route masks with too.
+//! The masking discipline is the part a peer can be attacked through, so it is decided here
+//! and nowhere else: a server must not mask, and a client must mask with a fresh key per
+//! frame. The mask is the engine's `websocket_mask`, the primitive the engine route masks
+//! with too.
 
 const std = @import("std");
 const zslay = @import("zslay");
@@ -36,8 +34,7 @@ pub fn transmit() type {
         /// Allocated only once a connection actually compresses something.
         compress: deflate.Compressor = .{},
 
-        /// The formatted frame waiting to be copied out. One slot, because a caller
-        /// encodes, writes, and encodes again.
+        /// One slot, because a caller encodes, writes, and encodes again.
         buffer: growth.buffer(u8) = .{},
         length: usize = 0,
         masked: bool = false,
@@ -57,15 +54,11 @@ pub fn transmit() type {
             self.compress.deinit();
         }
 
-        /// Formats one frame and returns its length.
-        ///
         /// `compress` asks for a compressed payload with RSV1 set, honoured only for a
-        /// complete data message: RSV1 marks the *first* frame of a message, and a
-        /// per-frame deflate stream with no context between frames is not something a
-        /// receiver can concatenate.
-        ///
-        /// `mask` is `ws`'s `generateMask`: the caller's own four bytes, or empty to draw
-        /// one from the operating system. A server never masks either way.
+        /// complete data message: RSV1 marks the *first* frame of a message, and a per-frame
+        /// deflate stream with no context between frames is not something a receiver can
+        /// concatenate. `mask` is `ws`'s `generateMask`: the caller's own four bytes, or empty
+        /// to draw one from the operating system. A server never masks either way.
         pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8) outbound.Encoded {
             const opcode = header.wire_opcode(kind) orelse return .{ .failed = .invalid_opcode };
             if (payload.len > self.max_message_bytes) return .{ .failed = .unsupported_message_length };
@@ -77,8 +70,8 @@ pub fn transmit() type {
             }
             if (control and !fin) return .{ .failed = .expected_fin };
 
-            // Taken before anything is framed, which is what keeps the frame one
-            // contiguous buffer with one header. `ws` decides the same way, in its sender.
+            // Taken before anything is framed, which is what keeps the frame one contiguous
+            // buffer with one header. `ws` decides the same way, in its sender.
             const wire = deflate.wire(&self.compress, payload, self.max_message_bytes, control, fin, compress) catch
                 return .{ .failed = .unsupported_message_length };
 
@@ -90,10 +83,9 @@ pub fn transmit() type {
                 .rsv3 = false,
                 .opcode = @intFromEnum(opcode),
                 .mask = masked,
-                // The framed payload, not `payload`: compression makes the two differ,
-                // and the compatibility byte makes them differ by one even when it does
-                // not. A length field describing bytes that were never written is a
-                // receiver that hangs waiting for the rest of the frame.
+                // The framed payload, not `payload`: compression makes the two differ, and the
+                // compatibility byte makes them differ by one even when it does not. A length
+                // field describing bytes that were never written is a receiver that hangs.
                 .payload_len = header.length_field(wire.bytes.len),
             };
 
@@ -108,9 +100,9 @@ pub fn transmit() type {
                 }
                 key = chosen;
             }
-            // One buffer for the whole frame, because the boundary hands JavaScript a
-            // single `Buffer` and a caller stitching a header to a payload across the
-            // boundary could get the header size wrong.
+            // One buffer for the whole frame, because the boundary hands JavaScript a single
+            // `Buffer` and a caller stitching a header to a payload across the boundary could
+            // get the header size wrong.
             const framed = std.math.add(usize, wire.bytes.len, header_capacity) catch {
                 return .{ .failed = .unsupported_message_length };
             };

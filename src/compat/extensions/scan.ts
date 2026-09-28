@@ -1,13 +1,9 @@
-/// The scanner behind the extension header grammar.
-///
-/// Split out of `grammar.ts` because the grammar is one policy -- what a header is
-/// allowed to say, which is `ws`'s policy -- and the scanner is the mechanical part that
-/// has to reproduce that policy exactly. Keeping them apart is what lets a change to
-/// either be reviewed on its own: a scanner change that alters a refusal is a
-/// compatibility change, and a grammar change that stops refusing something is one too.
+/// The scanner behind the extension header grammar. Kept apart from the grammar because
+/// a scanner change that alters a refusal is a compatibility change, and a grammar change
+/// that stops refusing something is one too.
 
-/// RFC 6455 section 9.1 `tchar`, which is what a parameter name and an unquoted
-/// parameter value both have to be.
+/// RFC 6455 section 9.1 `tchar`, which a parameter name and an unquoted value both
+/// have to be.
 const TOKEN = /^[!#$%&'*+\-.0-9A-Z^_`|a-z~]+$/;
 
 const COMMA = 0x2c;
@@ -17,13 +13,10 @@ const QUOTE = 0x22;
 
 export const isWhitespace = (code: number): boolean => code === 0x20 || code === 0x09;
 
-/// One extension name and every `;` group that belongs to it, up to a comma or the end,
-/// plus the index just past it.
-///
-/// A comma ends the *configuration*, not the extension:
-/// `permessage-deflate; a, permessage-deflate; b` is two offers of one name, and
-/// RFC 7692 section 7.1.1.1 lets a client send exactly that so a server with a narrow
-/// window can be offered a second configuration after the first is declined.
+/// A comma ends the *configuration*, not the extension: `permessage-deflate; a,
+/// permessage-deflate; b` is two offers of one name, and RFC 7692 section 7.1.1.1 lets a
+/// client send exactly that so a server with a narrow window can be offered a second
+/// configuration after the first is declined.
 export type ScannedConfiguration = {
   readonly name: string;
   readonly parameters: Readonly<Record<string, readonly string[]>>;
@@ -43,8 +36,7 @@ export function scanConfiguration(header: string, start: number): ScannedConfigu
     }
     const afterSemicolon = skipWhitespace(header, index + 1);
     // A trailing `;` names no parameter, which `ws` tolerates: a semicolon separates
-    // parameters rather than ending the list, so a header that ends on one says the
-    // same thing as a header without it.
+    // parameters rather than ending the list.
     if (afterSemicolon >= header.length) {
       index = afterSemicolon;
       break;

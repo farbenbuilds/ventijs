@@ -32,9 +32,8 @@ export function socketStateOf(socket: unknown): SocketState | undefined {
   return (socket as BrandedSocket)[SOCKET_STATE];
 }
 
-/// Builds the mutable record behind one socket. Defaults mirror `ws`: a
-/// server-side socket starts CONNECTING with the abnormal close code latched
-/// until a close frame or the transport supplies a better one.
+/// Defaults mirror `ws`: a server-side socket starts CONNECTING with the abnormal close
+/// code latched until a close frame or the transport supplies a better one.
 export function createSocketState(): SocketState {
   return {
     url: "",

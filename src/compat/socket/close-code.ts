@@ -1,19 +1,15 @@
 import { isValidStatusCode } from "../../protocol/close-codes";
 import { createError } from "../errors";
 
-/// The close code to put on the wire, or `undefined` for "the caller did not say".
-///
-/// `undefined` is a real answer rather than a missing one. `ws` writes an *empty* close
-/// payload when `close()` is called with no code (`sender.js`: `if (code ===
-/// undefined) buf = EMPTY_BUFFER`), and a peer reads an empty close frame as 1005,
-/// "no status received" (RFC 6455 section 7.1.5). Substituting 1000 claimed a normal
-/// shutdown the caller never stated, and it made 1005 unobservable from a ventijs peer
-/// in both directions.
-///
-/// A code that is not `undefined` is truncated toward zero first, then validated, which
-/// is `ws`'s order: a fractional reserved code such as `1005.5` passes both validators
-/// and truncates to 1005 on the wire, where the peer's own validation refuses it. The
-/// divergence is recorded in `COMPATIBILITY.md`.
+/// `undefined` is a real answer, not a missing one. `ws` writes an *empty* close payload
+/// when `close()` takes no code (`sender.js`: `if (code === undefined) buf =
+/// EMPTY_BUFFER`), and a peer reads that as 1005, "no status received" (RFC 6455 section
+/// 7.1.5). Substituting 1000 claimed a shutdown the caller never stated and made 1005
+/// unobservable in both directions.
+
+// A code is truncated toward zero, then validated, which is `ws`'s order: a fractional
+// reserved code such as `1005.5` passes both validators and truncates to 1005 on the
+// wire, where the peer's own validation refuses it. See `COMPATIBILITY.md`.
 export function closeCodeOf(code: unknown): number | undefined {
   if (code === undefined) return undefined;
   return Math.trunc(assertCloseCode(code));

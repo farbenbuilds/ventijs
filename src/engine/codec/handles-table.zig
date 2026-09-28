@@ -1,26 +1,14 @@
-//! The bounded table of live codecs.
-//!
-//! The engine's own connection slab is one per server and sized by the engine's
-//! pool, because the engine owns the sockets. A codec's owner is Node: the transport
-//! is a `net.Socket` or a `tls.TLSSocket` the compatibility layer accepted, and its
-//! count is whatever the application opened. So this is a process-wide table rather
-//! than a per-server one, and it is the second sanctioned module-level variable in
-//! the addon, for the same reason `server/instance.zig` is the first: the Node-API
-//! callback ABI carries no user context, and a codec handle is all a call site has to
-//! go on.
-//!
-//! **A slot is a word pair, not a codec.** The codec is heap-allocated by `create` and
-//! freed by `destroy`, so the table's fixed cost is `codec_capacity * 16` bytes and
-//! the per-connection cost is charged to the connection. A table of inlined codecs
-//! would reserve a message buffer per slot at load time, which is the difference
-//! between a limit and a bug.
+//! The bounded table of live codecs. Process-wide rather than per-server, because a
+//! codec's owner is Node -- its count is whatever the application opened -- and the
+//! Node-API callback ABI carries no user context, so a codec handle is all a call
+//! site has to go on.
 
 const std = @import("std");
 const capacities = @import("capacities.zig");
 const state = @import("state.zig");
 
 /// Which side of the connection enforces masking. Re-declared here so the slot can
-/// name it; `handles.zig` is the module that owns the vocabulary.
+/// name it; `handles.zig` owns the vocabulary.
 pub const Role = enum(u8) { client, server };
 
 const Codec = state.codec(capacities.control_slots);

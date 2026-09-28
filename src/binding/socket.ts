@@ -33,8 +33,7 @@ function assertPayload(data: Uint8Array): void {
   }
 }
 
-/// Decodes the ABI ordinal into a status. An ordinal outside the table is an
-/// ABI mismatch between the loaded addon and this binding.
+/// An ordinal outside the table is an ABI mismatch between the addon and this binding.
 function statusFromOrdinal(ordinal: number): EngineStatus {
   const status = NATIVE_SOCKET_STATUSES[ordinal];
   if (status === undefined) {
@@ -53,9 +52,8 @@ function assertCloseCode(code: number): void {
   }
 }
 
-/// Stages one outbound text or binary message. The engine copies `data` into
-/// its bounded staging ring before returning, so retaining or mutating the
-/// buffer afterwards cannot affect the queued frame.
+/// The engine copies `data` into its bounded staging ring before returning, so retaining
+/// or mutating the buffer afterwards cannot affect the queued frame.
 export function sendSocket(
   server: ServerHandle,
   connection: ConnectionHandle,
@@ -69,8 +67,7 @@ export function sendSocket(
   return statusFromOrdinal(callNative(() => addon.sendSocket(server, connection, data, binary)));
 }
 
-/// Validates the close code and reason, stages the close frame, and enters the
-/// closing state. A second call reports `closing` instead of restaging.
+/// A second call reports `closing` instead of restaging.
 export function closeSocket(
   server: ServerHandle,
   connection: ConnectionHandle,
@@ -85,7 +82,6 @@ export function closeSocket(
   return statusFromOrdinal(callNative(() => addon.closeSocket(server, connection, code, reason)));
 }
 
-/// Suspends inbound message dispatch for the connection, matching `ws.pause()`.
 export function pauseSocket(server: ServerHandle, connection: ConnectionHandle): EngineStatus {
   assertServerHandle(server);
   assertConnectionHandle(connection);
@@ -93,7 +89,6 @@ export function pauseSocket(server: ServerHandle, connection: ConnectionHandle):
   return statusFromOrdinal(callNative(() => addon.pauseSocket(server, connection)));
 }
 
-/// Resumes inbound message dispatch for the connection.
 export function resumeSocket(server: ServerHandle, connection: ConnectionHandle): EngineStatus {
   assertServerHandle(server);
   assertConnectionHandle(connection);
@@ -101,12 +96,10 @@ export function resumeSocket(server: ServerHandle, connection: ConnectionHandle)
   return statusFromOrdinal(callNative(() => addon.resumeSocket(server, connection)));
 }
 
-/// Hands the connection's staged payloads to the engine thread.
-///
-/// `sendSocket` only copies bytes into the staging ring, so a caller that never
-/// pumps would see `ok` and a growing `bufferedAmount` with nothing on the wire.
-/// The engine copies the bytes out before the next loop iteration, so the ring
-/// slot is free as soon as this returns and a partial flush is safe to retry.
+/// `sendSocket` only copies bytes into the staging ring, so a caller that never pumps
+/// would see `ok` and a growing `bufferedAmount` with nothing on the wire. The engine
+/// copies the bytes out before the next loop iteration, so the ring slot is free as soon
+/// as this returns and a partial flush is safe to retry.
 export function pumpSocket(server: ServerHandle, connection: ConnectionHandle): EngineStatus {
   assertServerHandle(server);
   assertConnectionHandle(connection);
@@ -114,8 +107,7 @@ export function pumpSocket(server: ServerHandle, connection: ConnectionHandle): 
   return statusFromOrdinal(callNative(() => addon.pumpSocket(server, connection)));
 }
 
-/// Bytes staged for the connection and not yet drained. A stale handle reads
-/// zero, matching a closed `ws` socket.
+/// A stale handle reads zero, matching a closed `ws` socket.
 export function socketBufferedAmount(server: ServerHandle, connection: ConnectionHandle): number {
   assertServerHandle(server);
   assertConnectionHandle(connection);

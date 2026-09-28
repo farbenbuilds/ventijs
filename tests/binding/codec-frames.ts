@@ -2,35 +2,23 @@ import { expect } from "vitest";
 import { selectCodecEvent, selectedCodecEvent, takeCodecEvent } from "../../src/binding/codec";
 import type { CodecEvent } from "../../src/binding/codec";
 
-/// A masked frame's header: two fixed bytes and the four-byte mask key. Tests that
-/// assert where a decode stopped name it rather than writing `6`.
+/// Two fixed header bytes plus the four-byte mask key, named so a decode-stop assertion says 6.
 export const MASKED_HEADER_BYTES = 6;
 
-/// A frame a `ws` client would put on the wire: masked, as a client must.
-///
-/// The tests build client frames here rather than through the codec's own encoder
-/// wherever the point is to check the *decoder*, because a decoder tested with its
-/// matching encoder agrees with a symmetrically wrong pair. The mask is a fixed key
-/// so a failure is reproducible; nothing here depends on it being unpredictable,
-/// which is a property of the encoder and is pinned there instead.
+/// A decoder tested with its own encoder agrees with a symmetrically wrong pair, so client frames
+/// are built here. The mask is a fixed key for reproducibility; unpredictability is the encoder's property.
 export type ClientFrame = {
   readonly opcode: number;
   readonly payload: Buffer;
-  /// False for a fragment, which the continuation opcode and the RFC both make
-  /// mandatory rather than optional: a message split across frames has to say so.
+  /// A message split across frames has to say so: the continuation opcode is mandatory, not optional.
   readonly fin?: boolean;
 };
 
 const MASK: readonly number[] = [0x37, 0xfa, 0x21, 0x3d];
 
-/// Encodes one client frame.
-///
-/// The seven-bit length field has three encodings and the one above 65535 needs an
-/// eight-byte length, not the two-byte one every earlier case fitted in. A helper
-/// that only knows two of them makes the 126 and 127 cases untestable at a capacity
-/// that reaches them, which is exactly what happened when the compiled cap moved
-/// from 32 KiB to 64 KiB: the case above the cap is the one that needs the form
-/// that was missing.
+/// The seven-bit length field has three encodings, and the one above 65535 needs an eight-byte
+/// length. A helper that knew only two made the 126 and 127 cases untestable once the compiled cap
+/// moved from 32 KiB to 64 KiB -- the case above the cap is the one needing the missing form.
 export function clientFrame(frame: ClientFrame): Buffer {
   const length = frame.payload.length;
   const wide = length > 0xffff;
@@ -68,11 +56,8 @@ export function closePayload(code: number, reason: string): Buffer {
   return payload;
 }
 
-/// Every queued event, drained.
-///
-/// A loop rather than a single read because the queue is a control ring plus one
-/// message slot: a caller that assumes a fixed number of events per feed either
-/// leaves events behind or reads a slot that is not there yet.
+/// A loop, not a single read: the queue is a control ring plus one message slot, so a fixed event
+/// count per feed either leaves events behind or reads a slot that is not there yet.
 export function drain(handle: bigint): CodecEvent[] {
   const events: CodecEvent[] = [];
   while (selectCodecEvent(handle)) {

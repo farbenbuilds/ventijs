@@ -1,12 +1,5 @@
-//! Environment-teardown cleanup for servers a worker never finalized.
-//!
-//! A worker that creates a server and exits without `finalizeServer` would
-//! otherwise leak the engine thread, the listener, and the instance for the
-//! process lifetime. The cleanup hook runs on the Node main thread during
-//! environment teardown: it stops the engine thread, retires the handle, and
-//! frees every resource. Node drains the threadsafe function's queue with a
-//! null environment while the channel closes, so no queued dispatch can
-//! observe the freed ring.
+//! Environment-teardown cleanup for servers a worker never finalized: Node drains the
+//! threadsafe function's queue with a null environment, so no dispatch sees a freed ring.
 
 const std = @import("std");
 const napi = @import("napi-zig");
@@ -14,8 +7,7 @@ const instance = @import("instance.zig");
 
 const c = napi.c;
 
-/// Registers the hook that frees `target` if its environment is torn down
-/// before `remove` runs.
+/// Frees `target` if its environment is torn down before `remove` runs.
 pub fn register(env: napi.Env, target: *instance.Instance) !void {
     if (c.napi_add_env_cleanup_hook(env.handle, on_env_cleanup, target) != .ok) {
         return error.EnvCleanupUnavailable;
@@ -29,8 +21,7 @@ pub fn remove(target: *instance.Instance) void {
 
 fn on_env_cleanup(raw: ?*anyopaque) callconv(.c) void {
     const target: *instance.Instance = @ptrCast(@alignCast(raw orelse return));
-    // Stop the channel before the engine thread is joined: the thread can no
-    // longer queue a dispatch into an environment that is going away.
+    // Stop the channel before joining: the thread can no longer queue into a dying environment.
     target.channel.stop();
     switch (target.state.load(.acquire)) {
         .listening => target.cluster.request_shutdown(),
@@ -42,21 +33,10 @@ fn on_env_cleanup(raw: ?*anyopaque) callconv(.c) void {
     }
     destroy(target);
 }
-
-/// Releases every native resource an instance owns and frees it. Every
-/// teardown path funnels through here, so a new resource cannot be missed in
-/// one of them. The caller must have joined the engine thread and removed the
-/// environment cleanup hook; the hook's own path calls this directly because
-/// Node is already running it.
-///
-/// The slot is retired first, not last. A comptime trampoline resolves its
-/// instance through the table, and `cluster.deinit()` tears down the event loop
-/// those trampolines run on. Retiring after the deinit left a window in which a
-/// callback that was already in flight could resolve a slot whose cluster was
-/// half destroyed. Both current callers join the engine thread first, so the
-/// window was empty, but nothing in the type system or in this function's
-/// contract enforced that, and `retire` is the release store that makes the
-/// ordering safe rather than merely currently-true.
+/// Every teardown path funnels through here, so a new resource cannot be missed in one of
+/// them. The slot is retired first, not last: a comptime trampoline resolves its instance
+/// through the table, and `retire` is the release store that makes the join safe.
+/// nothing enforces it, and `retire` is the release store that makes it safe.
 pub fn destroy(target: *instance.Instance) void {
     instance.servers.retire(target.handle);
     target.channel.close();

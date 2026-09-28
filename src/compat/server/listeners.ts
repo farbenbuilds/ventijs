@@ -12,9 +12,8 @@ type ServerHandlers = {
   readonly onUpgrade: UpgradeHandler;
 };
 
-/// Forwards the HTTP server's lifecycle to the facade and routes upgrades
-/// through the same `handleUpgrade` path `noServer` callers use, so both modes
-/// share one handshake implementation.
+/// Routes upgrades through the same `handleUpgrade` path `noServer` callers use, so both
+/// modes share one handshake implementation.
 export function wireServer(state: ServerState): void {
   const httpServer = state.server;
   if (httpServer === null) return;

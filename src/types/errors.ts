@@ -1,10 +1,7 @@
-/// The codes ventijs puts on a thrown or emitted error.
-///
-/// The `ERR_*` half is ventijs's own, for the conditions `ws` reports by throwing a bare
-/// `Error` or a `TypeError`: a bad option, a socket used in a state it is not in. The
-/// `WS_ERR_*` half is `ws`'s, for the conditions it reports on the socket's `error` event
-/// after refusing a frame, and they carry `ws`'s own strings so an application written
-/// against `ws` reads the same code it always did.
+/// The `ERR_*` half is ventijs's own, for what `ws` reports by throwing a bare `Error` or
+/// a `TypeError`. The `WS_ERR_*` half is `ws`'s, for what it reports on the socket's
+/// `error` event after refusing a frame, with `ws`'s own strings so a migrating
+/// application reads the same code it always did.
 export type WsErrorCode =
   | "WS_ERR_EXPECTED_FIN"
   | "WS_ERR_EXPECTED_MASK"

@@ -10,8 +10,8 @@ import {
 } from "./shared";
 
 export function normalizeClientOptions(options?: ClientOptions): NormalizedClientOptions {
-  // ws copies own enumerable properties before reading, so inherited
-  // properties are ignored and each getter runs exactly once.
+  // `ws` copies own enumerable properties before reading, so inherited properties are
+  // ignored and each getter runs exactly once.
   const source = { ...options };
   const protocolVersion = source.protocolVersion ?? 13;
   if (protocolVersion !== 8 && protocolVersion !== 13) {
@@ -31,9 +31,8 @@ export function normalizeClientOptions(options?: ClientOptions): NormalizedClien
     allowSynchronousEvents: source.allowSynchronousEvents ?? true,
     autoPong: source.autoPong ?? true,
     // `closeTimeout` is read rather than declared: `@types/ws` does not declare it
-    // either, so a caller passing it in typed code is refused by `ws` too. Accepting
-    // it here keeps the runtime behaviour identical, which is the only part a
-    // difference here would be observable in.
+    // either, so accepting it here keeps the runtime behaviour identical, which is the
+    // only part a difference would be observable in.
     closeTimeout: closeTimeoutOf(source),
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, true),
     origin: source.origin,

@@ -1,9 +1,9 @@
 //! Close-frame tests for the frame codec.
 //!
-//! The close frame is where the codec's two outputs meet: a code and a reason,
-//! and the close code a refused frame maps to. A caller reports both, so both
-//! have to be right, and the two ways a close can be wrong -- a code the RFC
-//! reserves, and a reason that is not valid UTF-8 -- map to different codes.
+//! The close frame is where the codec's two outputs meet: a code and a reason, and the
+//! close code a refused frame maps to. A caller reports both, and the two ways a close can
+//! be wrong -- a code the RFC reserves, and a reason that is not valid UTF-8 -- map to
+//! different codes.
 
 const std = @import("std");
 const testing = std.testing;
@@ -43,8 +43,7 @@ test "a one-byte close payload is a protocol error" {
 }
 
 test "a failure is latched so every later call reports the same reason" {
-    // Further bytes cannot revive a connection that has already been refused, and
-    // reporting a different reason on the second call would be a lie.
+    // Reporting a different reason on the second call would be a lie.
     var peer = support.server();
     var buffer: [64]u8 = undefined;
     _ = peer.feed((Frame{ .opcode = .text, .payload = "\xff", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer));

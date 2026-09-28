@@ -1,16 +1,12 @@
-//! `clientTracking`, which decides whether `server.clients` exists at all.
-//!
-//! Split from `server-options-acting.test.ts` for the module budget. It is its own
-//! file because it is the one option whose *absence* is the observable: `ws` leaves
-//! the key off the server entirely rather than setting it to `undefined`, and every
-//! way of reading that difference needs its own assertions.
+//! `clientTracking`, which decides whether `server.clients` exists at all. Its own file because
+//! it is the one option whose *absence* is the observable: `ws` leaves the key off the server
+//! entirely rather than setting it to `undefined`.
 
 import { expect, test } from "vitest";
 import { WebSocketServer, type ServerOptions } from "../../../src/index";
 import { normalizeServerOptions } from "../../../src/compat/options/server";
 
-/// `clientTracking` is declared as `boolean` by `@types/ws`, so `0` and `""` need the
-/// cast a JavaScript caller makes implicitly.
+/// `@types/ws` declares this as `boolean`, so `0` and `""` need the cast a JavaScript caller makes implicitly.
 function atRuntime(options: Record<string, unknown>): ServerOptions {
   return options as ServerOptions;
 }
@@ -18,19 +14,15 @@ function atRuntime(options: Record<string, unknown>): ServerOptions {
 test("a falsy clientTracking leaves clients absent, as ws does", () => {
   const server = new WebSocketServer(atRuntime({ noServer: true, clientTracking: 0 }));
   try {
-    // Absent rather than present-and-undefined, so `in`, `Object.keys`, spread, and
-    // `JSON.stringify` all agree with `ws`.
+    // Absent rather than present-and-undefined, so `in`, `Object.keys`, and `JSON.stringify` agree with `ws`.
     expect("clients" in server).toBe(false);
   } finally {
     server.close();
   }
 });
 
-/// Every falsy value other than `false` disables tracking, as `ws` reads it.
-///
-/// `null`, `0`, and `""` were read as absent, which put a `clients` set on the server
-/// where `ws` has none and made `close()` wait for connections in a case where `ws`
-/// emits on the next tick.
+/// `null`, `0`, and `""` were read as absent, which put a `clients` set on the server where `ws` has
+/// none and made `close()` wait for connections where `ws` emits on the next tick.
 test("clientTracking is a truthiness, not an identity", () => {
   for (const value of [undefined, true, 1, "yes"] as readonly unknown[]) {
     expect(

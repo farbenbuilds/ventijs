@@ -13,13 +13,11 @@ const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const STATUS_MIN = 100;
 const STATUS_MAX = 599;
 
-/// The TLS fields Node attaches to an upgraded request socket.
 type TlsSocketInfo = {
   readonly authorized?: boolean;
   readonly encrypted?: boolean;
 };
 
-/// Control characters must never reach a response header or status line.
 function hasControlCharacters(value: string): boolean {
   return value.includes("\u0000") || value.includes("\r") || value.includes("\n");
 }
@@ -40,8 +38,7 @@ export function isSecure(request: IncomingMessage): boolean {
   return Boolean(socket.authorized || socket.encrypted);
 }
 
-/// Parses the requested subprotocols, aborting with the `ws` message when the
-/// header is malformed. Returns undefined once the rejection is written.
+/// Returns undefined once the rejection is written.
 export function parseProtocols(
   state: ServerState,
   request: IncomingMessage,
@@ -57,10 +54,9 @@ export function parseProtocols(
   }
 }
 
-/// Picks the response subprotocol: the `handleProtocols` hook owns the
-/// decision when present, otherwise `ws` takes the first offered protocol. A
-/// hook result that is not a valid token is refused rather than echoed into a
-/// response header.
+/// `handleProtocols` owns the decision when present, otherwise `ws` takes the first
+/// offered protocol. A hook result that is not a valid token is refused rather than echoed
+/// into a response header.
 export function selectProtocol(
   state: ServerState,
   protocols: readonly string[],
@@ -74,10 +70,9 @@ export function selectProtocol(
   return selected;
 }
 
-/// Emits `wsClientError` when a listener exists, otherwise writes the HTTP
-/// rejection. The coded error keeps the stable `ERR_PROTOCOL` surface while
-/// the message stays byte-identical to `ws`. `headers` only rides along with
-/// the written rejection, matching upstream: the emitted error carries none.
+/// The coded error keeps the stable `ERR_PROTOCOL` surface while the message stays
+/// byte-identical to `ws`. `headers` only rides along with the written rejection,
+/// matching upstream: the emitted error carries none.
 export function abortOrEmit(
   state: ServerState,
   request: IncomingMessage,

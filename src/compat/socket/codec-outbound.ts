@@ -5,12 +5,10 @@ import { createError } from "../errors";
 import { isWritable, noTransportError } from "./codec-handle";
 import { statusError } from "./payload";
 
-/// What framing one frame did, in the vocabulary the send path already switches on.
-///
-/// The codec reports a refusal as a negative ordinal rather than a status name, and
-/// this is where that becomes a status the rest of the facade can act on. The two
-/// vocabularies are the same set on purpose: a caller that has to learn two error
-/// vocabularies for one operation will eventually handle only one of them.
+/// What framing one frame did, in the vocabulary the send path already switches on. The
+/// codec reports a refusal as a negative ordinal; this is where that becomes a status.
+/// The two vocabularies are the same set on purpose: a caller learning two error
+/// vocabularies for one operation will handle only one.
 export type FrameStatus =
   | "ok"
   | "backpressure"
@@ -20,17 +18,13 @@ export type FrameStatus =
   | "payload-too-large"
   | "protocol-error";
 
-/// `encode` takes an ordinal, so a kind name is looked up rather than passed.
 function ordinalOf(kind: CodecKindName): number {
   return CODEC_KINDS.indexOf(kind);
 }
 
-/// The caller's own masking key, or empty for the engine to draw one.
-///
-/// Reused across frames rather than allocated per frame: `generateMask` is called before
-/// every masked frame and an allocation here would be one per send on the client path.
-/// A server never masks, so `state.isServer` answers before the callback is asked, which
-/// is what `ws` does and what keeps a server's `generateMask` from being called at all.
+/// The caller's own masking key, or empty for the engine to draw one. Reused rather than
+/// allocated per frame, because `generateMask` runs before every masked frame. A server
+/// never masks, so `isServer` answers before the callback is asked, as in `ws`.
 function maskFor(state: SocketState): Uint8Array {
   if (state.isServer || state.generateMask === null) return NO_MASK;
   state.generateMask(state.maskScratch);
@@ -39,22 +33,13 @@ function maskFor(state: SocketState): Uint8Array {
 
 const NO_MASK = new Uint8Array(0);
 
-/// Frames one message and writes it.
-///
-/// A server does not mask, so the role is decided by the codec rather than by the
-/// caller: a masked frame from a server is a protocol error a peer is entitled to
-/// close on, and the only way to avoid sending one is not to offer the choice.
-///
-/// `fin` is the caller's because a fragmented send is two calls. The first passes
-/// `false` and opens a message, the second passes `true` and appends a continuation
-/// frame. It was hardcoded, so a caller who asked for a fragment got a complete message
-/// with the `fin` bit set and no error anywhere.
-///
-/// `compress` is the caller's for the same reason: RSV1 is a per-frame decision, and
-/// RFC 7692 only allows it on the first frame of a data message. A control frame or a
-/// continuation that asks for it is refused by the engine with 1002, which is what a
-/// peer would be entitled to close on, so the decision is made here where the socket's
-/// state is visible.
+/// Frames one message and writes it. A server does not mask, so the role is decided by
+/// the codec rather than the caller: a masked frame from a server is a protocol error a
+/// peer may close on, and the only way not to send one is not to offer the choice.
+
+// `fin` and `compress` are the caller's because a fragmented send is two calls and RSV1
+// is a per-frame decision. RFC 7692 only allows RSV1 on the first frame of a data
+// message, and a control frame or continuation asking for it is refused with 1002.
 export function writeFrame(
   state: SocketState,
   kind: CodecKindName,
@@ -73,19 +58,14 @@ export function writeFrame(
   return "ok";
 }
 
-/// Writes a pong, which is not optional: RFC 6455 section 5.5.2 requires one,
-/// promptly, whether or not an application ever asks for it.
+/// A pong is not optional: RFC 6455 section 5.5.2 requires one, promptly.
 export function writePong(state: SocketState, payload: Buffer): void {
   writeFrame(state, "pong", payload);
 }
 
-/// Writes a close frame, if the socket has not sent one already.
-///
-/// An absent `code` writes the *empty* close payload, which is what a caller who called
-/// `close()` with no arguments asked for and what a peer reads as "no status".
-/// Substituting 1000 claimed a normal shutdown the caller never stated, and it made
-/// 1005 unobservable from a ventijs peer: the peer's own report of "no status received"
-/// is the only way a caller learns that the other end closed without saying why.
+/// An absent `code` writes the *empty* close payload, which is what a peer reads as "no
+/// status". Substituting 1000 claimed a shutdown the caller never stated and made 1005
+/// unobservable from a ventijs peer.
 export function writeCloseFrame(
   state: SocketState,
   code: number | undefined,
@@ -97,8 +77,6 @@ export function writeCloseFrame(
   state.closeFrameSent = true;
 }
 
-/// The two code bytes and the reason, which is what a close frame carries, or nothing
-/// at all for a close that carries no status.
 function closePayload(code: number | undefined, reason: Buffer): Buffer {
   if (code === undefined) return Buffer.alloc(0);
   const payload = Buffer.alloc(2 + reason.length);
@@ -107,7 +85,6 @@ function closePayload(code: number | undefined, reason: Buffer): Buffer {
   return payload;
 }
 
-/// The codec's refusal ordinals onto the facade's statuses.
 function encodeFailure(ordinal: number): FrameStatus {
   switch (ordinal) {
     case 1:
@@ -123,22 +100,17 @@ function encodeFailure(ordinal: number): FrameStatus {
   }
 }
 
-/// Every status that is not a success, which is what a caller turns into an error.
 export type FailureStatus = Exclude<FrameStatus, "ok">;
 
-/// Whether a status is one the caller can retry, which is what decides if a send
-/// waits for the transport or fails now.
 export function isTransient(status: FrameStatus): boolean {
   return status === "backpressure";
 }
 
-/// The error a framing refusal reports, for the paths that carry no status of their
-/// own. Typed to the failures rather than to `FrameStatus`, so a caller cannot ask
-/// for the error behind an outcome that has none.
+/// Typed to the failures rather than to `FrameStatus`, so a caller cannot ask for the
+/// error behind an outcome that has none.
 export function frameError(status: FailureStatus): Error {
   if (status === "closed" || status === "closing") return noTransportError();
-  // A full queue is not a fault of the socket, and the engine's own backpressure
-  // reports the same code, so a caller that handles one handles the other.
+  // The same code the engine's own backpressure uses, so handling one handles the other.
   if (status === "backpressure") {
     return createError("ERR_BACKPRESSURE", "ventijs: the codec's event queue is full");
   }

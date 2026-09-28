@@ -1,10 +1,6 @@
-//! Decoder tests for the frame codec.
-//!
-//! Two properties get the most attention. A frame split across reads decodes
-//! identically to the same frame in one read, because a peer controls the split
-//! and there is nothing a codec can do about that except handle it. And a frame
-//! RFC 6455 forbids is refused with the right close code, because that code is
-//! the only thing the peer ever finds out.
+//! Decoder tests. A frame split across reads decodes identically to the same frame in
+//! one read, because a peer controls the split, and a frame RFC 6455 forbids is refused
+//! with the right close code, because that code is the only thing the peer finds out.
 
 const std = @import("std");
 const testing = std.testing;

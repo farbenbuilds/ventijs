@@ -1,21 +1,6 @@
-//! Incremental UTF-8 validation for RFC 6455 section 8.1.
-//!
-//! A text message is validated as it arrives rather than after reassembly,
-//! because a peer can put a 64 KiB payload in one frame and a single 4-byte
-//! sequence in another, and only a validator that carries its state across chunk
-//! boundaries can reject a message whose invalid byte is at the end.
-//!
-//! The state is a plain value, not a pointer to a heap buffer, so folding a chunk
-//! is a copy and a call and needs no allocation on the message path. The
-//! validator holds the count of continuation bytes still expected and the legal
-//! range of the next one; that pair is enough to reject every sequence RFC 3629
-//! forbids, because the range narrows on exactly the two lead bytes where a
-//! naive `0x80..0xbf` would admit an overlong form (`0xC0`, `0xC1`), a surrogate
-//! (`0xED` followed by `0xA0` or above), or a codepoint past `U+10FFFF` (`0xF4`
-//! followed by `0x90` or above).
-//!
-//! `std.unicode` has no incremental validator, only `utf8ValidateSlice` over a
-//! whole slice, so this is the codec's own.
+//! Incremental UTF-8 validation for RFC 6455 section 8.1, folded as a message arrives because
+//! a peer can split a 4-byte sequence across two frames. The carried range is what rejects
+//! overlongs, surrogates, and codepoints past `U+10FFFF`.
 
 /// Folding state. Copying it is the whole cost of validating a chunk.
 pub const State = struct {
@@ -30,13 +15,9 @@ pub const State = struct {
 const continuation_lower: u8 = 0x80;
 const continuation_upper: u8 = 0xbf;
 
-/// Folds one chunk into the validator, or returns null if the chunk contains a
-/// byte that cannot continue or begin a valid sequence.
-///
-/// A null return is terminal for the connection: RFC 6455 requires a 1007 close
-/// and forbids delivering the message, and a stream cannot be resynchronized
-/// after invalid UTF-8 because the byte lengths of the following sequences are
-/// themselves unknown.
+/// Folds one chunk into the validator, or returns null if it contains a byte that cannot
+/// continue or begin a valid sequence. A null is terminal: RFC 6455 requires a 1007 close and
+/// forbids delivery, and a stream cannot be resynchronized after invalid UTF-8.
 pub fn feed(state: State, input: []const u8) ?State {
     var next = state;
     for (input) |byte| {
@@ -52,16 +33,12 @@ pub fn feed(state: State, input: []const u8) ?State {
     return next;
 }
 
-/// Whether the state sits on a codepoint boundary.
-///
-/// A message that ends mid-sequence is invalid even when every byte it did
-/// contain was in range, which is the case a validator that only ever checks
-/// incoming bytes misses: the truncation is only visible at the end.
+/// Whether the state sits on a codepoint boundary. A message ending mid-sequence is invalid
+/// even when every byte was in range, which a byte-wise validator cannot see.
 pub fn complete(state: State) bool {
     return state.remaining == 0;
 }
 
-/// Resolves a lead byte into the state that follows it.
 fn lead(byte: u8) ?State {
     if (byte <= 0x7f) return .{};
     if (byte < 0xc2) return null; // 0xC0 and 0xC1 are always overlong.

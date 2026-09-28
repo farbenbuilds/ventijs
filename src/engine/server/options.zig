@@ -53,13 +53,9 @@ pub const Limits = struct {
     max_frame_bytes: u32,
     /// Whether the route negotiates RFC 7692 `permessage-deflate`.
     ///
-    /// The choice is per route rather than a build option because `ws` makes it a
-    /// per-`WebSocketServer` boolean. It needs no startup-slab reservation: the
-    /// engine carves the paired deflate scratch inside the slab unconditionally
-    /// (`ServerConfig.compression_stride` is called from `layout_offsets` for
-    /// every configuration), so the memory was already being reserved and
-    /// untouched. Enabling this turns dead slab into function at zero additional
-    /// cost, which is why it and the message cap are the same piece of work.
+    /// Per route rather than a build option because `ws` makes it a per-server boolean, and
+    /// it needs no startup-slab reservation: the engine carves the paired deflate scratch
+    /// unconditionally, so enabling this turns dead slab into function at no extra cost.
     permessage_deflate: bool,
 };
 

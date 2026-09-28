@@ -18,22 +18,20 @@ export function sendData(
   const payload = toPayload(data);
   const failure = resolveCallback(options, callback);
   if (state.readyState !== OPEN) {
-    // `sendAfterClose`: the bytes are accounted and the callback is told, and
-    // nothing else happens. Routing this through `reportFailure` would close a
-    // socket that was merely mid-close.
+    // `sendAfterClose`: the bytes are accounted and the callback is told, nothing
+    // else. Routing this through `reportFailure` would close a merely mid-close socket.
     defer(failure, notOpenError(state.readyState));
     return;
   }
   if (state.codec !== null) {
-    // The codec owns the framing for a socket that has a transport, so a message
-    // goes out as a frame rather than as bytes the engine would have to frame.
+    // The codec frames for a socket that has a transport, so a message goes out as a
+    // frame rather than as bytes the engine would have to frame.
     sendFramed(state, payload, options, failure);
     return;
   }
   if (state.attachment === null) {
-    // Not `reportFailure`: the failure is this build's missing transport, not a
-    // fault of the socket, so the socket is left usable and only the observation
-    // differs from `ws`.
+    // Not `reportFailure`: the failure is this build's missing transport, not the
+    // socket's, so only the observation differs from `ws`.
     if (typeof failure === "function") defer(failure, notAttachedError());
     else reportWithoutClosing(state, notAttachedError());
     return;
@@ -48,8 +46,7 @@ export function sendData(
   applySendStatus(state, status, payload.bytes.length, failure);
 }
 
-/// `ws` treats a function in the options position as the callback, so the
-/// options object never doubles as the callback slot.
+/// `ws` treats a function in the options position as the callback.
 function resolveCallback(options: unknown, callback: unknown): unknown {
   if (typeof options === "function") return options;
   return callback;
@@ -80,8 +77,7 @@ function applySendStatus(
       return;
     case "closing":
     case "closed":
-      // The engine says the connection is gone, so this is `sendAfterClose` and
-      // not a send failure: the bytes are accounted and the caller is told.
+      // The engine says the connection is gone, so this is `sendAfterClose`.
       defer(callback, notOpenError(state.readyState));
       return;
     case "invalid-handle":
@@ -99,12 +95,8 @@ function applySendStatus(
       reportFailure(state, callback, statusError(status));
       return;
   }
-  // Every case above returns, so reaching here means a new `EngineStatus` member
-  // has no branch. `unhandledStatus` takes `never`, which is the compile-time
-  // proof: adding a member to the union turns this call into a type error rather
-  // than a silent no-op on a status the send path has never seen. A `void` return
-  // type gives no exhaustiveness checking of its own, which is why
-  // `close-failure.ts` earns the same guarantee by returning an `Error`.
+  // `unhandledStatus` takes `never`: a new `EngineStatus` member turns this into a type
+  // error rather than a silent no-op on a status the send path has never seen.
   throw unhandledStatus(status);
 }
 

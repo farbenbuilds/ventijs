@@ -6,22 +6,10 @@ import {
   TOTAL_CASES,
 } from "./expected-cases.ts";
 
-/// How much of the suite a run selects, and the counts the gate holds it to.
-///
-/// `framing` drops the two per-message-deflate groups. They are 216 of 517 cases
-/// and every one is `UNIMPLEMENTED` because `permessage-deflate` is normalised and
-/// never negotiated, so they cannot change until deflate is implemented.
-///
-/// It is not a speedup, which was the assumption when it was added. Two runs of
-/// the same job: `full` took 2100s of suite time for 517 cases, `framing` took
-/// 2086s for 301. The cost is not per case, because a deflate case whose
-/// extension is never negotiated fails almost immediately while the framing and
-/// UTF-8 groups are where the client actually waits. The cost is concentrated in
-/// the groups this mode keeps.
-///
-/// It is kept because it is the same signal for marginally less work, because
-/// the report then states what it covered, and because it will start costing real
-/// time the moment deflate is implemented and the groups have to come back.
+/// How much of the suite a run selects, and the counts the gate holds it to. `framing` drops
+/// the two per-message-deflate groups: 216 of 517 cases, every one `UNIMPLEMENTED` because
+/// `permessage-deflate` is normalised and never negotiated. It is not a speedup -- two runs
+/// measured 2100s for 517 cases and 2086s for 301 -- but the report states what it covered.
 export type SuiteMode = "framing" | "full";
 
 export type ModeCounts = {

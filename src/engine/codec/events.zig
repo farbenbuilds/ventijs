@@ -1,42 +1,28 @@
-//! The event vocabulary a decoded frame turns into.
-//!
-//! The engine's own `WebSocket` resolves frames into three actions: answer a ping, note
-//! a close, or hand a message to the application. The codec needs the same three plus a
-//! few the transport does not care about, so the mapping from a completed frame to
-//! something the caller can observe is written down once here.
+//! The event vocabulary a decoded frame turns into. The engine's own `WebSocket` resolves a
+//! frame into three actions -- answer a ping, note a close, hand a message over -- and the
+//! codec needs the same three plus a few the transport does not care about.
 
 const zslay = @import("zslay");
 
-/// What a completed frame means to the caller.
-///
-/// `text` and `binary` are the two halves of a reassembled data message; `ping`, `pong` and
-/// `close` are the control frames, which RFC 6455 section 5.5 lets a peer interleave
-/// between the fragments of one message. The ordinals are the ABI:
-/// `src/binding/codec-status.ts` carries the matching table, so keep this order.
+/// RFC 6455 section 5.5 lets a peer interleave a control frame between the fragments of
+/// one message, which is why the three control opcodes are separate kinds. The ordinals
+/// are the ABI: `src/binding/codec-status.ts` carries the matching table, keep this order.
 pub const Kind = enum(u8) {
     text = 0,
     binary = 1,
     ping = 2,
     pong = 3,
     close = 4,
-    /// A frame the codec refused. The connection is finished, but the event is still
-    /// queued so a caller has one place to learn why.
+    /// A frame the codec refused, still queued so a caller has one place to learn why.
     rejected = 5,
-    /// The continuation half of a fragmented outbound message, which is what a caller
-    /// produces by sending with `fin: false` and then again. Last in the enum so the
-    /// ordinals above keep their values.
+    /// The continuation half of a fragmented outbound message. Last, so the ordinals keep their values.
     continuation = 6,
 };
 
-/// Why a frame could not be accepted.
-///
-/// One member per condition `ws` names in a `WS_ERR_*` code, plus two of its own: a
-/// refusal with no more specific reason, and a compressed payload that is not a
-/// DEFLATE stream, which `ws` reports as a 1007 with no code. The members are the
-/// vocabulary the boundary reports as an ordinal, so `src/binding/codec-status.ts`
-/// carries the matching table and the order is the ABI.
+/// One member per condition `ws` names in a `WS_ERR_*` code, plus two of its own. The
+/// members are the vocabulary the boundary reports as an ordinal, so
+/// `src/binding/codec-status.ts` carries the matching table and the order is the ABI.
 pub const Failure = enum(u8) {
-    /// A refusal with no more specific reason. Everything the parser could not name.
     protocol_error,
     expected_fin,
     expected_mask,
@@ -50,20 +36,18 @@ pub const Failure = enum(u8) {
     too_many_buffered_parts,
     unsupported_data_payload_length,
     unsupported_message_length,
-    /// The one fault with no `ws` equivalent: a peer sent a compressed payload that is
-    /// not a DEFLATE stream, which `ws` reports as a 1007 with no code at all.
+    /// The one fault with no `ws` equivalent: a compressed payload that is not a DEFLATE
+    /// stream, which `ws` reports as a 1007 with no code.
     invalid_compressed_data,
-    /// A `generateMask` callback left a buffer that is not four bytes, so there is no
-    /// key to mask with. A caller's own mistake, reported on the send callback, so the
-    /// close code below is never the one a peer sees.
+    /// A `generateMask` callback left a buffer that is not four bytes, so there is no key to
+    /// mask with. A caller's own mistake, reported on the send callback, so a peer never sees
+    /// this close code.
     invalid_mask,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
-///
-/// The distinction that matters is 1002 against 1007: a frame that violates the framing
-/// is a protocol error, and a well-formed frame carrying invalid UTF-8 or undecodable
-/// compressed data is an invalid payload.
+/// A frame that violates the framing is a 1002 protocol error; a well-formed frame
+/// carrying invalid UTF-8 or undecodable compressed data is a 1007 invalid payload.
 pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
         .unsupported_message_length => CLOSE_MESSAGE_TOO_BIG,
@@ -84,29 +68,23 @@ pub fn close_code_for(failure: Failure) u16 {
     };
 }
 
-/// The ordinal the FFI reports a failure as, so the boundary does not restate this
-/// enum's order and drift from it. Zero is never produced, because a caller has to
-/// be able to say "no failure".
+/// The ordinal the FFI reports a failure as, so the boundary need not restate this enum's
+/// order and drift from it. Zero is never produced: a caller must be able to say "no failure".
 pub fn failure_ordinal(failure: Failure) u8 {
     return @intFromEnum(failure) + 1;
 }
 
-/// The highest `Kind` ordinal, which is what the boundary checks against. Named as the
-/// last member on purpose: the bound was once written against `rejected`.
+/// The highest `Kind` ordinal, which is what the boundary checks against; keep it last.
 pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
 
-/// Whether an opcode may carry a payload of more than 125 bytes.
 pub fn is_control(opcode: zslay.Opcode) bool {
     return opcode.is_control();
 }
 
-/// Maps a parse failure onto this vocabulary, so the close code is decided in one
-/// place rather than at each call site.
-///
-/// The parameter is `anyerror` because each step infers its own error set from the
-/// expressions it can reach, and Zig does not widen an inferred set to a declared one at
-/// a call. The default arm is the policy rather than a gap: an error the codec has no
-/// name for is a protocol error as far as the peer is concerned.
+/// Maps a parse failure onto this vocabulary, so the close code is decided in one place. The
+/// default arm is the policy, not a gap: an error the codec cannot name is a protocol error to
+/// the peer. The parameter is `anyerror` because Zig will not widen an inferred set to a
+/// declared one at a call.
 pub fn classify(err: anyerror) Failure {
     return switch (err) {
         error.PayloadTooLarge => .unsupported_message_length,
@@ -116,9 +94,8 @@ pub fn classify(err: anyerror) Failure {
         error.CorruptPayload => .invalid_compressed_data,
         error.PayloadNotMasked => .expected_mask,
         error.PayloadMasked => .unexpected_mask,
-        // The parser's own ceiling on a declared length, which is a frame a peer could
-        // not have meant to send. A length past `maxPayload` is the other member, and
-        // conflating the two reported a size limit for an impossible length.
+        // The parser's ceiling on a declared length, not `maxPayload`: conflating the
+        // two reported a size limit for a length no peer could have sent.
         error.InvalidLength => .unsupported_data_payload_length,
         error.InvalidCloseCode => .invalid_close_code,
         else => .protocol_error,
@@ -130,17 +107,12 @@ const CLOSE_INVALID_PAYLOAD: u16 = 1007;
 const CLOSE_POLICY_VIOLATION: u16 = 1008;
 const CLOSE_PROTOCOL_ERROR: u16 = 1002;
 
-/// What one completed frame meant.
-///
-/// `payload` borrows the receive state this was decoded into, so it is valid until the
-/// next payload is taken. The FFI layer copies it into a Node-owned `Buffer` within
-/// the call that reads it, which is what keeps engine memory unreachable from
-/// JavaScript.
+/// `payload` borrows the receive state this was decoded into, so it is valid until the next
+/// payload is taken. The FFI layer copies it into a Node-owned `Buffer` within the call that
+/// reads it, which is what keeps engine memory unreachable from JavaScript.
 pub const Decoded = struct {
     kind: Kind,
-    /// Close code for a `close` frame, 0 otherwise.
     code: u16 = 0,
     payload: []const u8 = &.{},
-    /// Why a `rejected` frame was refused.
     failure: Failure = .protocol_error,
 };

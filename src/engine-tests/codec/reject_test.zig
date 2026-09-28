@@ -1,11 +1,8 @@
 //! Tests for the frames RFC 6455 forbids, and the failure each one is reported as.
 //!
-//! Both halves are load bearing. The close code is the only thing a peer finds out, so
-//! getting it wrong is a protocol failure even when everything else works. The failure
-//! ordinal is what the local application gets, and it is what lets a caller tell a
-//! misbehaving peer from a bug of its own: `ws` gives every one of these a distinct
-//! `WS_ERR_*` string, and collapsing them into "protocol error" is what the codec used
-//! to do.
+//! Both halves are load bearing. The close code is the only thing a peer finds out, and the
+//! failure ordinal is what lets a caller tell a misbehaving peer from a bug of its own:
+//! `ws` gives every one of these a distinct `WS_ERR_*` string.
 
 const std = @import("std");
 const testing = std.testing;
@@ -41,9 +38,9 @@ test "a client refuses a masked frame" {
 }
 
 test "each reserved bit is named, not folded into a protocol error" {
-    // Section 5.2: RSV1 only means anything once an extension defines it, and RSV2 and
-    // RSV3 never do. All three close with 1002, and none of them is the same fault as
-    // the one next to it, which is what `ws`'s three separate codes say.
+    // Section 5.2: RSV1 only means anything once an extension defines it, and RSV2 and RSV3
+    // never do. All three close with 1002, and none is the same fault as the one next to it,
+    // which is what `ws`'s three separate codes say.
     const cases = [_]struct { bit: u8, failure: codec.Failure }{
         .{ .bit = 0x40, .failure = .unexpected_rsv_1 },
         .{ .bit = 0x20, .failure = .unexpected_rsv_2_3 },
@@ -125,8 +122,8 @@ test "a fragmented control frame is an expected fin" {
 }
 
 test "a control frame over 125 bytes is an invalid control payload length" {
-    // Section 5.5. 126 bytes needs the two-byte extended length, so this also covers the
-    // length encoding rather than only the cap.
+    // Section 5.5. 126 bytes needs the two-byte extended length, so this covers the length
+    // encoding too, not only the cap.
     var peer = support.server();
     var buffer: [256]u8 = undefined;
     _ = peer.feed(raw_frame(&buffer, true, @intFromEnum(zslay.Opcode.ping), 126, true, .{ 1, 2, 3, 4 }, "x" ** 126));

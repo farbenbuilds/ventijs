@@ -1,8 +1,7 @@
 import type { CodedError, ErrorCode } from "../types/errors";
 
-/// Native error names mapped to the stable public codes. The napi-zig bridge
-/// throws `Error` with the Zig error name as the message, so the name is the
-/// only discriminator the binding has.
+/// The napi-zig bridge throws `Error` with the Zig error name as the message, so the
+/// name is the only discriminator the binding has.
 const NATIVE_ERROR_CODES: Readonly<Record<string, ErrorCode>> = {
   UnknownServer: "ERR_INVALID_HANDLE",
   InvalidServerState: "ERR_INVALID_STATE",
@@ -17,8 +16,7 @@ const NATIVE_ERROR_CODES: Readonly<Record<string, ErrorCode>> = {
   InvalidMessageCapacity: "ERR_INVALID_OPTION",
   InvalidFrameCapacity: "ERR_INVALID_OPTION",
   ThreadsafeFunctionUnavailable: "ERR_PROTOCOL",
-  // Resource and environment failures the engine wrappers can surface; these
-  // are states of the host, not ABI mismatches.
+  // States of the host, not ABI mismatches.
   CapacityExhausted: "ERR_INVALID_STATE",
   ServerCapacityExhausted: "ERR_INVALID_STATE",
   EngineWorkerMissing: "ERR_INVALID_STATE",
@@ -28,22 +26,17 @@ const NATIVE_ERROR_CODES: Readonly<Record<string, ErrorCode>> = {
   OutOfMemory: "ERR_INVALID_STATE",
 };
 
-/// Wraps a native addon failure in a coded `Error`. The native name stays the
-/// message so existing diagnostics keep working; an unknown name is an ABI
-/// mismatch and reports `ERR_PROTOCOL`.
+/// The native name stays the message so existing diagnostics keep working; an unknown
+/// name is an ABI mismatch and reports `ERR_PROTOCOL`.
 export function nativeError(error: unknown): CodedError {
   const name = error instanceof Error ? error.message : String(error);
   const code = NATIVE_ERROR_CODES[name] ?? "ERR_PROTOCOL";
   return Object.assign(new Error(name), { code });
 }
 
-/// A guard failure: a value the caller passed that the binding refuses before
-/// any native call is made.
-///
-/// Coded like every other error in the repository. These are the checks that keep
-/// a bad value away from the ABI, and an uncoded `RangeError` here is the one
-/// error shape a consumer sees that carries no stable code, which is exactly the
-/// thing the error policy exists to prevent.
+/// Coded like every other error here: these are the checks that keep a bad value away
+/// from the ABI, and an uncoded `RangeError` is the one error shape a consumer sees that
+/// carries no stable code.
 export function guardError(
   message: string,
   code: ErrorCode,

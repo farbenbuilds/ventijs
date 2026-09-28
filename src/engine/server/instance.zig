@@ -1,9 +1,5 @@
-//! One live engine server and the bounded table of live instances.
-//!
-//! `Instance` is allocated once, never moved, and owns everything the engine
-//! thread and the Node main thread share: the configuration copy, the
-//! generation-checked connection slab, the callback channel, and the cluster
-//! that hosts the event loop.
+//! One live engine server and the bounded table of live instances. `Instance` is allocated
+//! once, never moved, and owns everything the engine thread and the Node main thread share.
 
 const std = @import("std");
 const napi = @import("napi-zig");
@@ -36,33 +32,20 @@ pub const Slab = handles.connection_slab(options.connection_capacity);
 pub const Table = registry.slot_table(server_capacity, Instance);
 pub const Handle = registry.Handle;
 
-/// Outbound payload slots staged per server. Slot bytes equal the trusted
-/// message cap, so every accepted message fits exactly one record.
+/// Outbound payload slots staged per server; slot bytes equal the trusted message cap.
 pub const payload_slots: usize = 8;
 
-/// Inbound slots, deliberately deeper than the outbound ring.
-///
-/// The two directions drain under different conditions. An outbound payload is
-/// taken by the `pump` that staged it, in the same call, so eight slots is
-/// ample. An inbound payload waits for the Node main thread to reach the next
-/// threadsafe-function callback, and the engine thread keeps reading its socket
-/// in the meantime, so the depth is the burst budget: a peer that delivers more
-/// messages than this before the main thread turns has the excess counted as
-/// dropped by `serverDroppedMessages`.
-///
-/// The engine's WebSocket behavior exposes no way to stop reading once a
-/// consumer falls behind, so the buffer is the only place to absorb a burst.
-/// At the configured 32 KiB message cap this is 2 MiB per live server.
+/// Inbound slots, deliberately deeper than the outbound ring: an outbound payload is taken
+/// by the `pump` that staged it, while an inbound one waits for the main thread. The depth is
+/// the burst budget -- the engine cannot stop reading once a consumer falls behind. At the
+/// 64 KiB message cap that is 4 MiB per server; the excess is `serverDroppedMessages`.
 pub const inbound_slots: usize = 64;
 pub const PayloadRing = payload.payload_ring(payload_slots, @as(usize, options.message_capacity));
 pub const InboundRing = payload.payload_ring(inbound_slots, @as(usize, options.message_capacity));
 pub const Sockets = socket.socket_slab(options.connection_capacity, PayloadRing, InboundRing);
 
-/// Mutable process-wide binding table. This is the one module-level variable
-/// in the addon: the engine callback ABI carries no user context, so the
-/// bounded table is how a callback finds its server. It is only written by
-/// create/finalize on the Node main thread, read by engine callbacks, and
-/// reached from JavaScript only through generation-checked handles.
+/// The one module-level variable in the addon: the engine callback ABI carries no user
+/// context, so the bounded table is how a callback finds its server.
 pub var servers: Table = .{};
 
 /// One live engine server. Fields are ordered largest first.
@@ -73,25 +56,19 @@ pub const Instance = struct {
     config: options.ServerConfig,
     io: std.Io.Threaded = std.Io.Threaded.init_single_threaded,
     cluster: ClusterType,
-    /// Staged payloads the engine refused after the pump had already taken them
-    /// out of the ring. Read on the Node main thread, written on the engine
-    /// thread, so it is atomic. See `socket_pump.flush` for why the loss has to
-    /// be counted rather than reported as success.
+    /// Staged payloads the engine refused after the pump took them out of the ring. Written on
+    /// the engine thread and read on the main one, so it is atomic; see `socket_pump.flush`.
     undelivered: std.atomic.Value(u64) align(std.atomic.cache_line) = .init(0),
     runner: ?std.Thread = null,
     state: std.atomic.Value(State) = .init(.created),
     handle: Handle,
     env: c.napi_env,
-    /// Actual local port resolved after `listen`; equals the requested port
-    /// when the listener cannot be queried (Windows).
+    /// The local port resolved after `listen`; equals the requested port on Windows.
     bound_port: u16 = 0,
 };
 
-/// Resolves a JavaScript server handle and rejects handles owned by another
-/// Node.js environment (worker thread), so one isolate cannot drive another's
-/// server. The owning environment is checked inside the slot table, before the
-/// instance pointer is loaded, so a worker teardown cannot race the lookup
-/// into freed memory.
+/// Rejects handles owned by another Node.js environment, so one isolate cannot drive another's
+/// server. Checked in the table before the pointer is loaded, so a teardown cannot race it.
 pub fn lookup(env: napi.Env, raw: u40) ?*Instance {
     return servers.lookup(Handle.from_int(raw), env.handle);
 }
@@ -101,19 +78,15 @@ pub fn lookup_slot(slot: u32) ?*Instance {
     return servers.lookup_slot(slot);
 }
 
-/// Maps an engine connection onto its slab slot, or null when the pool does not
-/// know it. Null means the connection was never admitted through this server, and
-/// every caller treats it as a refusal rather than proceeding.
+/// Null means the connection was never admitted, and every caller treats it as a refusal.
 pub fn connection_index(target: *Instance, ws: *uwz.WebSocket) ?u32 {
     const app = target.cluster.worker(0) orelse return null;
     const index = app.pool.index_of(ws.conn) orelse return null;
     return @intCast(index);
 }
 
-/// Resolves a packed connection handle and returns it only when the slab still
-/// holds that exact generation. Every FFI entry point goes through here, so a
-/// call against a closed connection returns a typed status instead of
-/// dereferencing a stale slot.
+/// Resolves a packed connection handle only when the slab still holds that generation, so a
+/// call against a closed connection returns a typed status instead of a stale slot.
 pub fn resolve_connection(target: *Instance, raw: u64) ?handles.Handle {
     const handle = handles.Handle.from_int(raw);
     _ = target.slab.resolve(handle) orelse return null;

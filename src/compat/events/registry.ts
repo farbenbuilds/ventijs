@@ -30,8 +30,7 @@ export function prepend<E extends EventMap, K extends EventName<E>>(
 }
 
 /// Removes the most recent entry a predicate accepts, matching
-/// `EventEmitter.removeListener`, which scans from the end. Once wrappers and
-/// DOM listeners are matched through their tags by the caller.
+/// `EventEmitter.removeListener`, which scans from the end.
 export function unsubscribeMatching<E extends EventMap, K extends EventName<E>>(
   registry: Registry<E>,
   event: K,
@@ -65,9 +64,8 @@ export function eventNames<E extends EventMap>(registry: Registry<E>): EventName
   return names;
 }
 
-/// Dispatches with the emitter as `this`, which is the contract the vendored
-/// `@types/ws` listeners declare. `Reflect.apply` accepts the readonly tuple
-/// the event map carries.
+/// Dispatches with the emitter as `this`, which is the contract the vendored `@types/ws`
+/// listeners declare. `Reflect.apply` accepts the readonly tuple the event map carries.
 export function dispatchWith<E extends EventMap, K extends EventName<E>>(
   registry: Registry<E>,
   target: unknown,

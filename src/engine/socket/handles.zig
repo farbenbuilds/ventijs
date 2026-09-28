@@ -1,20 +1,13 @@
-//! Generation-checked connection slots and the opaque handles that name them.
-//!
-//! One slab is allocated per server beside the engine connection pool. A slot
-//! index maps one-to-one onto an engine pool slot; the generation rejects a
-//! handle after its connection has closed, so a stale JavaScript call is a
-//! typed error instead of a use-after-free. State and generation share one
-//! atomic word, so a resolve can never pair a fresh generation with a stale
-//! state or observe a torn transition.
+//! Generation-checked connection slots. State and generation share one atomic word,
+//! so a resolve can never pair a fresh generation with a stale state or observe a torn
+//! transition: a stale JavaScript call is a typed error, never a use-after-free.
 
 const std = @import("std");
 
-/// Lifecycle of one connection slot.
 pub const State = enum(u8) { free, active };
 
-/// Opaque connection handle: 32 bit slot index and 32 bit generation.
-///
-/// The integer form is the only representation passed to JavaScript.
+/// Opaque connection handle: 32-bit slot index and 32-bit generation. The integer form
+/// is the only representation passed to JavaScript.
 pub const Handle = struct {
     index: u32,
     generation: u32,
@@ -29,23 +22,19 @@ pub const Handle = struct {
 };
 
 const Slot = struct {
-    /// `generation << 8 | state`. One atomic word keeps the pair consistent
-    /// for the Node main thread's lock-free `resolve`.
+    /// `generation << 8 | state`; one word keeps the pair consistent for a
+    /// lock-free `resolve`.
     word: std.atomic.Value(u64) = .init(0),
 
     fn pack(state: State, generation: u32) u64 {
         return (@as(u64, generation) << 8) | @intFromEnum(state);
     }
 
-    /// Reconstructs the state from the low byte rather than with
-    /// `@enumFromInt`.
-    ///
-    /// `pack` is the only writer of that byte and it writes one of these two, so
-    /// the default arm is unreachable by construction rather than a fallback. It
-    /// is `unreachable` and not a third value because a defaulting state would
-    /// turn a second writer into a silently free slot, and every transition here
-    /// would then report a stale handle as `invalid_handle` instead of failing
-    /// where the bug is.
+    /// Reconstructs the state from the low byte rather than `@enumFromInt`, with
+    /// `else => unreachable` because `pack` is the only writer of that byte and writes
+    /// one of the two. A defaulting third state would turn a second writer into a
+    /// silently free slot, and every transition would then report a stale handle as
+    /// `invalid_handle` instead of failing where the bug is.
     fn state_of(word: u64) State {
         return switch (@as(u8, @truncate(word))) {
             0 => .free,
@@ -59,8 +48,8 @@ const Slot = struct {
     }
 };
 
-/// Builds a fixed-capacity connection slab. `capacity` must match the engine
-/// pool capacity so every pool slot has exactly one slab slot.
+/// A fixed-capacity slab; `capacity` must match the engine pool so every pool slot has
+/// exactly one slab slot.
 pub fn connection_slab(comptime capacity: u32) type {
     if (capacity == 0) @compileError("connection slab capacity must be greater than zero");
 
@@ -68,19 +57,15 @@ pub fn connection_slab(comptime capacity: u32) type {
         const Self = @This();
 
         slots: [capacity]Slot = [_]Slot{.{}} ** capacity,
-        /// Live connections. Atomic because it is the only count in the slab that
-        /// is not read out of a slot word, and `connections.on_open` uses it as
-        /// the `max_connections` admission gate: a torn or reordered count there
-        /// is an admission bug rather than a crash, which is exactly the kind of
-        /// defect that is invisible until a server is under load.
+        /// Live connections. Atomic because it is the `max_connections` admission gate,
+        /// where a torn or reordered count is an admission bug that stays invisible
+        /// until a server is under load.
         active: std.atomic.Value(u32) = .init(0),
 
-        /// Marks a pool slot active and returns a fresh handle for it.
-        ///
-        /// The generation advances on acquire, so a handle from the previous
-        /// occupant of this slot can never resolve again. The CAS loop
-        /// terminates because a failed swap reloads the word and every success
-        /// moves the slot from free to active.
+        /// Marks a pool slot active and returns a fresh handle. The generation advances
+        /// on acquire, so the previous occupant's handle can never resolve again; the CAS
+        /// loop terminates because a failed swap reloads the word and every success moves
+        /// the slot from free to active.
         pub fn acquire(slab: *Self, index: u32) !Handle {
             if (index >= capacity) return error.SlotOutOfRange;
             const slot = &slab.slots[index];
@@ -110,11 +95,9 @@ pub fn connection_slab(comptime capacity: u32) type {
             }
         }
 
-        /// Resolves a handle to its slot index, or null when the handle is
-        /// out of range, the slot is free, or the generation is stale.
-        ///
-        /// A single acquire load answers both checks, so the caller can trust
-        /// the generation it resolved against for the rest of its operation.
+        /// A handle's slot index, or null when it is out of range, the slot is free, or
+        /// the generation is stale. One acquire load answers both checks, so the caller
+        /// can trust the generation for the rest of its operation.
         pub fn resolve(slab: *const Self, handle: Handle) ?u32 {
             if (handle.index >= capacity) return null;
             const word = slab.slots[handle.index].word.load(.acquire);
@@ -123,10 +106,9 @@ pub fn connection_slab(comptime capacity: u32) type {
             return handle.index;
         }
 
-        /// The generation currently occupying a slot, or null when the slot is
-        /// free or out of range. The engine thread needs it to stamp an inbound
-        /// payload with the generation it belongs to: only the main thread holds
-        /// a handle, so there is no handle to resolve against here.
+        /// The generation occupying a slot, or null when it is free or out of range. The
+        /// engine thread needs it to stamp an inbound payload: only the main thread holds
+        /// a handle, so there is nothing to resolve against.
         pub fn generation_at(slab: *const Self, index: u32) ?u32 {
             if (index >= capacity) return null;
             const word = slab.slots[index].word.load(.acquire);

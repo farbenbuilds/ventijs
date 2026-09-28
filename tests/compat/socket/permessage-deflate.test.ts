@@ -1,15 +1,7 @@
-//! RFC 7692 on the wire, against real `ws` peers and against raw bytes.
-//!
-//! The split is deliberate. The `ws` peers prove interoperability, which is the claim
-//! that matters: a message this build compresses is a message `ws` reads, and the other
-//! way round. The raw peer proves the *decisions* -- which header went out, whether RSV1
-//! is set, which close code a peer earns -- because `ws` decompresses transparently and
-//! would hide both.
-//!
-//! Every payload that is expected to compress is above the 1024-byte threshold by
-//! construction, since the threshold is what decides the case, and a payload that did
-//! not compress would make a byte count ambiguous and pass RSV1 assertions for the wrong
-//! reason.
+//! RFC 7692 on the wire. The `ws` peers prove interoperability -- a message this build
+//! compresses is a message `ws` reads, and the other way round -- while the raw peer proves the
+//! *decisions* (which header went out, whether RSV1 is set), because `ws` decompresses
+//! transparently and would hide both.
 
 import { expect, test } from "vitest";
 import { WebSocketServer as WsServer } from "ws";
@@ -27,8 +19,7 @@ test(
   "a ws client's compressed message reaches a ventijs socket",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // The direction a drop-in has to get right: a browser or a `ws` client compressing,
-    // this build inflating, and the application seeing the original text.
+    // A browser or a `ws` client compressing, this build inflating, the application seeing the original text.
     const harness = await upgradeHarness(deflateServer());
     const accepted = nextSocket(harness.server);
     const client = await openClient(harness.url);
@@ -70,11 +61,8 @@ test(
   "a ventijs client negotiates against a ws server and compresses",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // Not the same code as the two above: the client route writes the offer and reads the
-    // answer, and a `ws` server's answer is a parameter set this codec did not choose.
-    // `perMessageDeflate: true` is not the default on a `ws` *server*
-    // (`websocket-server.js:76`), so without it the offer is declined and the whole case
-    // would pass on an uncompressed connection.
+    // The client route writes the offer and reads the answer, and a `ws` server's answer is a
+    // parameter set this codec did not choose. `perMessageDeflate: true` is not a `ws` *server* default, so the case would pass uncompressed.
     const server = new WsServer({ port: 0, perMessageDeflate: true });
     await new Promise<void>((resolve) => server.once("listening", resolve));
     try {
@@ -104,9 +92,7 @@ test(
   "a ws client that does not offer the extension still connects uncompressed",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // The negative case, and the one a "negotiated or bust" implementation gets wrong: an
-    // extension nobody offered is not an error, and refusing it would make every
-    // compression-disabled client a 400.
+    // An extension nobody offered is not an error; refusing it would make every compression-disabled client a 400.
     const harness = await upgradeHarness();
     const accepted = nextSocket(harness.server);
     const client = await openClient(harness.url, { perMessageDeflate: false });

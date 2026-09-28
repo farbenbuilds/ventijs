@@ -1,8 +1,5 @@
-//! Backpressure tests for the frame codec.
-//!
-//! A full event store is not a protocol fault and must never be reported as one.
-//! These tests pin where the decoder stops, what survives, and that a caller
-//! draining the store and re-feeding gets the frame it was
+//! Backpressure tests. A full event store is not a protocol fault and must never be
+//! reported as one.
 
 const std = @import("std");
 const testing = std.testing;
@@ -12,9 +9,8 @@ const support = @import("frame_support.zig");
 const Frame = support.Frame;
 
 test "a backpressured frame resumes from the byte it stopped at" {
-    // A full queue is not a protocol fault and must not be reported as one. The
-    // header is taken, the payload is not, and the caller re-feeds the remainder
-    // after draining, so nothing is lost and nothing is delivered twice.
+    // The header is taken and the payload is not; the caller re-feeds the remainder
+    // after draining, so nothing is lost and nothing delivered twice.
     const One = codec.codec(1);
     var peer = One.init(.server, support.trusted()) catch unreachable;
     defer peer.deinit();
@@ -41,9 +37,8 @@ test "a backpressured frame resumes from the byte it stopped at" {
 }
 
 test "only one data message is queued at a time" {
-    // A queued message's payload is a slice into the single reassembly buffer, so
-    // a second one would overwrite the first and the caller would read one
-    // message as another. One slot is the fix, and the second frame waits.
+    // A queued message's payload is a slice into the single reassembly buffer, so a
+    // second one would overwrite the first and the caller would read one as another.
     var peer = support.server();
     var buffers: [2][64]u8 = undefined;
     const frames = [_]Frame{
@@ -51,8 +46,8 @@ test "only one data message is queued at a time" {
         .{ .opcode = .text, .payload = "two", .mask = .{ 2, 2, 2, 2 } },
     };
     try testing.expectEqual(codec.Outcome.ok, peer.feed(frames[0].bytes(&buffers[0])).outcome);
-    // The second frame cannot even take its header, because a queued message is
-    // still pointing into the reassembly buffer.
+    // The second frame cannot even take its header: a queued message still points into
+    // the reassembly buffer.
     const second = peer.feed(frames[1].bytes(&buffers[1]));
     try testing.expectEqual(codec.Outcome.backpressure, second.outcome);
 
@@ -61,8 +56,8 @@ test "only one data message is queued at a time" {
     try testing.expectEqualStrings("one", peer.selected_event().?.payload);
     peer.take();
 
-    // Draining the slot is what lets the waiting frame through, and it arrives
-    // intact rather than sharing storage with the message that was just taken.
+    // Draining the slot lets the waiting frame through intact, not sharing storage with
+    // the message just taken.
     const resumed = peer.feed(frames[1].bytes(&buffers[1])[second.consumed..]);
     try testing.expectEqual(codec.Outcome.ok, resumed.outcome);
     try testing.expect(peer.select());
@@ -71,14 +66,13 @@ test "only one data message is queued at a time" {
 }
 
 test "control events queue independently of the message slot" {
-    // A ping must be answerable while a large message is still waiting, so the
-    // control ring is separate and is drained first.
+    // A ping must be answerable while a large message waits, so the control ring is
+    // separate and drains first.
     var peer = support.server();
     var buffers: [4][64]u8 = undefined;
     _ = peer.feed((Frame{ .opcode = .text, .payload = "msg", .mask = .{ 1, 1, 1, 1 } }).bytes(&buffers[0]));
     try testing.expectEqual(codec.Outcome.ok, peer.feed((Frame{ .opcode = .ping, .payload = "p1", .mask = .{ 2, 2, 2, 2 } }).bytes(&buffers[1])).outcome);
     try testing.expectEqual(codec.Outcome.ok, peer.feed((Frame{ .opcode = .pong, .payload = "p2", .mask = .{ 3, 3, 3, 3 } }).bytes(&buffers[2])).outcome);
-    // A second data message waits for the slot, and a second ping does not.
     const blocked = peer.feed((Frame{ .opcode = .text, .payload = "later", .mask = .{ 4, 4, 4, 4 } }).bytes(&buffers[3]));
     try testing.expectEqual(codec.Outcome.backpressure, blocked.outcome);
 
@@ -97,10 +91,9 @@ test "control events queue independently of the message slot" {
 }
 
 test "every queued control event keeps its own payload" {
-    // A control payload is written into one shared 125-byte buffer as it arrives, so
-    // a ring of events that stored a slice into it would hand the caller the newest
-    // frame's bytes for every event. All eight land in one feed, which is the order
-    // that exposes the aliasing: nothing is taken until the ring is full.
+    // A control payload is written into one shared 125-byte buffer as it arrives, so a
+    // ring storing a slice into it would hand every event the newest frame's bytes. All
+    // eight land in one feed, which is the order that exposes the aliasing.
     const payloads = [_][]const u8{ "a", "bb", "ccc", "dddd", "eeeee", "ffffff", "ggggggg", "hhhhhhhh" };
     var peer = support.server();
     var scratch: [8][32]u8 = undefined;
@@ -119,8 +112,7 @@ test "every queued control event keeps its own payload" {
     try testing.expectEqual(codec.Outcome.ok, peer.feed(all).outcome);
     try testing.expectEqual(payloads.len, peer.pending());
 
-    // Every event's payload is its own, which is the whole point: eight slices into
-    // one buffer would all read "hhhhhhhh".
+    // Eight slices into one buffer would all read "hhhhhhhh".
     for (payloads) |expected| {
         try testing.expect(peer.select());
         try testing.expectEqual(codec.Kind.ping, peer.selected_event().?.kind);
@@ -132,19 +124,17 @@ test "every queued control event keeps its own payload" {
 
 test "a refused frame's code outlives the event that reported it" {
     // The `rejected` event carries a description, not a close code: one refused frame
-    // maps to one code for the whole connection, latched on the codec.
+    // maps to one code, latched on the codec.
     var peer = support.server();
     var buffer: [32]u8 = undefined;
-    // An unmasked frame to a server: a protocol error, and 1002.
     const frame = support.raw_frame(&buffer, true, 0x1, 1, false, .{ 0, 0, 0, 0 }, "x");
     try testing.expectEqual(codec.Outcome.failed, peer.feed(frame).outcome);
     try testing.expectEqual(@as(u16, 1002), peer.failure_code());
     const event = try support.take_only(&peer);
     try testing.expectEqual(codec.Kind.rejected, event.kind);
-    // The event's own code is zero: it is the description that is queued, and a
-    // caller that mistook it for a close code would send 0, which is not a code.
+    // The event's own code is zero; a caller mistaking it for a close code would send 0,
+    // which is not a code.
     try testing.expectEqual(@as(u16, 0), event.code);
-    // A later call reports the same reason rather than a fresh, healthy one.
     try testing.expectEqual(codec.Outcome.failed, peer.feed(frame).outcome);
     try testing.expectEqual(@as(u16, 1002), peer.failure_code());
 }

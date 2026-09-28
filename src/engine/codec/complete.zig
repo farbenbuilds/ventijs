@@ -1,11 +1,5 @@
-//! Turning a completed frame into an event, or into nothing.
-//!
-//! The two halves of a frame fail differently. Consuming bytes can only fail on a length
-//! the codec will not accept, and it does so while the frame is still arriving. Deciding
-//! what a frame *meant* can fail for reasons the wire cannot show: a close payload with a
-//! reserved code, a text message that ended mid-sequence. Keeping them apart means the
-//! error each one raises is the one that actually happened, which is what the failure the
-//! caller sees is derived from.
+//! Turning a completed frame into an event, or into nothing. Deciding what a frame *meant*
+//! is kept apart from consuming its bytes so each raises the error that actually happened.
 
 const zslay = @import("zslay");
 const close_payload = @import("close_payload.zig");
@@ -15,10 +9,7 @@ const receive = @import("receive.zig");
 
 const Kind = events.Kind;
 
-/// What a completed frame can mean: an event, or nothing because the frame was a
-/// fragment. A fragment is not a message, so there is nothing to report and the
-/// accumulator stays. Named rather than written `!?Decoded` twice, because two
-/// spellings of the same shape are two types in Zig.
+/// A fragment is not a message, so nothing is reported and the accumulator stays.
 pub const Finished = union(enum) {
     /// A complete data message or control frame.
     event: receive.Decoded,
@@ -32,17 +23,13 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
     const opcode: zslay.Opcode = @enumFromInt(decoded.header.opcode);
 
     if (opcode.is_control()) return .{ .event = try finish_control(State, peer, opcode, decoded.payload_len) };
-    // A frame with no payload never reached `consume`, so the opcode is recorded
-    // here as well. An empty text message is legal and common, and without this it
-    // would arrive with no opcode and be refused as a continuation with nothing to
-    // continue.
+    // A frame with no payload never reached `consume`, so the opcode is recorded here too:
+    // an empty text message would otherwise arrive with no opcode at all.
     if (opcode != .continuation) peer.message_opcode = opcode;
     if (!decoded.header.fin) {
-        // A boundary before the accumulator is released, so a caller that asked for
-        // the fragments rather than the message can slice what was already copied.
-        // Past the bound this is a policy failure and not a protocol error: the frames
-        // were well formed, the peer simply split one message into more pieces than
-        // the option allows, which RFC 6455 does not forbid.
+        // Bound the fragments before the accumulator is released, so a caller that asked
+        // for them can slice what was copied. Past the bound this is a policy failure and not
+        // a protocol error: RFC 6455 does not forbid splitting a message further.
         peer.note_fragment() catch return error.TooManyFragments;
         peer.conn.complete_frame();
         return .fragment;
@@ -50,10 +37,8 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
 
     if (peer.inflate.is_compressed()) try decompress(State, peer);
     const message_opcode = peer.message_opcode orelse return error.ProtocolError;
-    // A message that ends mid-sequence is invalid even though every byte it did
-    // contain was in range, which is the case a validator that only ever checks
-    // incoming bytes cannot see. Skipped when the caller asked for it to be: the
-    // check is what `skipUTF8Validation` turns off.
+    // A message ending mid-sequence is invalid although every byte was in range, which a
+    // byte-wise validator cannot see; this is what `skipUTF8Validation` turns off.
     if (message_opcode == .text and peer.validate_utf8 and !utf8.complete(peer.utf8_state)) {
         return error.InvalidUtf8;
     }
@@ -66,20 +51,14 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
     return .{ .event = .{ .kind = kind, .payload = payload } };
 }
 
-/// Inflates the staged message into the reassembly buffer, in place.
-///
-/// `maxPayload` bounds the *delivered* message, so a peer that inflates a small payload
-/// to a large one is a 1009 rather than an allocation, and the buffer grows into that
-/// bound rather than starting at it. The plaintext replaces the compressed form, so
-/// everything downstream -- the UTF-8 check, the event payload, the fragment boundaries
-/// -- sees the message and not the wire.
+/// `maxPayload` bounds the *delivered* message, so a peer inflating a small payload to a
+/// large one is a 1009 rather than an allocation.
 fn decompress(comptime State: type, peer: *State) !void {
     const plain = try peer.inflate.inflate(&peer.message, peer.max_message_bytes);
     peer.message.length = plain.len;
 }
 
-/// A control frame's payload and what it meant. A control frame is never fragmented and
-/// never exceeds 125 bytes, so the one buffer serves all three opcodes.
+/// A control frame is never fragmented and never exceeds 125 bytes, so one buffer serves all three opcodes.
 fn finish_control(comptime State: type, peer: *State, opcode: zslay.Opcode, payload_len: u64) !receive.Decoded {
     const payload = peer.control[0..@intCast(payload_len)];
     if (opcode == .close) try validate_close(payload);
@@ -87,19 +66,14 @@ fn finish_control(comptime State: type, peer: *State, opcode: zslay.Opcode, payl
     peer.conn.complete_frame();
     return .{
         .kind = kind,
-        // Only a close payload is split into a code and a reason. A ping and a pong
-        // carry their bytes whole, and trimming two off the front of either would
-        // deliver a short payload for every frame longer than two bytes.
+        // Only a close payload splits into code and reason; a ping or pong carries its bytes whole.
         .code = if (kind == .close) close_payload.close_code(payload) else 0,
         .payload = if (kind == .close) close_payload.close_reason(payload) else payload,
     };
 }
 
-/// The three faults a close payload can have, named apart.
-///
-/// `zslay` validates all three and reports two of them as one `ProtocolError`, so the
-/// code check is done here where the payload is still in hand. The order matches `ws`:
-/// the length, then the code, then the reason.
+/// The three close-payload faults. `zslay` validates all three but reports two as one
+/// `ProtocolError`, so the code check happens here; the order matches `ws`.
 fn validate_close(payload: []const u8) !void {
     if (payload.len == 1) return error.ProtocolError;
     if (!close_payload.has_valid_code(payload)) return error.InvalidCloseCode;

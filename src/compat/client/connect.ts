@@ -18,33 +18,28 @@ export type Attempt = {
   readonly requested: readonly string[];
   readonly offered: ProtocolSet;
   /// The request in flight, or null between hops and after a 101. The guard every
-  /// listener checks: a `redirect` hop's `response` arrives after the next hop's
-  /// `request` is set, and answering it would abort the hop the client is now on.
+  /// listener checks: a `redirect` hop's `response` arrives after the next hop's request
+  /// is set, and answering it would abort the hop the client is now on.
   request: ClientRequest | null;
-  /// The socket the codec reads, or null until a 101 hands one over.
-  ///
-  /// Null for the whole handshake now, where it used to be a `net.Socket` from the first
-  /// dial: a `CONNECTING` socket held a real connection, and `close()` on it had to
-  /// destroy a socket rather than cancel a request.
+  /// The socket the codec reads, or null until a 101 hands one over. Null for the whole
+  /// handshake, where it used to be a `net.Socket` from the first dial: a `CONNECTING`
+  /// socket held a real connection, and `close()` had to destroy a socket rather than
+  /// cancel a request.
   transport: Socket | null;
   handshake: Handshake;
-  /// The address this attempt is for, which is what a redirect's host and scheme are
-  /// compared against: the original one, not the previous hop. A chain that wanders off
-  /// `wss:` is refused on the first downgrade, wherever in the chain it happens.
+  /// The original address, not the previous hop: a chain that wanders off `wss:` is
+  /// refused on the first downgrade, wherever in the chain it happens.
   address: ClientAddress;
-  /// The credentials the caller dialled with, kept while a redirect stays on the same
-  /// host and dropped the moment it does not. A `Location` names a URL and carries no
-  /// credentials, so without this a same-host redirect would silently un-authenticate a
-  /// client that authenticated.
+  /// Kept while a redirect stays on the same host and dropped the moment it does not. A
+  /// `Location` names a URL and carries no credentials, so without this a same-host
+  /// redirect would silently un-authenticate a client that authenticated.
   auth: string | undefined;
   redirects: number;
 };
 
-/// Starts a client connection and returns the socket record.
-///
-/// Only the first two steps can throw: a bad address or subprotocol is a programming
-/// error, and a caller who fixes it can try again. Everything after them is reported
-/// through the socket, because by then the caller holds a handle to it.
+/// Only address and subprotocol normalization can throw: both are programming errors and
+/// a caller who fixes one can try again. Everything after them is reported through the
+/// socket, because by then the caller holds a handle to it.
 export function connectSocket(
   address: string | URL,
   protocols: string | string[] | undefined,
@@ -63,8 +58,8 @@ export function connectSocket(
   state.validateUtf8 = !normalized.skipUTF8Validation;
   state.maxPayload = normalized.maxPayload;
   state.maxFragments = normalized.maxFragments;
-  // The threshold is known before the handshake, so it is set here; whether the extension
-  // was actually negotiated is not, and `open.ts` sets that from the response.
+  // The threshold is known before the handshake; whether the extension was negotiated
+  // is not, and `open.ts` sets that from the response.
   state.threshold = thresholdOf(normalized.perMessageDeflate);
   const socket = buildSocketRecord(state);
   const attempt: Attempt = {
@@ -79,12 +74,11 @@ export function connectSocket(
     auth: parsed.auth,
     redirects: 0,
   };
-  // Deliberately not attached: the socket's transport and codec are attached when the
-  // 101 arrives, because the response is not frames, and a codec that read it would
-  // refuse the connection with a 1002 before a single legitimate frame was sent. Until
-  // then the socket is `CONNECTING` with no transport, which is what makes `close()` and
-  // `terminate()` on a client that has not opened report the aborted handshake the way
-  // `ws` does.
+  // Deliberately not attached: the transport and codec are attached on the 101, because
+  // the response is not frames, and a codec that read it would refuse the connection with
+  // a 1002 before a single legitimate frame was sent. Until then the socket is
+  // `CONNECTING` with no transport, which is what makes `close()` and `terminate()` on an
+  // unopened client report the aborted handshake the way `ws` does.
   dial(attempt);
   return socket;
 }

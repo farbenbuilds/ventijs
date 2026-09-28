@@ -2,9 +2,7 @@ import type { EngineStatus } from "../../types/status";
 import { createError } from "../errors";
 import { statusError } from "./payload";
 
-/// Maps a rejected native close onto a coded error instead of leaving the
-/// socket latched in CLOSING with no frame sent. Exhaustive over `EngineStatus`
-/// so a new member cannot fall through to a generic message.
+/// Exhaustive over `EngineStatus` so a new member cannot fall through to a generic message.
 export function closeFailure(status: EngineStatus): Error {
   switch (status) {
     case "backpressure":

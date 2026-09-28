@@ -18,8 +18,7 @@ import { sendData } from "./send";
 import type { SocketState } from "../../types/socket";
 import { brandSocket } from "./state";
 
-/// Every value the setter accepts. One list, so the setter and the record's type
-/// cannot disagree about what "binary" means.
+/// One list, so the setter and the record's type cannot disagree about "binary".
 const BINARY_TYPE_VALUES: readonly BinaryTypeValue[] = [
   "nodebuffer",
   "arraybuffer",
@@ -27,13 +26,9 @@ const BINARY_TYPE_VALUES: readonly BinaryTypeValue[] = [
   "blob",
 ];
 
-/// The `ws`-shaped socket record, built around a state the caller has filled in.
-///
-/// Separate from construction because the two paths reach it differently: the server
-/// path adopts a state and hands it over, and the client path fills a state in while
-/// the handshake is still running. The record itself is identical, so the methods,
-/// the DOM attributes, and the listener registry are defined once rather than once
-/// per direction, which is what keeps the two sockets interchangeable to a caller.
+/// The `ws`-shaped socket record, built around a state the caller has filled in. The
+/// server path adopts a state and the client path fills one in mid-handshake, so the
+/// record is defined once rather than once per direction.
 export function buildSocketRecord(state: SocketState): WebSocket {
   const emitter = createEmitter(state);
   const socket = {
@@ -41,26 +36,22 @@ export function buildSocketRecord(state: SocketState): WebSocket {
     OPEN,
     CLOSING,
     CLOSED,
-    // Reports the stored value, including "blob". `@types/ws` narrows the public
-    // type to the three Buffer views, and `createSocket` is annotated as
-    // returning `WebSocket`, so that narrowing is the vendored contract's rather than
-    // this getter's to invent.
+    // Reports the stored value, including "blob": `@types/ws` narrows the public type
+    // to three Buffer views, and that narrowing is the vendored contract's.
     get binaryType(): BinaryTypeValue {
       return state.binaryType;
     },
     set binaryType(value: string) {
-      // `ws` accepts "blob" whenever the Blob global exists and silently ignores
-      // anything else. `state.binaryType` is typed as the widened union, so this
-      // is a narrowing check rather than an assertion that could be wrong.
+      // `ws` accepts "blob" wherever the Blob global exists and silently ignores
+      // anything else, so this is a narrowing check, not an assertion that could be wrong.
       const accepted = BINARY_TYPE_VALUES.includes(value as BinaryTypeValue);
       if (!accepted) return;
       state.binaryType = value as BinaryTypeValue;
     },
     get bufferedAmount(): number {
-      // Read live rather than returning the cached count: the number a caller polls to
-      // decide whether to stop sending changes as the queue drains, without any send
-      // happening to refresh it. Which queue depends on the route, so the choice lives
-      // in one function rather than in this getter.
+      // Read live: the number a caller polls to decide whether to stop sending changes
+      // as the queue drains, with no send to refresh it. Which queue depends on the
+      // route, so the choice lives in one function.
       return bufferedAmountOf(state);
     },
     get extensions(): string {

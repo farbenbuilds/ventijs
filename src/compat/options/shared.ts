@@ -8,20 +8,17 @@ export const DEFAULT_MAX_PAYLOAD = 100 * 1024 * 1024;
 export const DEFAULT_MAX_FRAGMENTS = 16 * 1024;
 export const DEFAULT_MAX_REDIRECTS = 10;
 
-/// How long a close handshake may stay unfinished before the socket is torn down.
-///
-/// `ws` bounds this at 30 seconds, and the bound is what makes a close a decision
-/// rather than a hope: a peer that receives a close frame and never answers one is a
-/// hung or crashed process, and without a deadline its socket sits at `CLOSING` for
-/// the life of the process, holding its transport and its codec slot.
+/// How long a close handshake may stay unfinished before the socket is torn down. `ws`
+/// bounds this at 30 seconds, and the bound is what makes a close a decision: a peer that
+/// never answers leaves its socket `CLOSING` for the life of the process, holding its
+/// transport and its codec slot.
 export const DEFAULT_CLOSE_TIMEOUT = 30_000;
 export const DEFAULT_THRESHOLD = 1024;
 export const DEFAULT_CONCURRENCY_LIMIT = 10;
 
 const SUBPROTOCOL_PATTERN = /^[!#$%&'*+\-.0-9A-Z^_`|a-z~]+$/;
 
-/// Token grammar for a `Sec-WebSocket-Protocol` value. Anything that is not a
-/// token (notably CR/LF) must never reach a response header.
+/// Anything that is not a token (notably CR/LF) must never reach a response header.
 export function isProtocolToken(value: unknown): value is string {
   return typeof value === "string" && SUBPROTOCOL_PATTERN.test(value);
 }
@@ -32,9 +29,8 @@ export function invalidOption(message: string, constructor: ErrorConstructor = T
 
 export function normalizeProtocols(protocols: string | string[] | undefined): readonly string[] {
   if (protocols === undefined) return [];
-  // ws wraps a non-array value into a one-element list and validates it, so an
-  // out-of-type number or null reports the SyntaxError below instead of an
-  // uncoded TypeError.
+  // `ws` wraps a non-array value into a one-element list and validates it, so an
+  // out-of-type number or null reports the SyntaxError rather than a TypeError.
   const list = typeof protocols === "string" ? [protocols] : protocols;
   const candidates: readonly unknown[] = Array.isArray(list) ? list : [list];
   const seen = new Set<string>();
@@ -49,10 +45,9 @@ export function normalizeProtocols(protocols: string | string[] | undefined): re
   return result;
 }
 
-/// Parses a `Sec-WebSocket-Protocol` request header. `ws` accepts comma
-/// separated tokens with optional surrounding whitespace and rejects empty,
-/// duplicated, or out-of-grammar ones, which is what the token validator does
-/// after the split.
+/// `ws` accepts comma separated tokens with optional surrounding whitespace and rejects
+/// empty, duplicated, or out-of-grammar ones, which is what the validator does after the
+/// split.
 export function parseProtocolHeader(header: string): readonly string[] {
   return normalizeProtocols(header.split(",").map((protocol) => protocol.trim()));
 }
@@ -61,8 +56,7 @@ export function normalizePerMessageDeflate(
   value: boolean | PerMessageDeflateOptions | undefined,
   fallback: boolean,
 ): false | NormalizedPerMessageDeflate {
-  // ws gates on truthiness: an out-of-type falsy value disables the
-  // extension instead of falling back to the default.
+  // `ws` gates on truthiness: an out-of-type falsy value disables the extension.
   if (value !== undefined && !value) return false;
   const resolved = value ?? fallback;
   if (!resolved) return false;
@@ -79,25 +73,11 @@ export function normalizePerMessageDeflate(
   };
 }
 
-/// The `maxPayload` a codec will enforce, in bytes.
-///
-/// **Zero means no limit, and it means that in `ws`.** `ws` guards both of its
-/// length checks with `_maxPayload > 0`, and its inflate bound with `_maxPayload < 1`,
-/// so a zero disables the check rather than refusing every message. The codec's
-/// representation of "no limit" is the largest value it can enforce, so zero is
-/// translated to the ceiling here; `engineLimits().maxPayloadBytes` reports what that
-/// number is, which makes the translation checkable rather than implicit.
 /// The close deadline, in milliseconds, or 0 for "tear down on the next tick".
-///
-/// A non-number or a negative value is refused rather than coerced: `setTimeout`
-/// would treat a string as a delay and a negative as zero, and a caller who passed
-/// nonsense would get a socket that closes instantly and a different one that never
-/// closes at all, depending on the value. This is a deliberate hardening over `ws`,
-/// which coerces, and it is recorded in `COMPATIBILITY.md`.
-///
-/// Zero is accepted, and it is *not* "no deadline". `ws` arms `setTimeout(fn, 0)`,
-/// which fires on the next tick and tears the socket down; reading it as "unbounded"
-/// turned that bounded teardown into a permanent hold of a transport and a codec slot.
+/// A non-number or a negative value is refused rather than coerced, because `setTimeout`
+/// reads a string as a delay and a negative as zero, giving a caller one socket that
+/// closes instantly and another that never closes. A deliberate hardening over `ws`,
+/// which coerces; see `COMPATIBILITY.md`.
 export function closeTimeoutOf(source: unknown): number {
   const raw = (source as { readonly closeTimeout?: unknown }).closeTimeout;
   if (raw === undefined) return DEFAULT_CLOSE_TIMEOUT;

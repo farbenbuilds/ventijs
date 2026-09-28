@@ -1,13 +1,10 @@
 import type { CodecFailureName } from "../../binding/codec";
 import type { ErrorCode, WsErrorCode } from "../../types/errors";
 
-/// One refused frame, as the peer and the application each hear about it.
-///
-/// The close code is the RFC's, so it cannot change. The rest is `ws`'s: the same
-/// `WS_ERR_*` string on `error.code`, the same `RangeError` (or `Error`, for the two
-/// payload faults `ws` does not range-check), and the same message. A caller migrating
-/// from `ws` keys on that code, and a library that answered with one `ERR_PROTOCOL` for
-/// a dozen distinct faults could not be swapped in.
+/// One refused frame, as the peer and the application each hear about it. The close
+/// code is the RFC's, so it cannot change. The rest is `ws`'s: the same `WS_ERR_*`
+/// string on `error.code`, the same `RangeError` (or `Error` for the two payload faults
+/// `ws` does not range-check), and the same message. A migrating caller keys on that.
 export type Refusal = {
   readonly closeCode: number;
   readonly code: ErrorCode;
@@ -49,8 +46,8 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
     "protocol error",
     "payload length > 2^53 - 1",
   ),
-  // A plain `Error`, not a `RangeError`: `ws` raises an invalid UTF-8 sequence and an
-  // undecodable compressed payload the same way, and both are a 1007.
+  // A plain `Error`, not a `RangeError`: `ws` raises these two the same way, and both
+  // are a 1007.
   invalidUtf8: {
     closeCode: 1007,
     code: "WS_ERR_INVALID_UTF8",
@@ -79,10 +76,9 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
     message: "Max payload size exceeded",
     ctor: RangeError,
   },
-  // The one fault with no `ws` equivalent: a peer sent a compressed payload that is not
-  // a DEFLATE stream, which `ws` reports as a 1007 with no code at all. It keeps the
-  // protocol error it always was, because a code none of the twelve describes would be
-  // a lie about which one happened.
+  // The one fault with no `ws` equivalent: a compressed payload that is not a DEFLATE
+  // stream, which `ws` reports as a 1007 with no code. It keeps the protocol error it
+  // always was, because none of the twelve describes it.
   protocolError: {
     closeCode: 1002,
     code: "ERR_PROTOCOL",
@@ -92,8 +88,7 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
   },
 };
 
-/// A `RangeError` refusal: every framing fault `ws` raises is one, except the two
-/// payload faults above.
+/// Every framing fault `ws` raises is a `RangeError` except the two payload faults.
 function refused(closeCode: number, code: WsErrorCode, reason: string, detail: string): Refusal {
   return {
     closeCode,

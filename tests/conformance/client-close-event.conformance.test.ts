@@ -1,14 +1,7 @@
-//! Every way a client handshake can fail, observed the way a caller observes it.
-//!
-//! This file exists because of one defect. The abort path latched `CLOSED` and then
-//! called the function that dispatches `close`, which returns immediately on a socket
-//! that is already there — so *every* pre-101 failure set the ready state and emitted
-//! no event. A caller that awaits `close` to learn a handshake failed, which is the
-//! ordinary shape, hung for the life of the process. The existing tests missed it
-//! because they asserted `readyState`, which was correct.
-//!
-//! Each case is reduced to the same two observations so the whole family is covered:
-//! did `error` fire, and did `close` fire after it.
+//! Every way a client handshake can fail, observed the way a caller observes it. The abort path
+//! latched `CLOSED` and then called the function that dispatches `close`, which returns
+//! immediately on a socket that is already there, so every pre-101 failure set the ready state
+//! and emitted no event. Existing tests missed it by asserting `readyState`, which was correct.
 
 import { WebSocket as WsClient } from "ws";
 import { expect, test } from "vitest";
@@ -48,8 +41,7 @@ test(
   "a refused connection reports error and then close",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // Nothing is listening, so the dial is refused by the kernel. This is the ordinary
-    // first-run failure: a wrong port, a service that is not up yet, a typo.
+    // Nothing is listening, so the kernel refuses the dial: the ordinary first-run failure.
     const port = await closedPort();
     const result = await refused(async () => {
       const socket = new WebSocket(`ws://127.0.0.1:${port}/`);
@@ -59,8 +51,7 @@ test(
     expect(result.errors).toBe(1);
     expect(result.closed).toBe(true);
     expect(result.code).toBe(1006);
-    // `ws` latches `CLOSING` before the error so a listener reading `readyState` sees a
-    // socket that is going away rather than one that has already gone.
+    // `ws` latches `CLOSING` before the error, so a listener sees a socket going away, not gone.
     expect(result.stateDuringError).toBe(WebSocket.CLOSING);
   },
 );
@@ -69,8 +60,7 @@ test(
   "a handshake that is answered with a non-101 reports error and then close",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // No `unexpected-response` listener, so nothing takes the refusal over and the
-    // client aborts on its own. A listener changes this deliberately.
+    // No `unexpected-response` listener, so nothing takes the refusal over and the client aborts.
     const { createServer } = await import("node:http");
     const http = createServer((_request, response) => {
       response.writeHead(404).end();
@@ -101,8 +91,7 @@ test(
   "a ws client sees the same two events on the same failures",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // The oracle, for the same refusal: the ready state during `error` is the only
-    // part a caller reads that distinguishes "failing" from "failed".
+    // The ready state during `error` is the only part a caller reads that tells "failing" from "failed".
     const port = await closedPort();
     const result = await refused(async () => {
       const socket = new WsClient(`ws://127.0.0.1:${port}/`) as unknown as WebSocket;

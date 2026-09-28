@@ -1,9 +1,5 @@
-//! The vocabulary the transmit path answers in.
-//!
-//! Split out of `encode.zig` because these two types are what every *caller* of the
-//! formatter switches on, and they are not what the formatter does. `handles-table.zig`
-//! and the FFI both name them, and neither of them should have to import a module whose
-//! body is frame layout to find out what a frame refusal is called.
+//! The vocabulary the transmit path answers in, split out of `encode.zig` so the FFI
+//! and the handle table can name a frame refusal without importing a frame-layout module.
 
 const events = @import("events.zig");
 

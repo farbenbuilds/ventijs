@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Enforces the mechanically checkable conventions that the other gates cannot:
-// the 150-line module budget, snake_case Zig functions, kebab-case TypeScript
-// filenames, and emoji code points. Scans `src/` and `tests/`; vendored and
-// generated trees are out of scope.
+// the 150-line module budget, the comment budget, snake_case Zig functions,
+// kebab-case TypeScript filenames, and emoji code points. Scans `src/` and
+// `tests/`; vendored and generated trees are out of scope. The comment budget has
+// its own module because it is the only check that reads a file as more than a
+// list of lines.
 
+import { commentViolations } from "./comment-budget.mjs";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,6 +67,8 @@ function check(path) {
   if (lines > MAX_LINES) {
     violations.push(`${name}: ${lines} lines exceeds the ${MAX_LINES}-line module budget`);
   }
+
+  commentViolations(name, source, violations);
 
   if (extension === ".zig") {
     for (const match of source.matchAll(ZIG_FUNCTION)) {
