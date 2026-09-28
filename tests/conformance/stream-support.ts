@@ -1,92 +1,127 @@
-export type Handler = (...args: unknown[]) => void;
+//! The stream harness: a real server per implementation, and the normalization both legs
+//! are compared through.
+//!
+//! The stub this replaced answered `send` and `close` from memory, so it could not show
+//! either thing these tests exist for: an object-mode conversion decided by the readable
+//! side, and a `finish` that has to land before the close handshake has completed. Both are
+//! orderings on a live connection, so both legs are real servers now.
 
-export type FakeSocket = {
-  readyState: number;
-  readonly CONNECTING: 0;
-  readonly OPEN: 1;
-  readonly CLOSING: 2;
-  readonly CLOSED: 3;
-  isPaused: boolean;
-  readonly sent: unknown[];
-  readonly counts: { paused: number; resumed: number; terminated: number };
-  on(event: string, handler: Handler): FakeSocket;
-  once(event: string, handler: Handler): FakeSocket;
-  removeListener(event: string, handler: Handler): FakeSocket;
-  emit(event: string, ...args: unknown[]): void;
-  pause(): void;
-  resume(): void;
-  send(data: unknown, callback?: (error?: Error) => void): void;
-  close(): void;
+import type { Duplex, DuplexOptions } from "node:stream";
+import {
+  type WebSocket as UpstreamSocket,
+  WebSocket as UpstreamClient,
+  WebSocketServer as UpstreamServer,
+  createWebSocketStream as upstreamStream,
+} from "ws";
+import { WebSocketServer, createWebSocketStream } from "../../src/index";
+import type { WebSocket } from "../../src/types/ws";
+import { nextSocket, openClient } from "../compat/socket/codec-upgrade-support";
+import { serve } from "../compat/server/upgrade-support";
+
+/// What two implementations can be compared on: the events a caller would see, in order.
+export type Transcript = string[];
+
+/// The server-side socket, narrowed to what a scenario observes of it.
+export type Watched = {
+  on(event: "close", handler: (code: number, reason: Buffer) => void): unknown;
   terminate(): void;
+  readonly isPaused: boolean;
 };
 
-/// The socket surface `createWebSocketStream` consumes, shared by both
-/// implementations under test.
-export function fakeSocket(): FakeSocket {
-  const listeners = new Map<string, Handler[]>();
-  const add = (event: string, handler: Handler): void => {
-    listeners.set(event, [...(listeners.get(event) ?? []), handler]);
-  };
-  const remove = (event: string, handler: Handler): void => {
-    listeners.set(
-      event,
-      (listeners.get(event) ?? []).filter((entry) => entry !== handler),
-    );
-  };
-  const fake: FakeSocket = {
-    readyState: 1,
-    CONNECTING: 0,
-    OPEN: 1,
-    CLOSING: 2,
-    CLOSED: 3,
-    isPaused: false,
-    sent: [],
-    counts: { paused: 0, resumed: 0, terminated: 0 },
-    on(event, handler) {
-      add(event, handler);
-      return fake;
-    },
-    once(event, handler) {
-      const wrapper = (...args: unknown[]): void => {
-        remove(event, wrapper);
-        handler(...args);
-      };
-      add(event, wrapper);
-      return fake;
-    },
-    removeListener(event, handler) {
-      remove(event, handler);
-      return fake;
-    },
-    emit(event, ...args) {
-      for (const handler of (listeners.get(event) ?? []).slice()) handler(...args);
-    },
-    pause() {
-      fake.isPaused = true;
-      fake.counts.paused += 1;
-    },
-    resume() {
-      fake.isPaused = false;
-      fake.counts.resumed += 1;
-    },
-    send(data, callback) {
-      fake.sent.push(data);
-      callback?.();
-    },
-    close() {
-      fake.readyState = 2;
-    },
-    terminate() {
-      fake.counts.terminated += 1;
-      fake.readyState = 3;
-      fake.emit("close");
+export type StreamFixture = {
+  /// The stream under test, already bound to the socket the server accepted.
+  readonly stream: Duplex;
+  readonly socket: Watched;
+  /// The peer that drives the scenario.
+  readonly client: UpstreamClient;
+  readonly dispose: () => Promise<void>;
+};
+
+/// Loopback plus slack. It bounds a wait rather than an operation, so it is not a
+/// correctness number: a leg that has not finished by then hands back the transcript that
+/// shows which event is missing.
+const WINDOW_MS = 2_000;
+const POLL_MS = 5;
+
+/// The `ws` reference: a real `ws` server, the socket it accepts, and `ws`'s own stream.
+export async function upstreamFixture(options?: DuplexOptions): Promise<StreamFixture> {
+  const server = new UpstreamServer({ port: 0 });
+  const accepted = new Promise<UpstreamSocket>((resolve) => {
+    server.on("connection", (socket) => resolve(socket));
+  });
+  await new Promise<void>((resolve) => {
+    server.once("listening", resolve);
+  });
+  const port = (server.address() as { port: number }).port;
+  const client = new UpstreamClient(`ws://127.0.0.1:${port}/`);
+  client.on("error", () => {});
+  // The server accepts on the 101 it writes, which is before the client has read it, so a
+  // scenario that sends has to wait for the client's own `open` and not infer it.
+  const opened = new Promise<void>((resolve) => {
+    client.once("open", resolve);
+  });
+  const socket = await accepted;
+  await opened;
+  return {
+    stream: upstreamStream(socket, options),
+    socket,
+    client,
+    dispose: async () => {
+      client.terminate();
+      socket.terminate();
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
     },
   };
-  return fake;
 }
 
-export function settle(): Promise<void> {
-  return new Promise((resolve) => {
-    setImmediate(resolve);
+/// The same shape over ventijs's own `WebSocketServer`, so the sockets are the facade's and
+/// the frames on them are the codec's rather than a test's.
+export async function ventijsFixture(options?: DuplexOptions): Promise<StreamFixture> {
+  const server = new WebSocketServer({ noServer: true });
+  const accepted = nextSocket(server);
+  const harness = await serve(server);
+  const client = await openClient(`ws://127.0.0.1:${harness.port}/`);
+  const socket: WebSocket = await accepted;
+  return {
+    stream: createWebSocketStream(socket, options),
+    socket,
+    client,
+    dispose: async () => {
+      client.terminate();
+      socket.terminate();
+      await harness.close();
+    },
+  };
+}
+
+/// A chunk as the caller sees it. The type is half the transcript: a text message under
+/// `readableObjectMode` is the only chunk whose type a caller can tell apart.
+export function describeChunk(chunk: unknown): string {
+  if (typeof chunk === "string") return `string:${chunk}`;
+  if (Buffer.isBuffer(chunk)) return `buffer:${chunk.toString()}`;
+  return `other:${String(chunk)}`;
+}
+
+export function within(settled: Promise<void>, what: string): Promise<void> {
+  const late = new Promise<never>((_, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), WINDOW_MS);
+    timer.unref?.();
+  });
+  return Promise.race([settled, late]);
+}
+
+export function until(seen: Transcript, label: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const poll = setInterval(() => {
+      if (!seen.includes(label)) return;
+      clearInterval(poll);
+      resolve();
+    }, POLL_MS);
+    setTimeout(() => {
+      clearInterval(poll);
+      resolve();
+    }, WINDOW_MS).unref?.();
   });
 }

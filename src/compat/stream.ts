@@ -1,6 +1,7 @@
 import { Duplex } from "node:stream";
 import type { DuplexOptions } from "node:stream";
 import type { WebSocket } from "../types/ws";
+import { closeFrameWritten } from "./socket/lifecycle";
 
 /// Mirroring `ws` byte for byte: messages become readable chunks, writes become `send`
 /// calls, and destroy terminates the socket unless the socket itself raised the error.
@@ -23,8 +24,11 @@ export function createWebSocketStream(ws: WebSocket, options?: DuplexOptions): D
     if (duplex.listenerCount("error") === 0) duplex.emit("error", error);
   };
 
-  ws.on("message", (message) => {
-    if (!duplex.push(message)) ws.pause();
+  ws.on("message", (message, isBinary) => {
+    // `ws` (stream.js:63-64) converts only a text message, and only for a readable side in
+    // object mode: a binary message stays a Buffer whatever the mode.
+    const data = !isBinary && duplex.readableObjectMode ? message.toString() : message;
+    if (!duplex.push(data)) ws.pause();
   });
   ws.once("error", (error) => {
     if (duplex.destroyed) return;
@@ -60,6 +64,11 @@ export function createWebSocketStream(ws: WebSocket, options?: DuplexOptions): D
     if (terminateOnDestroy) ws.terminate();
   };
 
+  // `ws` (stream.js:127-137) settles `_final` from the raw socket's `finish`, which
+  // `Sender.close` triggers by ending that socket with the close frame, so `end` completes
+  // once the frame is on the wire rather than when the peer answers it. The codec writes
+  // the frame without ending the transport, so the latch is that same point, and the peer
+  // answering stays the teardown path: `close` is what pushes the EOF and destroys.
   duplex._final = (callback) => {
     if (ws.readyState === ws.CONNECTING) {
       ws.once("open", () => {
@@ -71,10 +80,15 @@ export function createWebSocketStream(ws: WebSocket, options?: DuplexOptions): D
       callback();
       return;
     }
-    ws.once("close", () => {
-      callback();
-    });
     ws.close();
+    if (!closeFrameWritten(ws)) {
+      ws.once("close", () => {
+        callback();
+      });
+      return;
+    }
+    callback();
+    if (duplex.readableEnded) duplex.destroy();
   };
 
   duplex._read = (): void => {
