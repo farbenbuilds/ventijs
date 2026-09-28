@@ -64,6 +64,33 @@ test "a message can be larger on the wire than off it, which is what threshold i
     try testing.expect(repeated.len < repetitive.len);
 }
 
+test "one connection's compressor and decompressor survive many messages" {
+    // The engines are built once and rewound per message, and the rewind has to
+    // re-borrow the input buffer, which grows as larger messages arrive. A message
+    // sequence of growing length is what catches an engine still pointing at the
+    // buffer it was built with.
+    var compressor: deflate.Compressor = .{};
+    defer compressor.deinit();
+    var decompressor: inflate.Message = .init(true);
+    defer decompressor.deinit();
+    var out: growth.buffer(u8) = try growth.buffer(u8).init(1 << 10);
+    defer out.deinit();
+
+    var size: usize = 1;
+    while (size <= 1 << 16) : (size *= 2) {
+        const message = try std.testing.allocator.alloc(u8, "ventijs".len * size);
+        defer std.testing.allocator.free(message);
+        for (0..size) |repeat| {
+            @memcpy(message[repeat * "ventijs".len ..][0.."ventijs".len], "ventijs");
+        }
+        const compressed = try compressor.compress(message, 1 << 20);
+        decompressor.clear();
+        try decompressor.stage(compressed, 1 << 20);
+        const plain = try decompressor.inflate(&out, 1 << 20);
+        try testing.expectEqualSlices(u8, message, plain);
+    }
+}
+
 test "a message that inflates past the ceiling is refused rather than delivered short" {
     // The bound is the storage, not a check afterwards: libdeflate reports insufficient
     // space and the message is a 1009 rather than a silently short one. A real stream is

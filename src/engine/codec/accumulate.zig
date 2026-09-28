@@ -14,6 +14,7 @@
 //! UTF-8 by construction.
 
 const zslay = @import("zslay");
+const uwz = @import("uWebZockets");
 const events = @import("events.zig");
 const utf8 = @import("utf8.zig");
 
@@ -39,7 +40,7 @@ pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !vo
     const count: usize = @intCast(@min(remaining, available));
     const chunk = input[offset.*..][0..count];
 
-    if (decoded.masking_key) |key| zslay.frame.mask(@constCast(chunk), key, position);
+    if (decoded.masking_key) |key| uwz.websocket_mask.apply(@constCast(chunk), key, position);
     offset.* += count;
     peer.conn.advance_payload_read(count) catch return error.ProtocolError;
 

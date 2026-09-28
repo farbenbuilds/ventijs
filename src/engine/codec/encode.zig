@@ -6,10 +6,13 @@
 //!
 //! The masking discipline is the part a peer can be attacked through, so it is decided
 //! here and nowhere else: a server must not mask, and a client must mask with a fresh
-//! key from the operating system for every frame.
+//! key from the operating system for every frame. The mask itself is the engine's
+//! `websocket_mask`, which is the same primitive the engine route masks with and picks
+//! a vector path where the CPU has one.
 
 const std = @import("std");
 const zslay = @import("zslay");
+const uwz = @import("uWebZockets");
 const capacities = @import("capacities.zig");
 const events = @import("events.zig");
 const growth = @import("growth.zig");
@@ -121,7 +124,7 @@ pub fn transmit() type {
             // After the header and before the mask: RSV1 is in the first octet and the
             // mask covers the payload only.
             if (wire.compressed) rsv1.mark(self.buffer.items[0..written]);
-            if (key) |drawn| zslay.frame.mask(start, drawn, 0);
+            if (key) |drawn| uwz.websocket_mask.apply(start, drawn, 0);
             self.length = written + wire.bytes.len;
             self.masked = masked;
             return .{ .ok = self.length };
