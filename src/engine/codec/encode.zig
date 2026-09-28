@@ -6,9 +6,8 @@
 //!
 //! The masking discipline is the part a peer can be attacked through, so it is decided
 //! here and nowhere else: a server must not mask, and a client must mask with a fresh
-//! key from the operating system for every frame. The mask itself is the engine's
-//! `websocket_mask`, which is the same primitive the engine route masks with and picks
-//! a vector path where the CPU has one.
+//! key per frame. The mask is the engine's `websocket_mask`, the primitive the engine
+//! route masks with too.
 
 const std = @import("std");
 const zslay = @import("zslay");
@@ -37,9 +36,8 @@ pub fn transmit() type {
         /// Allocated only once a connection actually compresses something.
         compress: deflate.Compressor = .{},
 
-        /// The formatted frame waiting to be copied out. One slot because a caller
-        /// encodes, writes, and encodes again; a caller that needs to interleave two frames
-        /// has to drain this one first, which a single-threaded writer already follows.
+        /// The formatted frame waiting to be copied out. One slot, because a caller
+        /// encodes, writes, and encodes again.
         buffer: growth.buffer(u8) = .{},
         length: usize = 0,
         masked: bool = false,
@@ -61,13 +59,14 @@ pub fn transmit() type {
 
         /// Formats one frame and returns its length.
         ///
-        /// `compress` asks for the payload to be compressed and RSV1 set, and it is
-        /// honoured only for a complete data message: a control frame is never
-        /// compressed, and a fragmented message goes out uncompressed, because
-        /// per-frame deflate streams with no context between them are not something a
-        /// receiver can concatenate. RSV1 marks the *first* frame of a message, which
-        /// is why a fragment never carries it.
-        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool) outbound.Encoded {
+        /// `compress` asks for a compressed payload with RSV1 set, honoured only for a
+        /// complete data message: RSV1 marks the *first* frame of a message, and a
+        /// per-frame deflate stream with no context between frames is not something a
+        /// receiver can concatenate.
+        ///
+        /// `mask` is `ws`'s `generateMask`: the caller's own four bytes, or empty to draw
+        /// one from the operating system. A server never masks either way.
+        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8) outbound.Encoded {
             const opcode = header.wire_opcode(kind) orelse return .{ .failed = .invalid_opcode };
             if (payload.len > self.max_message_bytes) return .{ .failed = .unsupported_message_length };
             const control = opcode.is_control();
@@ -100,13 +99,18 @@ pub fn transmit() type {
 
             var key: ?zslay.MaskingKey = null;
             if (masked) {
-                var drawn: zslay.MaskingKey = undefined;
-                header.draw_masking_key(&drawn) catch return .{ .failed = .protocol_error };
-                key = drawn;
+                var chosen: zslay.MaskingKey = undefined;
+                if (mask.len == 0) {
+                    header.draw_masking_key(&chosen) catch return .{ .failed = .protocol_error };
+                } else {
+                    if (mask.len != chosen.len) return .{ .failed = .invalid_mask };
+                    @memcpy(&chosen, mask);
+                }
+                key = chosen;
             }
             // One buffer for the whole frame, because the boundary hands JavaScript a
-            // single `Buffer` of it and a caller that stitched a header to a payload
-            // across an FFI call could get the header size wrong.
+            // single `Buffer` and a caller stitching a header to a payload across the
+            // boundary could get the header size wrong.
             const framed = std.math.add(usize, wire.bytes.len, header_capacity) catch {
                 return .{ .failed = .unsupported_message_length };
             };
@@ -141,6 +145,5 @@ pub fn transmit() type {
     };
 }
 
-/// RFC 6455 section 5.5, mirrored from `receive.zig` so the transmit path depends on no
-/// module it does not need.
+/// RFC 6455 section 5.5, mirrored from `receive.zig` so this path depends on less.
 const control_capacity: usize = 125;

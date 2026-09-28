@@ -62,14 +62,39 @@ test "every encoded control frame is a legal 125-byte frame" {
     try testing.expectEqual(codec.Failure.expected_fin, support.framed(&peer, .close, false, "").result.failed);
 }
 
+test "a caller's own mask is the key that goes on the wire" {
+    // `ws`'s `generateMask`, and the reason it has to be four bytes rather than "some
+    // bytes": the key is the mask, and a shorter one would produce a frame a peer
+    // unmasks into the wrong plaintext.
+    var peer = support.client();
+    const wanted = [4]u8{ 0xde, 0xad, 0xbe, 0xef };
+    const length = peer.tx.encode(.text, true, "hello", false, &wanted).ok;
+    const frame = peer.tx.bytes();
+    // Two header bytes, then the key, then the masked payload.
+    try testing.expectEqualSlices(u8, &wanted, frame[2..6]);
+
+    // And the frame it produces is the frame that key describes: the payload unmasks
+    // back to the bytes that went in, which is what a peer will do with it.
+    var plain: [4]u8 = undefined;
+    for (0..4) |index| plain[index] = frame[6 + index] ^ wanted[index];
+    try testing.expectEqualSlices(u8, "hell", &plain);
+    try testing.expectEqual(@as(usize, 11), length);
+}
+
+test "a mask that is not four bytes is refused before anything is framed" {
+    var peer = support.client();
+    try testing.expectEqual(
+        codec.Failure.invalid_mask,
+        peer.tx.encode(.text, true, "hello", false, "abc").failed,
+    );
+}
+
 test "the encoder refuses a payload over the cap" {
-    // A different capacity, so the shared fixture's type does not apply and the
-    // transmit state is reached directly rather than through a helper.
     const Small = codec.codec(2);
     var peer = Small.init(.server, trusted(8, 8)) catch unreachable;
     defer peer.deinit();
-    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.tx.encode(.text, true, "123456789", false).failed);
-    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false).ok);
+    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.tx.encode(.text, true, "123456789", false, &.{}).failed);
+    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false, &.{}).ok);
 }
 
 test "a round trip through the encoder and the decoder preserves the message" {

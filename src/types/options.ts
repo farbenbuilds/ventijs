@@ -1,4 +1,9 @@
-import type { PerMessageDeflateOptions, ServerOptions } from "./ws";
+import type {
+  ClientOptions,
+  FinishRequestCallback,
+  PerMessageDeflateOptions,
+  ServerOptions,
+} from "./ws";
 
 export type ZlibDeflateOptions = PerMessageDeflateOptions["zlibDeflateOptions"];
 
@@ -66,4 +71,10 @@ export type NormalizedClientOptions = {
   readonly closeTimeout: number;
   readonly origin: string | undefined;
   readonly headers: Readonly<Record<string, string>> | undefined;
+  /// `ws`'s `finishRequest`: the caller finishes the request itself, which means it
+  /// owns the `end()`. Declared by `@types/ws`, so unlike `maxFragments` a typed caller
+  /// reaches it without a cast.
+  readonly finishRequest: FinishRequestCallback | undefined;
+  /// `ws`'s `generateMask`, read as given. A four-byte buffer the callback fills.
+  readonly generateMask: ClientOptions["generateMask"];
 };

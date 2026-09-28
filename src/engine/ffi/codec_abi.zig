@@ -63,7 +63,7 @@ pub fn event_kind(ordinal: Arg) ?state.Kind {
 pub fn encode_failure(failure: state.Failure) EncodeFailure {
     return switch (failure) {
         .invalid_opcode => .unexpected_opcode,
-        .unsupported_message_length => .message_too_large,
+        .unsupported_message_length, .invalid_mask => .message_too_large,
         else => .protocol_error,
     };
 }

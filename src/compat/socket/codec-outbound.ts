@@ -25,6 +25,20 @@ function ordinalOf(kind: CodecKindName): number {
   return CODEC_KINDS.indexOf(kind);
 }
 
+/// The caller's own masking key, or empty for the engine to draw one.
+///
+/// Reused across frames rather than allocated per frame: `generateMask` is called before
+/// every masked frame and an allocation here would be one per send on the client path.
+/// A server never masks, so `state.isServer` answers before the callback is asked, which
+/// is what `ws` does and what keeps a server's `generateMask` from being called at all.
+function maskFor(state: SocketState): Uint8Array {
+  if (state.isServer || state.generateMask === null) return NO_MASK;
+  state.generateMask(state.maskScratch);
+  return state.maskScratch;
+}
+
+const NO_MASK = new Uint8Array(0);
+
 /// Frames one message and writes it.
 ///
 /// A server does not mask, so the role is decided by the codec rather than by the
@@ -51,7 +65,7 @@ export function writeFrame(
   const handle = state.codec;
   if (handle === null) return "closed";
   if (!isWritable(state)) return state.transport?.writableEnded === true ? "closed" : "closing";
-  const length = encodeCodecFrame(handle, ordinalOf(kind), fin, payload, compress);
+  const length = encodeCodecFrame(handle, ordinalOf(kind), fin, payload, compress, maskFor(state));
   if (length < 0) return encodeFailure(-length);
   const framed = codecOutbound(handle);
   if (state.transport === null) return "closed";

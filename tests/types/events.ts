@@ -93,6 +93,8 @@ export const socketState: SocketState = {
   closeTimer: null,
   closeTimeout: 30_000,
   autoPong: true,
+  generateMask: null,
+  maskScratch: Buffer.alloc(4),
   listeners: createRegistry<SocketEventMap>(),
   maxListeners: 10,
   warned: new Set<string>(),

@@ -65,6 +65,8 @@ export function createSocketState(): SocketState {
     compressible: false,
     threshold: 0,
     autoPong: true,
+    generateMask: null,
+    maskScratch: Buffer.alloc(4),
     listeners: createRegistry<SocketEventMap>(),
     maxListeners: 10,
     warned: new Set<string>(),

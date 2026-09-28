@@ -58,6 +58,7 @@ export function connectSocket(
   state.url = parsed.url;
   state.closeTimeout = normalized.closeTimeout;
   state.autoPong = normalized.autoPong;
+  state.generateMask = normalized.generateMask ?? null;
   state.allowSynchronousEvents = normalized.allowSynchronousEvents;
   state.validateUtf8 = !normalized.skipUTF8Validation;
   state.maxPayload = normalized.maxPayload;

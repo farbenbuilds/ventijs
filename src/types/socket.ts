@@ -127,6 +127,12 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// Whether a ping is answered automatically. On the socket because the decision is
   /// made per frame in the inbound path, where the peer is known to be a client.
   autoPong: boolean;
+  /// `ws`'s `generateMask`: fills four bytes with the key for one masked frame, or null
+  /// to let the engine draw one. Client-side only, because a server never masks.
+  generateMask: ((mask: Buffer) => void) | null;
+  /// The four bytes `generateMask` fills, held on the state so the per-frame call does
+  /// not allocate on the client's send path.
+  maskScratch: Buffer;
 };
 
 export type SocketRegistry = Registry<SocketEventMap>;

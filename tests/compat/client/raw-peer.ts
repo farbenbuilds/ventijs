@@ -12,6 +12,9 @@ const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 export type RawPeer = {
   readonly url: string;
+  /// The first socket a client opened, for a test that has to read the frames it sends
+  /// rather than the 101 it sends first.
+  readonly accepted: Promise<Socket>;
   close(): Promise<void>;
 };
 
@@ -24,8 +27,13 @@ export async function rawAcceptServer(
   status = "101 Switching Protocols",
 ): Promise<RawPeer> {
   const sockets: Socket[] = [];
+  let announce: (socket: Socket) => void = () => undefined;
+  const accepted = new Promise<Socket>((resolve) => {
+    announce = resolve;
+  });
   const server: Server = createServer((socket) => {
     sockets.push(socket);
+    announce(socket);
     let buffered = Buffer.alloc(0);
     let answered = false;
     socket.on("error", () => undefined);
@@ -61,6 +69,7 @@ export async function rawAcceptServer(
   });
   return {
     url: `ws://127.0.0.1:${(server.address() as { port: number }).port}`,
+    accepted,
     close: () => {
       for (const socket of sockets) socket.destroy();
       return new Promise<void>((resolve) => {

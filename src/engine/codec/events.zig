@@ -9,30 +9,22 @@ const zslay = @import("zslay");
 
 /// What a completed frame means to the caller.
 ///
-/// `text` and `binary` are the two halves of a reassembled data message, and
-/// `ping`, `pong`, and `close` are the control frames, which RFC 6455 section 5.5
-/// permits to be interleaved between the fragments of a data message. The
-/// ordinals are the ABI: `src/binding/codec.ts` carries the matching table, so
-/// they must keep this order.
+/// `text` and `binary` are the two halves of a reassembled data message; `ping`, `pong` and
+/// `close` are the control frames, which RFC 6455 section 5.5 lets a peer interleave
+/// between the fragments of one message. The ordinals are the ABI:
+/// `src/binding/codec-status.ts` carries the matching table, so keep this order.
 pub const Kind = enum(u8) {
     text = 0,
     binary = 1,
     ping = 2,
     pong = 3,
     close = 4,
-    /// A frame the codec refused. The connection is finished at that point, but the
-    /// event is still queued so a caller has one place to learn why rather than
-    /// having to correlate a close code with a timestamp.
+    /// A frame the codec refused. The connection is finished, but the event is still
+    /// queued so a caller has one place to learn why.
     rejected = 5,
-    /// The continuation half of a fragmented outbound message, which is what a
-    /// caller produces by sending with `fin: false` and then again. Absent until a
-    /// caller could actually fragment: `ws` documents `send`'s `fin` option, a
-    /// peer that receives `text FIN=1` after `text FIN=0` reads two complete
-    /// messages rather than one, and the facade had no way to write the opcode
-    /// RFC 6455 requires here.
-    ///
-    /// Last in the enum so the ordinals above stay where they are: they are the
-    /// ABI that `src/binding/codec.ts` carries as a table.
+    /// The continuation half of a fragmented outbound message, which is what a caller
+    /// produces by sending with `fin: false` and then again. Last in the enum so the
+    /// ordinals above keep their values.
     continuation = 6,
 };
 
@@ -58,7 +50,13 @@ pub const Failure = enum(u8) {
     too_many_buffered_parts,
     unsupported_data_payload_length,
     unsupported_message_length,
+    /// The one fault with no `ws` equivalent: a peer sent a compressed payload that is
+    /// not a DEFLATE stream, which `ws` reports as a 1007 with no code at all.
     invalid_compressed_data,
+    /// A `generateMask` callback left a buffer that is not four bytes, so there is no
+    /// key to mask with. A caller's own mistake, reported on the send callback, so the
+    /// close code below is never the one a peer sees.
+    invalid_mask,
 };
 
 /// The close code a parse failure maps to, per RFC 6455 section 7.4.1.
@@ -81,6 +79,7 @@ pub fn close_code_for(failure: Failure) u16 {
         .unexpected_rsv_1,
         .unexpected_rsv_2_3,
         .unsupported_data_payload_length,
+        .invalid_mask,
         => CLOSE_PROTOCOL_ERROR,
     };
 }
@@ -92,9 +91,8 @@ pub fn failure_ordinal(failure: Failure) u8 {
     return @intFromEnum(failure) + 1;
 }
 
-/// The highest `Kind` ordinal, which is what the boundary checks a JavaScript ordinal
-/// against. Named as the last member on purpose: the bound was once written against
-/// `rejected`, so a kind added after it produced a kind the boundary refused to send.
+/// The highest `Kind` ordinal, which is what the boundary checks against. Named as the
+/// last member on purpose: the bound was once written against `rejected`.
 pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
 
 /// Whether an opcode may carry a payload of more than 125 bytes.

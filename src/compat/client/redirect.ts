@@ -16,7 +16,7 @@ import { emitEvent } from "../events/emitter";
 import { reportUnexpected } from "./unexpected";
 import { createError } from "../errors";
 import { parseAddress, type ClientAddress } from "./address";
-import { abort, create } from "./dial";
+import { abort, create, finish } from "./dial";
 import { buildRequest, newKey } from "./request";
 import { stripCredentials } from "./credentials";
 import type { Attempt } from "./connect";
@@ -109,7 +109,7 @@ function follow(
   // Before the hop goes out, which is the only order in which a listener can still
   // change it: `ws` creates the request, emits, and then ends it.
   emitEvent(attempt.state, "redirect", next.url, hop);
-  hop.end();
+  finish(attempt, hop);
 }
 
 /// Resolves a `Location` against the address it came from, which is what a relative

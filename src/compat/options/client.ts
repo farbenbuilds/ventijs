@@ -38,5 +38,7 @@ export function normalizeClientOptions(options?: ClientOptions): NormalizedClien
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, true),
     origin: source.origin,
     headers: source.headers === undefined ? undefined : { ...source.headers },
+    finishRequest: source.finishRequest,
+    generateMask: source.generateMask,
   };
 }

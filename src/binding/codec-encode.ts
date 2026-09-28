@@ -13,16 +13,25 @@ import { loadAddon } from "./load";
 /// The framed length is returned so the caller can allocate before copying, which
 /// is what keeps the header arithmetic out of TypeScript: nothing here knows how
 /// many bytes a header takes for a given payload.
+///
+/// `mask` is the caller's own masking key, or empty to let the engine draw one. A
+/// server never masks, so the role is what decides it and `mask` is read only on the
+/// client side.
 export function encodeCodecFrame(
   handle: bigint,
   kind: number,
   fin: boolean,
   payload: Uint8Array,
   compress: boolean,
+  mask: Uint8Array = EMPTY,
 ): number {
   const addon = loadAddon();
-  return callNative(() => addon.codecEncode(handle, kind, fin ? 1 : 0, payload, compress ? 1 : 0));
+  return callNative(() =>
+    addon.codecEncode(handle, kind, fin ? 1 : 0, payload, compress ? 1 : 0, mask),
+  );
 }
+
+const EMPTY = new Uint8Array(0);
 
 /// The framed bytes waiting to be copied out, as a Node-owned buffer.
 export function codecOutbound(handle: bigint): Buffer {

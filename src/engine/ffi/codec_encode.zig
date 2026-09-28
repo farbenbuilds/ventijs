@@ -22,6 +22,8 @@ const handles = @import("../codec/handles.zig");
 /// rather than a guarantee: `encode.transmit` declines it for a control frame and for a
 /// fragment, because RSV1 marks the first frame of a message and a compressed fragmented
 /// message needs a deflate context a one-shot codec does not carry between frames.
+/// `mask` is empty to draw a key in Zig, or the caller's own four bytes, which is
+/// `ws`'s `generateMask`.
 pub fn codec_encode(
     env: napi.Env,
     handle: u64,
@@ -29,11 +31,12 @@ pub fn codec_encode(
     fin: abi.Arg,
     payload: []const u8,
     compress: abi.Arg,
+    mask: []const u8,
 ) !abi.Count {
     _ = env;
     const peer = handles.resolve(handle) orelse return abi.encode_refusal(.stale_handle);
     const wanted = abi.event_kind(kind) orelse return abi.encode_refusal(.unexpected_opcode);
-    return switch (peer.tx.encode(wanted, fin != 0, payload, compress != 0)) {
+    return switch (peer.tx.encode(wanted, fin != 0, payload, compress != 0, mask)) {
         .ok => |length| @intCast(length),
         .failed => |failure| abi.encode_refusal(abi.encode_failure(failure)),
     };
