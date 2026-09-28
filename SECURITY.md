@@ -1,17 +1,5 @@
 # Security Policy
 
-## Supported versions
-
-Security fixes apply to the current development revision and the latest
-published release. Older snapshots and unreleased local builds do not receive
-backports.
-
-| Version                      | Supported |
-| ---------------------------- | --------- |
-| Current development revision | Yes       |
-| Latest published release     | Yes       |
-| Older tagged releases        | No        |
-
 ## Reporting a vulnerability
 
 Do not open a public issue, pull request, or discussion that contains an
@@ -33,108 +21,90 @@ fix and regression test, and coordinate disclosure. Response time depends on
 severity and maintainer availability; no fixed service-level agreement is
 offered.
 
+## Supported versions
+
+| Version                                | Supported                                      |
+| -------------------------------------- | ---------------------------------------------- |
+| `main`                                 | Yes                                            |
+| Any published release                  | None; the version is `0.0.0` and no tag exists |
+| Anything older than the current `main` | No                                             |
+
+ventijs is pre-alpha, so a fix lands on `main` and is not backported. A consumer
+who pins a commit has to apply the patch themselves, and gets no coverage on a
+platform CI does not build, which today means everything but Linux.
+
 ## Threat model
 
-The application embedding ventijs is trusted. Network peers are untrusted. The
-attacker-controlled surface is the same as a raw WebSocket server:
-
-- the HTTP upgrade request, including headers, extensions, and path;
-- every WebSocket frame, including fragmentation, control frames, masking keys,
-  and claimed payload lengths;
-- compressed payloads when per-message deflate is negotiated;
-- connection churn, idle peers, and traffic volume.
-
-Application code passing options to the constructors is trusted. Config values
-are still validated explicitly, because accidental misconfiguration should
-produce a clear error rather than undefined engine behavior.
+The application embedding ventijs is trusted; network peers are not. The
+attacker-controlled surface is the same as a raw WebSocket server: the HTTP
+upgrade request including its headers, extensions, and path; every frame
+including fragmentation, control frames, masking keys, and claimed payload
+lengths; compressed payloads when per-message deflate is negotiated; and
+connection churn, idle peers, and traffic volume. Constructor options come from
+trusted code and are validated anyway, so a misconfiguration produces an error
+rather than undefined engine behavior.
 
 ## Security boundaries
 
-The Zig engine parses and frames all untrusted bytes, and never exposes engine
-slabs, pointers, or offsets to JavaScript. The two lifetime rules below are the
-memory-safety contract at the FFI boundary.
+The Zig engine parses and frames all untrusted bytes and never exposes engine
+slabs, pointers, or offsets to JavaScript. Two lifetime rules are the
+memory-safety contract at the FFI boundary. An outbound buffer is borrowed only
+for the duration of the native call and copied into the bounded outbound queue
+before it returns, so retaining or freeing the `Buffer` afterwards changes
+nothing. An inbound payload is copied into a Node-owned `Buffer` inside
+`takeSocketMessage`, which the engine reuses for the next frame, so the returned
+buffer is safe to retain past the handler and a caller that mutates it cannot
+reach the engine, which `tests/binding/socket-echo.test.ts` exercises against a
+real client.
 
-Outbound buffers are borrowed only for the duration of the native call and
-copied into the bounded outbound queue before it returns.
-`tests/binding/socket.test.ts` asserts that copy.
-
-Inbound payloads are copied into Node-owned `Buffer` instances inside
-`takeSocketMessage`, and the engine's own message buffer is reused for the next
-frame, so the copy is the only copy and the returned buffer is safe to retain
-past the handler. `tests/binding/socket-echo.test.ts` exercises it end to end
-against a real client. The residual risk is the reverse direction: a caller that
-mutates the returned `Buffer` cannot affect the engine, because the ring slot is
-already freed.
-[COMPATIBILITY.md](COMPATIBILITY.md) records the state of both.
-
-Every native handle carries a generation counter. A handle used after close, or
-after its slot is reused, resolves to a typed error. Completion callbacks latch
-terminal state before dispatch, so `close` fires exactly once even under
-teardown races.
-
-The public surface deliberately excludes features that would widen the attack
-surface without a compatibility requirement:
-
-- no synchronous extension callbacks that run arbitrary JavaScript from an
-  engine thread;
-- no runtime code loading, `eval`, or `new Function`;
-- no remote artifact fetching. The native addon is resolved from the installed
-  package layout only.
+Every native handle packs a generation counter into the same word as its state
+(`src/engine/socket/handles.zig`), so a handle used after close, or after its slot
+is reused, resolves to a typed error, and completion callbacks latch terminal
+state before dispatch so `close` fires exactly once under teardown races. Three things are deliberately absent: no `eval` and no `new Function`,
+no network fetch of a build artifact (`src/binding/load.ts` resolves the addon
+from the installed package layout only), and no extension callback that runs
+arbitrary JavaScript from an engine thread. Each rule's evidence test is named in
+[COMPATIBILITY.md](COMPATIBILITY.md#boundary-and-lifetime-invariants).
 
 ## Resource limits
 
-Deployments must size the engine for their traffic and apply normal operating
-system limits such as file descriptors and memory caps. The compatibility layer
-records the `ws` options that describe limits, and the engine enforces the
-capacities it was compiled with:
-
-- `maxPayload` is validated and recorded but not yet read, so it is not a limit
-  today. The limit that applies is the engine's compiled
-  `message_capacity = 32 * 1024` in `src/engine/server/options.zig`, a
-  `comptime` constant baked into the addon. An oversized frame is closed by the
-  engine with code `1009` and no fallback buffer is allocated.
-- Outbound queues are bounded. When a queue reaches its high-water mark, the
-  engine reports backpressure and `bufferedAmount` reflects the queued bytes;
-  `send` returns no value, matching `ws`. Producers that ignore backpressure
-  cannot grow memory without bound.
-- Planned: idle connections swept by a configurable timeout. Until that option
-  lands, deployments must rely on their own liveness checks.
-- Per-message deflate is normalised and never negotiated, so no compressed
-  payload is accepted today. When negotiation lands it requires
-  no-context-takeover, and decompression has to be capped by the negotiated
-  message capacity so a compressed expansion bomb cannot exceed it.
+Every engine capacity is a `comptime` constant, so it is a property of the build
+and no JavaScript option raises it. [CODEBASE.md](CODEBASE.md#capacities) gives
+each constant, its value, its file, and the reason for the number;
+[COMPATIBILITY.md](COMPATIBILITY.md#engine-capacity-limits) says which socket
+route each one binds. Two of them bound the engine's memory rather than one
+message: a connection past the per-server cap is terminated on open, and a burst
+larger than the inbound ring is dropped and counted by `serverDroppedMessages`,
+because the engine cannot stop a read its consumer has not drained. Every
+outbound queue is bounded, so a producer that ignores backpressure cannot grow
+memory without limit.
 
 ## Dependency policy
 
-The published package has exactly two runtime dependencies: `napi-zig` and
-`uWebZockets`. Both are pinned exactly. The engine vendors BoringSSL, lsquic,
-zslay, libxev, libdeflate, and related components; their revisions and licenses
-are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Engine updates
-require a fresh native build, the full `ws` conformance suite, and the Autobahn
-gate before release.
-
-Do not add a runtime dependency for functionality the standard library or the
-engine already provides. Development tooling is not shipped and is excluded
-from the published tarball.
+The published package declares no npm runtime dependency. The addon is
+self-contained: µWebZockets is the first-party engine and `napi-zig` the only
+third-party runtime component, both pinned by hash in `build.zig.zon`, and the
+engine vendors BoringSSL, lsquic, libdeflate, zlib, and the rest of its own
+dependencies; [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records every
+revision and license. Do not add one the standard library or the engine already
+provides.
 
 ## Verification
 
-CI builds and executes the addon on `ubuntu-24.04` only. The matrix in
-[CI_CD_PIPELINE.md](CI_CD_PIPELINE.md), covering Linux, musl, macOS, and
-Windows, is the target and no other runner executes the artifact today, so no
-claim of platform coverage is made here. The compatibility suite runs the same
-scenarios against `ws` and ventijs and compares observable behaviour. The
-Autobahn harness exists in the tree and is not a CI job yet; it probes the
-target before it runs, and it is capacity-scoped, because 128 of the 517
-selected cases exceed the engine's 32 KiB message limit and are reported as
-`skipped-capacity` rather than as passes. These controls reduce risk; they do
-not guarantee the absence of defects. Consumers should pin an exact version,
-review the shipped licences, and load-test under their own workload before
-production deployment.
+[CI_CD_PIPELINE.md](CI_CD_PIPELINE.md) lists every workflow and what each gates
+on, on `ubuntu-24.04` only. The conformance suite compares `ws` and ventijs on
+the same scenarios. The Autobahn harness is a CI job (`autobahn.yml`), gated
+against the committed known-failure baseline, and a case above the engine's
+compiled message capacity is reported as `skipped-capacity` rather than as a
+pass, so a capacity gap cannot read as conformance. The recorded run is in
+[COMPATIBILITY.md](COMPATIBILITY.md#rfc-6455-conformance).
+
+No gate establishes the absence of defects. Pin an exact version, review the
+shipped licenses, and load-test under your own workload before deploying.
 
 ## Disclosure
 
 Please allow a reasonable remediation and release window before publication.
-Security advisories will credit reporters who request attribution and will
-describe affected versions, impact, and upgrade guidance without exposing
-unnecessary exploit detail before a fix is available.
+Security advisories credit reporters who ask for attribution, and describe
+affected versions, impact, and upgrade guidance without exposing exploit detail
+before a fix is available.

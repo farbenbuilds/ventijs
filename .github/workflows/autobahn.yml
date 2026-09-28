@@ -178,12 +178,11 @@ jobs:
         # Four concurrent fuzzing clients against four targets, in one job that
         # builds the addon once.
         #
-        # The suite is 92 per cent of the job and its cost is a near-constant per
-        # case inside the Python client rather than anything on the Node or Zig
-        # side: 2086s for the 301 framing cases against 2100s for all 517. A
-        # matrix of four *jobs* would cut wall clock the same way but pay the
-        # addon build four times, so it is sharded in-process instead, which is
-        # strictly better on both axes.
+        # The suite is most of the job and its cost is a near-constant per case
+        # inside the Python client rather than anything on the Node or Zig side,
+        # so the two selections cost about the same. A matrix of four *jobs* would
+        # cut wall clock the same way but pay the addon build four times, so it is
+        # sharded in-process instead.
         #
         # The per-case `duration` the report already carries is rolled up per
         # group in the summary, so the next run can re-derive the shard weights

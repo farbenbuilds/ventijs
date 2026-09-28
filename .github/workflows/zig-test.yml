@@ -111,12 +111,10 @@ jobs:
         run: pnpm exec tsdown && pnpm run typecheck:dist
 
       - name: Run the suite with the addon
-        # This job is the only one that builds the addon, so it runs the whole
-        # vitest suite: every suite that builds a WebSocket needs the frame codec,
-        # which is in the addon, and the fast job in ts-test.yml runs only the
-        # suites that provably do not. The paths are therefore not listed here,
-        # because a list is a claim about which files need the addon and that claim
-        # went stale once when the codec landed.
+        # Every suite that builds a WebSocket needs the frame codec, which is in
+        # the addon, so this runs the whole vitest suite. The paths are not listed:
+        # a list is a claim about which files need the addon, and that claim went
+        # stale once when the codec landed.
         #
         # Serialised because each file builds and tears down a real engine server,
         # and running them in parallel makes engine server creation fail

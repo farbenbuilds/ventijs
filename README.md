@@ -73,18 +73,18 @@ Option defaults match `ws`: `maxPayload` 100 MiB, `maxFragments` 16384, and
 `closeTimeout` 30000 ms. The itemised matrix, with the owner module and the
 evidence test behind every row, is [COMPATIBILITY.md](COMPATIBILITY.md).
 
-| Area                                                                                | State                                                                                                   |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `WebSocketServer`: options, events, `handleUpgrade`, `shouldHandle`, `verifyClient` | Works, compared property for property against `ws`                                                      |
-| Server-side `WebSocket`: properties, `on*` and DOM handlers, ready states           | Works, with exactly-once `close`                                                                        |
-| `WebSocket` client: `net` and `tls`, redirects, `ws+unix:`, `unexpected-response`   | Works against a real `ws` server                                                                        |
-| `send`, fragmentation, `binaryType`, `ping`/`pong`, close codes                     | Works both directions; `maxPayload` and `maxFragments` are enforced per connection                      |
-| `permessage-deflate`                                                                | Works; context takeover is declined in both directions ([why](COMPATIBILITY.md#shared-with-the-engine)) |
-| `createWebSocketStream`, `clientTracking`, `server.options`                         | Works, including the `WebSocket` class option                                                           |
-| Engine route message cap, 64 KiB                                                    | A property of the build. [Two limits](#two-limits-worth-knowing)                                        |
-| Engine route inbound ring, 64 messages                                              | Excess is dropped and counted. Same section                                                             |
-| RFC 6455 Autobahn suite                                                             | Regression gate; 93 of 517 cases are above the engine route's cap, so 424 are evaluated                 |
-| Client `wss:` to `ws:` downgrade, redirect hop limit, `origin`, `handshakeTimeout`  | Implemented with no behavioural test ([outstanding](COMPATIBILITY.md#what-is-still-outstanding))        |
+| Area                                                                                | State                                                                                                                             |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `WebSocketServer`: options, events, `handleUpgrade`, `shouldHandle`, `verifyClient` | Works, compared property for property against `ws`                                                                                |
+| Server-side `WebSocket`: properties, `on*` and DOM handlers, ready states           | Works, with exactly-once `close`                                                                                                  |
+| `WebSocket` client: `net` and `tls`, redirects, `ws+unix:`, `unexpected-response`   | Works against a real `ws` server                                                                                                  |
+| `send`, fragmentation, `binaryType`, `ping`/`pong`, close codes                     | Works both directions; `maxPayload` and `maxFragments` are enforced per connection                                                |
+| `permessage-deflate`                                                                | Works; context takeover is declined in both directions ([why](COMPATIBILITY.md#shared-with-the-engine))                           |
+| `createWebSocketStream`, `clientTracking`, `server.options`                         | Works, including the `WebSocket` class option                                                                                     |
+| Engine route message cap, 64 KiB                                                    | A property of the build. [Two limits](#two-limits-worth-knowing)                                                                  |
+| Engine route inbound ring, 64 messages                                              | Excess is dropped and counted. Same section                                                                                       |
+| RFC 6455 Autobahn suite                                                             | Regression gate; 424 of 517 cases in the full run, 268 in the framing selection ([matrix](COMPATIBILITY.md#rfc-6455-conformance)) |
+| Client `wss:` to `ws:` downgrade, redirect hop limit, `origin`, `handshakeTimeout`  | Implemented with no behavioural test ([outstanding](COMPATIBILITY.md#what-is-still-outstanding))                                  |
 
 ## Two limits worth knowing
 

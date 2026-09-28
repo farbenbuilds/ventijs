@@ -175,8 +175,8 @@ declarations through the package `exports` map; it needs `tsdown` output.
 ## Workflow notes
 
 - Commits follow Conventional Commits (`.github/COMMIT_CONVENTION.md`).
-  Scopes in use: `compat`, `napi`/`binding`, `types`, `protocol`, `engine`,
-  `build`, `deps`, `docs`, `ci`.
+  Scopes in use: `compat`, `binding`, `types`, `codec`, `protocol`, `engine`,
+  `build`, `deps`, `docs`, `ci`, `autobahn`, `lint`, `format`, `style`.
 - Before every commit, run `pnpm lint`, `pnpm format:check`, and
   `pnpm exec lefthook run pre-commit --all-files`; fix violations with
   `pnpm lint:fix` and `pnpm format`. Never bypass hooks with `--no-verify`.

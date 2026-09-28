@@ -7,9 +7,10 @@ import {
 } from "./expected-cases.ts";
 
 /// How much of the suite a run selects, and the counts the gate holds it to. `framing` drops
-/// the two per-message-deflate groups: 216 of 517 cases, every one `UNIMPLEMENTED` because
-/// `permessage-deflate` is normalised and never negotiated. It is not a speedup -- two runs
-/// measured 2100s for 517 cases and 2086s for 301 -- but the report states what it covered.
+/// the two per-message-deflate groups, 216 of 517 cases, because they are the slow ones
+/// and the compression wiring is on a separate change record. It is not much of a speedup:
+/// a per-case cost that is a near-constant inside the client makes the two selections
+/// cost about the same. What it buys is a report that says what it covered.
 export type SuiteMode = "framing" | "full";
 
 export type ModeCounts = {
