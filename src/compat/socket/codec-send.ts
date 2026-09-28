@@ -5,13 +5,14 @@ import { frameError, writeFrame } from "./codec-outbound";
 import { createError } from "../errors";
 import { reportFailure } from "./send-failure";
 
-/// The `ws` send options this route reads, resolved once per call. Both are wrong on the
-/// wire rather than absent when ignored: `binary: false` frames a binary message where
-/// `ws` frames text, and `fin: false` frames a complete message with the `fin` bit set.
-/// Neither produced an error, and both are found only against a correct peer.
+/// The `ws` send options this route reads, resolved once per call against the defaults at
+/// `websocket.js:472-478`. All four were wrong on the wire rather than absent when ignored,
+/// and each is found only against a peer that reads the bytes.
 export type FrameOptions = {
   readonly binary: boolean;
   readonly fin: boolean;
+  readonly compress: boolean;
+  readonly mask: boolean;
 };
 
 /// A separate module from the staging path because its statuses are the codec's, not the
@@ -23,7 +24,7 @@ export function sendFramed(
   options: unknown,
   callback: unknown,
 ): void {
-  const framing = frameOptions(options, payload.binary);
+  const framing = frameOptions(options, payload.binary, state.isServer);
   // RFC 6455 section 5.4: the first frame of a fragmented message carries the data
   // opcode and every later frame carries opcode 0. Choosing the opcode from whether the
   // socket is mid-message is what makes `fin` a real fragmentation, not two messages.
@@ -37,7 +38,8 @@ export function sendFramed(
     kind,
     payload.bytes,
     framing.fin,
-    mayCompress(state, framing.fin, payload.bytes.length),
+    mayCompress(state, framing, payload.bytes.length),
+    framing.mask,
   );
   // Latched on success only, so a refused send leaves the message open to retry.
   if (status === "ok") state.fragmentsOpen = !framing.fin;
@@ -63,26 +65,41 @@ export function sendFramed(
 }
 
 /// Three rules, not preferences. The extension must be negotiated or RSV1 is a protocol
-/// error. The message must be complete, because a one-shot compressor cannot produce the
-/// sync flush a continuation frame needs; `ws` does compress those, so this is a
-/// documented subset and a fragmented message goes out uncompressed, which every peer
-/// reads. And the payload must reach the threshold, `ws`'s `permessage-deflate.js:56-57`
-/// default of 1024 bytes, below which deflate makes a message longer more often than not.
-function mayCompress(state: SocketState, fin: boolean, length: number): boolean {
-  if (!state.compressible || state.fragmentsOpen || !fin) return false;
+/// error, and the message must be complete, because a one-shot compressor cannot produce the
+/// sync flush a continuation frame needs; a fragmented message therefore goes out
+/// uncompressed, which every peer reads. The payload must also reach the threshold, `ws`'s
+/// 1024-byte default. The caller's `compress: false` short-circuits all three, which is how
+/// `ws` reads it: `rsv1` starts at `options.compress` and the threshold only lowers it.
+function mayCompress(state: SocketState, framing: FrameOptions, length: number): boolean {
+  if (!framing.compress || !state.compressible || !framing.fin || state.fragmentsOpen) {
+    return false;
+  }
   return length >= state.threshold;
 }
 
 /// An out-of-type value is ignored rather than coerced, as `ws` does with `opts.binary`.
-function frameOptions(options: unknown, autodetected: boolean): FrameOptions {
-  if (typeof options !== "object" || options === null) {
-    return { binary: autodetected, fin: true };
-  }
-  const source = options as { binary?: unknown; fin?: unknown };
+function frameOptions(options: unknown, autodetected: boolean, isServer: boolean): FrameOptions {
+  const source =
+    typeof options === "object" && options !== null ? (options as FrameOptionsRaw) : {};
   return {
-    binary: typeof source.binary === "boolean" ? source.binary : autodetected,
-    fin: typeof source.fin === "boolean" ? source.fin : true,
+    binary: booleanOr(source.binary, autodetected),
+    fin: booleanOr(source.fin, true),
+    compress: booleanOr(source.compress, true),
+    // A server never masks whatever the caller asked for, and `codec-outbound.ts` refuses it
+    // again; the default is the only place that decision is duplicated.
+    mask: booleanOr(source.mask, !isServer),
   };
+}
+
+type FrameOptionsRaw = {
+  binary?: unknown;
+  fin?: unknown;
+  compress?: unknown;
+  mask?: unknown;
+};
+
+function booleanOr(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function unhandledFrameStatus(status: never): Error {

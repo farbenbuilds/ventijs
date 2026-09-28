@@ -9,7 +9,8 @@ const handles = @import("../codec/handles.zig");
 /// The framed length is returned so the caller can allocate before copying; a negative
 /// return is the negated failure ordinal. `compress` is 1 to ask for compression with RSV1
 /// set, a request and not a guarantee -- `encode.transmit` declines it for a control frame
-/// or a fragment. `mask` empty draws a key in Zig, or it is `ws`'s `generateMask` bytes.
+/// or a fragment. `mask` empty draws a key in Zig, or it is `ws`'s `generateMask` bytes, and
+/// `mask_frame` is 0 for a client that asked for an unmasked frame.
 pub fn codec_encode(
     env: napi.Env,
     handle: u64,
@@ -17,12 +18,13 @@ pub fn codec_encode(
     fin: abi.Arg,
     payload: []const u8,
     compress: abi.Arg,
+    mask_frame: abi.Arg,
     mask: []const u8,
 ) !abi.Count {
     _ = env;
     const peer = handles.resolve(handle) orelse return abi.encode_refusal(.stale_handle);
     const wanted = abi.event_kind(kind) orelse return abi.encode_refusal(.unexpected_opcode);
-    return switch (peer.tx.encode(wanted, fin != 0, payload, compress != 0, mask)) {
+    return switch (peer.tx.encode(wanted, fin != 0, payload, compress != 0, mask, mask_frame != 0)) {
         .ok => |length| @intCast(length),
         .failed => |failure| abi.encode_refusal(abi.encode_failure(failure)),
     };

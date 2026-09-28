@@ -80,6 +80,7 @@ export const socketState: SocketState = {
   deliveryPaused: false,
   pendingInput: [],
   maxBufferedChunks: 256 * 1024,
+  pendingSend: null,
   validateUtf8: true,
   maxPayload: 100 * 1024 * 1024,
   maxFragments: 16 * 1024,

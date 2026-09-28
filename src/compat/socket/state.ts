@@ -63,6 +63,7 @@ export function createSocketState(): SocketState {
     maxPayload: DEFAULT_MAX_PAYLOAD,
     maxFragments: DEFAULT_MAX_FRAGMENTS,
     cancelHandshake: null,
+    pendingSend: null,
     compressible: false,
     threshold: 0,
     autoPong: true,

@@ -106,13 +106,16 @@ export type VentiAddon = {
   codecTake(handle: bigint): void;
   /// Returns the framed length, or a negative `codec.ts` encode-failure ordinal.
   /// `compress` asks for RSV1 and is declined for a control frame or a fragment.
-  /// `mask` is `generateMask`: four caller bytes, or empty to draw one here.
+  /// `maskFrame` is 0 for a caller that asked for an unmasked frame, which `ws` allows a
+  /// client to do with `send`'s `mask` option. `mask` is `generateMask`: four caller bytes,
+  /// or empty to draw one here, and is read only when `maskFrame` is set.
   codecEncode(
     handle: bigint,
     kind: number,
     fin: number,
     payload: Uint8Array,
     compress: number,
+    maskFrame: number,
     mask: Uint8Array,
   ): number;
   codecOutbound(handle: bigint): Buffer;
