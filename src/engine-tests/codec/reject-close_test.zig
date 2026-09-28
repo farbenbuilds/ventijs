@@ -1,11 +1,7 @@
-//! The faults a close payload and a declared length can have.
-//!
-//! Separate from the framing refusals because these are the two the parser accepts the
-//! header for and then rejects, so the deciding code is not in the two base octets. Both
-//! are easy to get wrong in the same direction: reporting a 1009 for a length nobody
-// could have sent blames the caller's `maxPayload` for a peer's frame, and reporting a
-//! generic protocol error for a reserved close code makes an ordinary proxy fault
-//! indistinguishable from a misbehaving client.
+//! The faults a close payload and a declared length can have: the two the parser accepts
+//! the header for and then rejects, so the deciding code is not in the two base octets.
+//! A reserved close code must not read as a generic protocol error, which would make an
+//! ordinary proxy fault look like a misbehaving client.
 
 const std = @import("std");
 const testing = std.testing;
@@ -25,13 +21,13 @@ test "a reserved opcode is an invalid opcode" {
 
 test "a declared length past 2^53 is an unsupported length rather than a size limit" {
     // `ws` reads the high 32 bits of the 64-bit length and refuses above 2^21, because
-    // no JavaScript number could describe a larger frame. Reporting 1009 instead would
-    // blame the caller's `maxPayload` for a frame nobody could have sent.
+    // no JavaScript number could describe a larger frame. 1009 is the size limit code,
+    // which is what `ws` uses here and not the protocol error a malformed frame gets.
     var peer = support.server();
     var frame: [14]u8 = .{ 0x82, 0xff, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 1, 2, 3, 4 };
     _ = peer.feed(&frame);
     try testing.expectEqual(codec.Failure.unsupported_data_payload_length, peer.pending_failure().?);
-    try testing.expectEqual(@as(u16, 1002), peer.failure_code());
+    try testing.expectEqual(@as(u16, 1009), peer.failure_code());
 }
 
 test "a close payload with a reserved code is an invalid close code" {

@@ -42,7 +42,7 @@ export function ingest(state: SocketState, chunk: Buffer): void {
     // connection.
     try {
       deliver(state, () => {
-        resume(state);
+        guardedResume(state);
       });
     } catch (error) {
       failOnThrow(state, error);
@@ -76,6 +76,18 @@ function failOnThrow(state: SocketState, error: unknown): void {
   );
   closeCodec(state);
   state.transport?.destroy();
+}
+
+/// What a deferred delivery resumes with, through the same guard as the read that
+/// started it: a throw from a handler on a `allowSynchronousEvents: false` socket
+/// arrives from a `setImmediate` and would otherwise lose the same tail.
+function guardedResume(state: SocketState): void {
+  try {
+    resume(state);
+  } catch (error) {
+    failOnThrow(state, error);
+    throw error;
+  }
 }
 
 /// What a deferred delivery resumes with. The pause is a *parse* pause, as in `ws`, so

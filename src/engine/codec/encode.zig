@@ -1,11 +1,8 @@
 //! The transmit half of the frame codec: one complete frame, formatted. A codec encodes
-//! rather than streams, so this holds one frame at a time and the caller allocates the
-//! `Buffer` it copies into from the length returned here.
-//!
-//! The masking discipline is the part a peer can be attacked through, so it is decided here
-//! and nowhere else: a server must not mask, and a client must mask with a fresh key per
-//! frame. The mask is the engine's `websocket_mask`, the primitive the engine route masks
-//! with too.
+//! rather than streams, so it holds one frame at a time and the caller allocates the
+//! `Buffer` from the length returned here. Masking is decided here and nowhere else,
+//! because it is the part a peer can attack: a server must not mask, a client must mask
+//! with a fresh key, and that key is the engine's `websocket_mask` primitive.
 
 const std = @import("std");
 const zslay = @import("zslay");

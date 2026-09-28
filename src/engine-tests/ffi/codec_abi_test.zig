@@ -1,9 +1,5 @@
-//! The codec boundary's numeric contract.
-//!
-//! `@intFromEnum` over a tagged union of two vocabularies reads the union's *tag*, not the
-//! member's ordinal, so a single union-typed helper reported every refusal as "zero bytes
-//! and no reason" and a caller read a full queue as a healthy connection. The mapping is
-//! one negated cast per vocabulary, and it is pinned here rather than left to inspection.
+//! The codec boundary's numeric contract. `@intFromEnum` over a tagged union of two
+//! vocabularies reads the union's tag, so a refusal is one negated cast per vocabulary.
 
 const abi = @import("../../engine/ffi/codec_abi.zig");
 const events = @import("../../engine/codec/events.zig");
@@ -24,8 +20,7 @@ test "an encode refusal is the negated ordinal" {
 }
 
 test "no ordinal is zero, so a refusal is never a count" {
-    // A zero ordinal would make "refused" and "consumed nothing" the same value, the one
-    // ambiguity the sign is there to remove.
+    // A zero ordinal would make "refused" and "consumed nothing" the same value.
     inline for (@typeInfo(abi.Outcome).@"enum".fields) |field| {
         try testing.expect(field.value != 0);
     }
@@ -46,9 +41,8 @@ test "the two vocabularies share ordinals because no call uses both" {
 }
 
 test "every event kind is sendable and one past the last is refused" {
-    // The check is against the *highest* kind, not a named one. It was written against
-    // `rejected`, so a kind added after it produced a `send` reporting a protocol error for
-    // a frame the caller had explicitly asked for.
+    // The check is against the *highest* kind, not a named one, so a kind added after it
+    // cannot slip past a `send` that reports a protocol error for a requested frame.
     var ordinal: u32 = 0;
     while (ordinal <= events.max_ordinal) : (ordinal += 1) {
         try testing.expect(abi.event_kind(ordinal) != null);

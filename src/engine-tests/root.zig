@@ -1,10 +1,7 @@
-//! Zig unit test root.
-//!
-//! Every testable module in `src/engine/` has a matching `<module>_test.zig`
-//! in the same plane folder under this directory. `src/builds/testing.zig`
-//! compiles this root, so adding a suite means adding one import below. The
-//! engine-coupled modules (`server`, `connections`) keep their coverage in the
-//! binding tests instead, because they need a live Node-API environment.
+//! Zig unit test root: every testable module in `src/engine/` has a `<module>_test.zig`
+//! in the same plane folder below, and `src/builds/testing.zig` compiles this root, so a
+//! new suite means a new import. The engine-coupled `server` and `connections` modules
+//! keep their coverage in the binding tests, which need a live Node-API environment.
 
 test {
     _ = @import("ffi/lib_test.zig");

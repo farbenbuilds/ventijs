@@ -50,7 +50,7 @@ pub const Failure = enum(u8) {
 /// carrying invalid UTF-8 or undecodable compressed data is a 1007 invalid payload.
 pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
-        .unsupported_message_length => CLOSE_MESSAGE_TOO_BIG,
+        .unsupported_message_length, .unsupported_data_payload_length => CLOSE_MESSAGE_TOO_BIG,
         .invalid_utf8, .invalid_compressed_data => CLOSE_INVALID_PAYLOAD,
         .too_many_buffered_parts => CLOSE_POLICY_VIOLATION,
         .protocol_error,
@@ -62,7 +62,6 @@ pub fn close_code_for(failure: Failure) u16 {
         .unexpected_mask,
         .unexpected_rsv_1,
         .unexpected_rsv_2_3,
-        .unsupported_data_payload_length,
         .invalid_mask,
         => CLOSE_PROTOCOL_ERROR,
     };

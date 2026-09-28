@@ -9,12 +9,10 @@ const EMPTY = Buffer.alloc(0);
 
 /// Reports a terminal transport failure. The caller destroys the transport, whose `close`
 /// event finishes the socket, so this latches `CLOSING` and emits without reaching
-/// `CLOSED` itself.
-
-// Deliberately ignores the `errorEmitted` latch `failConnection` guards, which exists so
-// a *recoverable* report cannot become a second `error` on a healthy socket. A transport
-// failure is the opposite: it is the one event a caller with no callback has to observe,
-// and `ws` emits `error` for a socket-level failure regardless of `_errorEmitted`.
+/// `CLOSED` itself. It deliberately ignores the `errorEmitted` latch `failConnection`
+/// guards, which stops a *recoverable* report becoming a second `error`: a transport
+/// failure is the one event a caller with no callback must observe, and `ws` emits
+/// `error` for a socket-level failure regardless of `_errorEmitted`.
 export function failTransport(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
   state.readyState = CLOSING;

@@ -1,6 +1,4 @@
-//! Differential test of the incremental validator against `std.unicode`: every sequence
-//! of up to three interesting bytes plus a randomized sweep must agree on every split
-//! point. Too strict rejects a message the RFC allows; too loose delivers one it forbids.
+//! Differential against `std.unicode`: too strict rejects a message the RFC allows.
 
 const std = @import("std");
 const testing = std.testing;
@@ -8,21 +6,19 @@ const utf8 = @import("../../engine/codec/utf8.zig");
 
 /// Every lead-class boundary and the first and last byte of each continuation range.
 const interesting = [_]u8{
-    0x00, 0x01, 0x41, 0x7e, 0x7f, // ASCII
-    0x80, 0x81, 0xbe, 0xbf, // stray continuations
-    0xc0, 0xc1, 0xc2, 0xdf, // two-byte leads, overlong included
-    0xe0, 0xe1, 0xec, 0xed, 0xee, 0xef, // three-byte leads
-    0xa0, 0x9f, // the two edges of 0xED's narrowed range
-    0xf0, 0xf1, 0xf3, 0xf4, 0xf5, // four-byte leads, past-U+10FFFF included
-    0x90, 0x8f, // the two edges of 0xF0's and 0xF4's narrowed range
-    0xfe, 0xff, // never a lead byte
+    0x00, 0x01, 0x41, 0x7e, 0x7f,
+    0x80, 0x81, 0xbe, 0xbf,
+    0xc0, 0xc1, 0xc2, 0xdf, // 0xc0 and 0xc1 can lead an overlong form
+    0xe0, 0xe1, 0xec, 0xed,
+    0xee, 0xef,
+    0xa0, 0x9f, // the two edges of 0xed's narrowed range
+    0xf0, 0xf1, 0xf3, 0xf4, 0xf5, // 0xf5 leads past U+10FFFF
+    0x90, 0x8f, // the two edges of 0xf0's and 0xf4's narrowed range
+    0xfe, 0xff,
 };
 
-/// Folds a whole buffer one byte at a time, the harshest split and the one a peer
-/// controls. The two halves of the answer are distinct on purpose: `feed` rejects a byte
-/// that cannot begin or continue a sequence, `complete` rejects a message that ends
-/// mid-sequence, and conflating them is what this test exists to catch -- a buffer of
-/// `0xc3` contains no bad byte and is still not valid UTF-8.
+/// Folds a buffer one byte at a time, the harshest split. `feed` rejects a byte that
+/// cannot begin or continue, `complete` rejects a message ending mid-sequence.
 fn mine_validates(buffer: []const u8) bool {
     var state = utf8.State{};
     for (buffer) |byte| {
@@ -57,8 +53,7 @@ test "every sequence of up to three interesting bytes agrees with std" {
         }
     }
 
-    // A randomized sweep over the whole byte range, so the interesting set is a
-    // starting point rather than the search.
+    // A randomized sweep, so the interesting set is a starting point rather than the search.
     for (0..20_000) |_| {
         const len = 1 + prng.random().uintLessThan(usize, 3);
         for (0..len) |index| buffer[index] = prng.random().int(u8);
@@ -84,8 +79,7 @@ test "a valid sequence split at every point is still valid" {
 }
 
 test "a sequence truncated at the end is invalid however it was split" {
-    // Every byte it saw was in range and the message is still invalid: the case a
-    // validator that never checks its end state would accept.
+    // Every byte it saw was in range and the message is still invalid.
     const sequences = [_][]const u8{ "\xc3", "\xe2\x82", "\xf0\x9f\x92", "\xed\x9f" };
     for (sequences) |sequence| {
         for (0..sequence.len) |split| {
@@ -97,22 +91,21 @@ test "a sequence truncated at the end is invalid however it was split" {
 }
 
 test "the narrowings are the only reason a lead byte is special" {
-    // Each is a sequence `std` rejects and a naive `0x80..0xbf` continuation range
-    // would accept, which is why the range narrows on these four leads and no others.
+    // Each is a sequence `std` rejects and a naive `0x80..0xbf` range would accept.
     const rejected = [_][]const u8{
-        "\xc0\x80", // overlong NUL
-        "\xc1\xbf", // overlong
-        "\xe0\x80\x80", // overlong
-        "\xe0\x9f\xbf", // overlong
+        "\xc0\x80",
+        "\xc1\xbf",
+        "\xe0\x80\x80",
+        "\xe0\x9f\xbf",
         "\xed\xa0\x80", // U+D800, a surrogate half
-        "\xed\xbf\xbf", // U+DFFF
-        "\xf0\x80\x80\x80", // overlong
-        "\xf0\x8f\xbf\xbf", // overlong
+        "\xed\xbf\xbf",
+        "\xf0\x80\x80\x80",
+        "\xf0\x8f\xbf\xbf",
         "\xf4\x90\x80\x80", // U+110000, past the last codepoint
-        "\xf5\x80\x80\x80", // never a codepoint
-        "\xc2", // a two-byte lead with no continuation
+        "\xf5\x80\x80\x80",
+        "\xc2",
         "\x80", // a stray continuation
-        "\xfe", // never a lead byte
+        "\xfe",
     };
     for (rejected) |sequence| try expect_agreement(sequence);
 }

@@ -1,11 +1,5 @@
-//! The client handshake's failure and refusal paths, compared against `ws`.
-//!
-//! Every case here is a divergence that was *silently* wrong rather than absent,
-//! which is the worst shape for a compatibility library: an application written
-//! against ventijs passed its own tests and then spoke a different protocol, or
-//! waited for an event that never came. The three that mattered most are in
-//! `client-close-events.conformance.test.ts` and `client-refusal.conformance.test.ts`;
-//! this file covers the arguments to the handshake itself.
+// The client handshake's failure and refusal paths, compared against `ws`. Every case here
+// is a divergence that was silently wrong rather than absent, so each is pinned to `ws`.
 
 import { WebSocket as WsClient } from "ws";
 import { expect, test } from "vitest";
@@ -13,12 +7,8 @@ import { WebSocket } from "../../src/index";
 import { TEST_TIMEOUT_MS } from "../binding/support";
 import { startRawPeer } from "../binding/codec-peer";
 
-/// The `new WebSocket(address, options)` overload.
-///
-/// `@types/ws` declares it and `ws` implements it by promoting a non-array object
-/// out of the subprotocol slot. Passing the pair through unexamined sent the
-/// options object to the subprotocol validator, so a documented, typed, routinely
-/// used signature threw a `SyntaxError` about subprotocols on every call.
+/// The `new WebSocket(address, options)` overload. `ws` promotes a non-array object out of
+/// the subprotocol slot, so the two arguments must be told apart rather than passed through.
 test(
   "the two-argument constructor is the options overload",
   { timeout: TEST_TIMEOUT_MS },
@@ -42,22 +32,17 @@ test(
   },
 );
 
-/// A subprotocol list is still a subprotocol list, and still validated as one.
-///
-/// The promotion reads an object in the second position, so the risk is the other
-/// direction: an options-looking object in a position `ws` treats as protocols.
+/// The other direction: an options-looking object in a position `ws` treats as protocols is
+/// still a protocol list, and is still validated as one.
 test("a subprotocol list is not promoted", { timeout: TEST_TIMEOUT_MS }, async () => {
   expect(() => new WebSocket("ws://127.0.0.1:1/", ["chat", "chat"])).toThrowError(
     /invalid or duplicated subprotocol/i,
   );
 });
 
-/// The `close` code a peer reports for a code-less close frame.
-///
-/// RFC 6455 section 7.1.5 assigns 1005, "no status received", to a close frame with
-/// an empty body, and `ws` surfaces it. Reporting 1006 instead said the transport had
-/// failed, which is a claim about a connection that ended by exactly the agreed
-/// handshake, and it made 1005 unobservable from a ventijs peer in both directions.
+/// RFC 6455 section 7.1.5 assigns 1005, "no status received", to a close frame with an empty
+/// body, and `ws` surfaces it. Reporting 1006 instead claimed the transport had failed, a
+/// statement about a connection that ended by exactly the agreed handshake.
 test("a code-less close reports 1005, not 1006", { timeout: TEST_TIMEOUT_MS }, async () => {
   const peer = await startRawPeer();
   try {
@@ -77,12 +62,9 @@ test("a code-less close reports 1005, not 1006", { timeout: TEST_TIMEOUT_MS }, a
   }
 });
 
-/// The close code a `ws` peer reports for a ventijs `close()` with no argument.
-///
-/// The other half of the same rule. `ws` writes an *empty* close payload for a
-/// code-less `close()` and its own peer reports 1005; ventijs substituted 1000, which
-/// asserted a normal shutdown the caller never stated and made 1005 invisible to
-/// every `ws` client that ever connected.
+/// The other half of the same rule: `ws` writes an *empty* close payload for a code-less
+/// `close()` and its own peer reports 1005, so substituting 1000 asserted a normal shutdown
+/// the caller never stated.
 test("close() with no code writes an empty close frame", { timeout: TEST_TIMEOUT_MS }, async () => {
   const { WebSocketServer } = await import("../../src/index");
   const server = new WebSocketServer({ port: 0 });

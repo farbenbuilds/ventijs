@@ -63,8 +63,15 @@ fn take_header(comptime Codec: type, peer: *Codec, input: []const u8, offset: us
     const destination = peer.rx.conn.get_header_buffer();
     const count = @min(destination.len, input.len - offset);
     @memcpy(destination[0..count], input[offset..][0..count]);
-    if (peer.rx.conn.header_bytes_read == 0) {
-        if (peer.rx.inspect_rsv1(&destination[0])) |failure| peer.failure = failure;
+    if (peer.rx.conn.header_bytes_read == 0 and peer.failure == null) {
+        // RSV2 and RSV3 are decided first, because a frame that sets them is refused
+        // whatever else it says and `ws` reports them first too. Deciding them before
+        // RSV1 rather than after is the only difference the two can make on a header
+        // that sets all three.
+        if (destination[0] & 0x30 != 0) peer.failure = .unexpected_rsv_2_3;
+        if (peer.failure == null) {
+            if (peer.rx.inspect_rsv1(&destination[0])) |failure| peer.failure = failure;
+        }
     }
     peer.rx.conn.advance_header_read(count) catch return 0;
     if (peer.failure == null) inspect_header(Codec, peer);

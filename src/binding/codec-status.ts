@@ -51,6 +51,7 @@ export const CODEC_FAILURES = [
   "unsupportedDataPayloadLength",
   "unsupportedMessageLength",
   "invalidCompressedData",
+  "invalidMask",
 ] as const;
 
 export type CodecFailureName = (typeof CODEC_FAILURES)[number];

@@ -19,8 +19,7 @@ export type SocketEventMap = {
   ping: [data: Buffer];
   pong: [data: Buffer];
   upgrade: [request: IncomingMessage];
-  /// The URL is what a caller checks against its own policy, and the request is the only way
-  /// to change a header on a hop that has not gone out yet.
+  /// The request is the only way to change a header on a hop that has not gone out yet.
   redirect: [url: string, request: ClientRequest];
   /// How a 401's `www-authenticate` is reached: a listener that returns without reading the response.
   "unexpected-response": [request: ClientRequest, response: IncomingMessage];
@@ -43,8 +42,7 @@ export type SocketState = EmitterState<SocketEventMap> & {
   closeReason: Buffer;
   closeFrameSent: boolean;
   closeFrameReceived: boolean;
-  /// RFC 6455 section 5.4 requires a continuation to carry opcode 0, and a peer reads a second
-  /// `fin`-set data frame as a second complete message.
+  /// RFC 6455 section 5.4: a continuation is opcode 0, so a second `fin` frame is a second message.
   fragmentsOpen: boolean;
   errorEmitted: boolean;
   attachment: SocketAttachment | null;
@@ -52,18 +50,15 @@ export type SocketState = EmitterState<SocketEventMap> & {
   transport: Duplex | null;
   /// Null outside a codec's lifetime, and for native attachments, which the engine frames itself.
   codec: bigint | null;
-  /// A socket finished by the peer, by a refusal, or by `terminate` has to drop it.
   closeTimer: ReturnType<typeof setTimeout> | null;
   /// On the socket because a server socket has no server to read them from.
   closeTimeout: number;
   /// `ws`'s `allowSynchronousEvents`, the same choice and the same default of true.
   allowSynchronousEvents: boolean;
   deliveryPaused: boolean;
-  /// A pause is a *parse* pause, as in `ws`: frames behind the message the application has not
-  /// heard about are not read until it has. Bounded to one read's worth.
+  /// A *parse* pause, as in `ws`: the unheard message's frames stay unread, one read's worth.
   pendingInput: Buffer | null;
-  /// `skipUTF8Validation` read the other way round. Latched at creation because the validator is
-  /// in Zig and a codec is one connection, so changing it means a second codec mid-stream.
+  /// `skipUTF8Validation` inverted, latched at creation: a codec is one connection.
   validateUtf8: boolean;
   /// Carried rather than read back because a socket outlives its codec.
   maxPayload: number;

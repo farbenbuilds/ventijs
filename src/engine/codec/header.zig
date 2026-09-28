@@ -14,6 +14,7 @@ const fin_mask: u8 = 0x80;
 const rsv_2_3_mask: u8 = 0x30;
 const opcode_mask: u8 = 0x0f;
 const opcode_control: u8 = 0x08;
+const opcode_control_max: u8 = 0x0a;
 
 /// The seven-bit length field's encoding: 0-125 inline, 126 for two bytes, 127 for eight.
 pub fn length_field(len: usize) u7 {
@@ -27,9 +28,14 @@ pub fn length_field(len: usize) u7 {
 pub const max_safe_frame_len: u64 = 0x001f_ffff_ffff_ffff;
 
 /// The two base octets' faults, or null. RSV1 is not here: `rsv1.zig` owns that bit.
+///
+/// The opcode range is 0x0 to 0xF, and only 0x8 to 0xA are control frames. `ws`
+/// reports 0xB to 0xF as `WS_ERR_INVALID_OPCODE` whatever else is wrong with the frame,
+/// so the reserved range is checked before the control-frame rules rather than after.
 pub fn base_failure(base: [2]u8, fragment_open: bool) ?Failure {
     if (base[0] & rsv_2_3_mask != 0) return .unexpected_rsv_2_3;
     const opcode = base[0] & opcode_mask;
+    if (opcode > opcode_control_max) return .invalid_opcode;
     if (opcode >= opcode_control) {
         if (base[0] & fin_mask == 0) return .expected_fin;
         if (base[1] & 0x7f > 125) return .invalid_control_payload_length;

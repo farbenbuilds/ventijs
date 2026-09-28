@@ -9,7 +9,7 @@ import { createError } from "../errors";
 import { CLOSED, CLOSING, OPEN } from "../ready-state";
 import { closeCodec, openCodec } from "./codec-handle";
 import { driveInbound } from "./codec-inbound";
-import { finishConnection } from "./lifecycle";
+import { failConnection, finishConnection } from "./lifecycle";
 import { failTransport } from "./transport";
 import { socketStateOf } from "./state";
 
@@ -53,7 +53,15 @@ export function attachSocket(
   // `OPEN` is permanently `OPEN` with nothing on the wire: every send reports success
   // and `bufferedAmount` stays at zero.
   if (!transport.readable || !transport.writable) {
+    // Terminated rather than ignored: a socket left `CONNECTING` with no listener
+    // attached never moves again, and a caller awaiting `open` or `close` would wait
+    // for the life of the process. 1006 because no close frame was exchanged.
+    const gone = createError(
+      "ERR_SOCKET_CLOSED",
+      "ventijs: the transport was closed before the socket opened",
+    );
     transport.destroy();
+    failConnection(state, gone);
     return;
   }
   state.transport = transport;

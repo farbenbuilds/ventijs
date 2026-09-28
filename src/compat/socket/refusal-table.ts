@@ -40,12 +40,16 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
     "protocol error",
     "RSV2 and RSV3 must be clear",
   ),
-  unsupportedDataPayloadLength: refused(
-    1002,
-    "WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH",
-    "protocol error",
-    "payload length > 2^53 - 1",
-  ),
+  // 1009 and no `Invalid WebSocket frame:` prefix, because `ws` says
+  // "Unsupported WebSocket frame" for this one and it is a size limit rather than a
+  // malformed frame: the length is a number the frame could not have meant.
+  unsupportedDataPayloadLength: {
+    closeCode: 1009,
+    code: "WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH",
+    reason: "message too big",
+    message: "Unsupported WebSocket frame: payload length > 2^53 - 1",
+    ctor: RangeError,
+  },
   // A plain `Error`, not a `RangeError`: `ws` raises these two the same way, and both
   // are a 1007.
   invalidUtf8: {
@@ -55,11 +59,14 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
     message: "Invalid WebSocket frame: invalid UTF-8 sequence",
     ctor: Error,
   },
+  // A 1007 either way, and a code of its own: `ws` passes the zlib error through
+  // uncoded, and folding this into the UTF-8 code would make a peer sending a broken
+  // deflate stream indistinguishable from one sending broken text.
   invalidCompressedData: {
     closeCode: 1007,
-    code: "WS_ERR_INVALID_UTF8",
+    code: "ERR_INVALID_COMPRESSED_DATA",
     reason: "invalid payload",
-    message: "Invalid WebSocket frame: invalid UTF-8 sequence",
+    message: "Invalid WebSocket frame: invalid compressed data",
     ctor: Error,
   },
   tooManyBufferedParts: {
@@ -79,6 +86,15 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
   // The one fault with no `ws` equivalent: a compressed payload that is not a DEFLATE
   // stream, which `ws` reports as a 1007 with no code. It keeps the protocol error it
   // always was, because none of the twelve describes it.
+  // A `generateMask` callback left a buffer that is not four bytes. A caller's own
+  // mistake on the send path, so it is a local error rather than a close frame.
+  invalidMask: {
+    closeCode: 1002,
+    code: "ERR_INVALID_OPTION",
+    reason: "protocol error",
+    message: "ventijs: generateMask must fill all four bytes of the masking key",
+    ctor: RangeError,
+  },
   protocolError: {
     closeCode: 1002,
     code: "ERR_PROTOCOL",
