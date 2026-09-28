@@ -4,6 +4,7 @@ import { createError } from "../errors";
 import { CLOSED, CLOSING, OPEN } from "../ready-state";
 import { closeCodec } from "./codec-handle";
 import { writeCloseFrame } from "./codec-outbound";
+import type { Refusal } from "./refusal-table";
 import { finishConnection } from "./lifecycle";
 
 const CLOSE_ABNORMAL = 1006;
@@ -23,33 +24,21 @@ export function closeFramed(state: SocketState, code: number | undefined, reason
 
 /// Refuses a frame, telling the peer the code and reporting it to the application.
 ///
-/// The close frame goes out first, because a connection refused without one is a
-/// reset to the peer and a reset cannot carry a code: `ws` closes with 1009 for an
-/// oversized message, and a peer that only ever saw the transport die reports 1006
-/// and cannot tell a size limit from a crash. The socket's own `close` event then
-/// reports the same code, so both sides agree on why.
-///
-/// `error` is emitted before `close`, as `ws` does, and inside a `finally` so a
-/// listener that throws cannot leave the socket open.
-export function refuseFramed(state: SocketState, code: number, reason: string): void {
+/// The close frame goes out first, because a connection refused without one is a reset
+/// to the peer and a reset cannot carry a code. `error` is emitted before `close`, as
+/// `ws` does, and inside a `finally` so a listener that throws cannot leave the socket
+/// open.
+export function refuseFramed(state: SocketState, refusal: Refusal): void {
   if (state.readyState === CLOSED) return;
   state.readyState = CLOSING;
-  writeCloseFrame(state, code, Buffer.from(reason, "utf8"));
+  writeCloseFrame(state, refusal.closeCode, Buffer.from(refusal.reason, "utf8"));
   try {
     if (!state.errorEmitted) {
       state.errorEmitted = true;
-      emitEvent(
-        state,
-        "error",
-        createError(
-          "ERR_PROTOCOL",
-          `ventijs: the peer sent a frame the protocol forbids (${reason})`,
-        ),
-      );
+      emitEvent(state, "error", createError(refusal.code, refusal.message, refusal.ctor));
     }
   } finally {
-    const reported = Buffer.from(reason, "utf8");
-    finishConnection(state, code, reported);
+    finishConnection(state, refusal.closeCode, Buffer.from(refusal.reason, "utf8"));
     closeCodec(state);
     state.transport?.end();
   }

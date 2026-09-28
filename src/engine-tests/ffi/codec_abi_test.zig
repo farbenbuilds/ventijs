@@ -62,9 +62,29 @@ test "every event kind is sendable and one past the last is refused" {
 }
 
 test "the codec's own failures map onto the boundary's" {
+    // Every member is listed rather than defaulted, so adding a failure the writer can
+    // hit is a compile error here rather than a `send` that reports a protocol error.
     try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.protocol_error));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.expected_fin));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.expected_mask));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.invalid_close_code));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.invalid_control_payload_length));
+    try testing.expectEqual(abi.EncodeFailure.unexpected_opcode, abi.encode_failure(.invalid_opcode));
     try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.invalid_utf8));
-    try testing.expectEqual(abi.EncodeFailure.message_too_large, abi.encode_failure(.message_too_large));
-    try testing.expectEqual(abi.EncodeFailure.message_too_large, abi.encode_failure(.fragmented_message_too_large));
-    try testing.expectEqual(abi.EncodeFailure.unexpected_opcode, abi.encode_failure(.unexpected_opcode));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.unexpected_mask));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.unexpected_rsv_1));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.unexpected_rsv_2_3));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.too_many_buffered_parts));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.unsupported_data_payload_length));
+    try testing.expectEqual(abi.EncodeFailure.message_too_large, abi.encode_failure(.unsupported_message_length));
+    try testing.expectEqual(abi.EncodeFailure.protocol_error, abi.encode_failure(.invalid_compressed_data));
+}
+
+test "the failure ordinal the FFI reports is the enum's index plus one" {
+    // `src/binding/codec-status.ts` carries the matching table, and the two drift apart
+    // silently: the ordinals still work, and every reason is reported as another one.
+    try testing.expectEqual(@as(u8, 1), events.failure_ordinal(.protocol_error));
+    try testing.expectEqual(@as(u8, 2), events.failure_ordinal(.expected_fin));
+    try testing.expectEqual(@as(u8, @intCast(@intFromEnum(events.Failure.invalid_opcode) + 1)), events.failure_ordinal(.invalid_opcode));
+    try testing.expectEqual(@as(u8, @intCast(@intFromEnum(events.Failure.invalid_compressed_data) + 1)), events.failure_ordinal(.invalid_compressed_data));
 }

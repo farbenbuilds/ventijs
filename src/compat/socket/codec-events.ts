@@ -1,4 +1,5 @@
 import {
+  codecFailure,
   codecFailureCode,
   codecFragmentEnds,
   pendingCodecEvents,
@@ -14,7 +15,7 @@ import { CLOSED } from "../ready-state";
 import { codecOf } from "./codec-handle";
 import { shapeBinary } from "./payload-shape";
 import { closeFromPeer } from "./codec-peer-close";
-import { refuseByCodec } from "./codec-refusal";
+import { failureByCode, refuseByCodec } from "./codec-refusal";
 import { writePong } from "./codec-outbound";
 import { isDeliveryPaused, pauseUntilNextTick } from "./codec-deferral";
 
@@ -124,9 +125,10 @@ export function dispatch(
       closeFromPeer(state, event);
       return;
     case "rejected":
-      // The code is latched on the codec because one refused frame ends the
-      // connection; the queued description names the reason for the error.
-      refuseByCodec(state, codecFailureCode(handle));
+      // The reason is latched on the codec rather than carried in the event, because
+      // one refused frame ends the connection and the copy would be a string nobody
+      // read, copied into JavaScript memory for every frame a peer chooses to send.
+      refuseByCodec(state, codecFailure(handle) ?? failureByCode(codecFailureCode(handle)));
       return;
   }
 }

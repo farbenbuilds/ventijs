@@ -1,12 +1,11 @@
 //! Turning a completed frame into an event, or into nothing.
 //!
-//! Split from `receive.zig` because the two halves fail differently. Consuming
-//! bytes can only fail on a length the codec will not accept, and it does so
-//! while the frame is still arriving. Deciding what a frame *meant* can fail for
-//! reasons the wire cannot show: a close payload with a reserved code, a text
-//! message that ended mid-sequence, a control frame that was fragmented. Keeping
-//! the two apart means the error each one raises is the error that actually
-//! happened, which is what the close code is derived from.
+//! The two halves of a frame fail differently. Consuming bytes can only fail on a length
+//! the codec will not accept, and it does so while the frame is still arriving. Deciding
+//! what a frame *meant* can fail for reasons the wire cannot show: a close payload with a
+//! reserved code, a text message that ended mid-sequence. Keeping them apart means the
+//! error each one raises is the one that actually happened, which is what the failure the
+//! caller sees is derived from.
 
 const zslay = @import("zslay");
 const close_payload = @import("close_payload.zig");
@@ -83,11 +82,7 @@ fn decompress(comptime State: type, peer: *State) !void {
 /// never exceeds 125 bytes, so the one buffer serves all three opcodes.
 fn finish_control(comptime State: type, peer: *State, opcode: zslay.Opcode, payload_len: u64) !receive.Decoded {
     const payload = peer.control[0..@intCast(payload_len)];
-    if (opcode == .close) {
-        zslay.frame.validate_close_payload(payload) catch |err| {
-            return if (err == error.InvalidUtf8) error.InvalidUtf8 else error.ProtocolError;
-        };
-    }
+    if (opcode == .close) try validate_close(payload);
     const kind: Kind = if (opcode == .ping) .ping else if (opcode == .pong) .pong else .close;
     peer.conn.complete_frame();
     return .{
@@ -97,5 +92,18 @@ fn finish_control(comptime State: type, peer: *State, opcode: zslay.Opcode, payl
         // deliver a short payload for every frame longer than two bytes.
         .code = if (kind == .close) close_payload.close_code(payload) else 0,
         .payload = if (kind == .close) close_payload.close_reason(payload) else payload,
+    };
+}
+
+/// The three faults a close payload can have, named apart.
+///
+/// `zslay` validates all three and reports two of them as one `ProtocolError`, so the
+/// code check is done here where the payload is still in hand. The order matches `ws`:
+/// the length, then the code, then the reason.
+fn validate_close(payload: []const u8) !void {
+    if (payload.len == 1) return error.ProtocolError;
+    if (!close_payload.has_valid_code(payload)) return error.InvalidCloseCode;
+    zslay.frame.validate_close_payload(payload) catch |err| {
+        return if (err == error.InvalidUtf8) error.InvalidUtf8 else error.ProtocolError;
     };
 }

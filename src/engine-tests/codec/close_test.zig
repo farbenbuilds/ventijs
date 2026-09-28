@@ -12,7 +12,7 @@ const support = @import("frame_support.zig");
 
 const Frame = support.Frame;
 
-test "a close frame with a reserved code is a protocol error" {
+test "a close frame with a reserved code is an invalid close code" {
     // Section 7.4: 1005, 1006, and 1015 must not appear on the wire.
     for ([_]u16{ 1005, 1006, 1015 }) |reserved| {
         var payload: [2]u8 = undefined;
@@ -20,7 +20,8 @@ test "a close frame with a reserved code is a protocol error" {
         var peer = support.server();
         var buffer: [64]u8 = undefined;
         _ = peer.feed((Frame{ .opcode = .close, .payload = &payload, .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer));
-        try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+        try testing.expectEqual(codec.Failure.invalid_close_code, peer.pending_failure().?);
+        try testing.expectEqual(@as(u16, 1002), peer.failure_code());
     }
 }
 

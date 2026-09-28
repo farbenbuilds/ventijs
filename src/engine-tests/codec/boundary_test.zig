@@ -89,7 +89,7 @@ test "a frame longer than the cap is refused rather than truncated" {
     const frame = support.raw_frame(&buffer, true, 0x1, 40, true, .{ 1, 2, 3, 4 }, "0123456789abcdefghijklmnopqrstuvwxyz1234");
     const result = peer.feed(frame);
     try testing.expectEqual(codec.Outcome.failed, result.outcome);
-    try testing.expectEqual(codec.Failure.message_too_large, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.pending_failure().?);
     try testing.expectEqual(@as(u16, 1009), peer.failure_code());
     // Nothing was queued: a truncated message is worse than no message.
     try testing.expect(peer.select());

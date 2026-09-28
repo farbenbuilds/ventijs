@@ -1,9 +1,9 @@
 import type { Duplex } from "node:stream";
-import { codecFailureCode, codecFeedResume, feedCodec } from "../../binding/codec";
+import { codecFailure, codecFailureCode, codecFeedResume, feedCodec } from "../../binding/codec";
 import type { SocketState } from "../../types/socket";
 import { codecOf } from "./codec-handle";
 import { isDeliveryPaused } from "./codec-deferral";
-import { refuseByCodec } from "./codec-refusal";
+import { failureByCode, refuseByCodec } from "./codec-refusal";
 import { deliver, drainReleased } from "./codec-events";
 
 /// Folds the transport's bytes into the socket's codec and delivers what comes out.
@@ -47,9 +47,9 @@ export function ingest(state: SocketState, chunk: Buffer): void {
       resume(state);
     });
     if (outcome.kind === "failed") {
-      // The code the codec latched is the one the RFC assigns this refusal, and it
-      // is what both ends of the connection get to see.
-      refuseByCodec(state, codecFailureCode(handle));
+      // The codec latched why, and both ends of the connection get a reason: the peer
+      // the close code, the application the `ws` error code.
+      refuseByCodec(state, codecFailure(handle) ?? failureByCode(codecFailureCode(handle)));
       return;
     }
     if (outcome.kind === "stale-handle") return;

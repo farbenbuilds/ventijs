@@ -28,10 +28,9 @@ const Failure = events.Failure;
 pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !void {
     const max_message = peer.max_message_bytes;
     const decoded = peer.conn.decoded_header orelse return error.ProtocolError;
-    // `zslay` ends an over-long frame at `max_frame_len` and reports what it
-    // took as a complete frame, so a decoder that only checked the accumulated
-    // message would deliver a silently short one. Refused here, before a byte of
-    // the payload is copied.
+    // The parser refuses a frame over its ceiling before this runs, so the only length
+    // reaching here that a caller could not have asked for is one the header refused
+    // first; `header.inspect` has already named that one.
     if (decoded.payload_len > max_message) return error.PayloadTooLarge;
     const opcode: zslay.Opcode = @enumFromInt(decoded.header.opcode);
     const position = peer.conn.payload_bytes_processed;

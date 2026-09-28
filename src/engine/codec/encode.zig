@@ -68,20 +68,20 @@ pub fn transmit() type {
         /// receiver can concatenate. RSV1 marks the *first* frame of a message, which
         /// is why a fragment never carries it.
         pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool) outbound.Encoded {
-            const opcode = header.wire_opcode(kind) orelse return .{ .failed = .unexpected_opcode };
-            if (payload.len > self.max_message_bytes) return .{ .failed = .message_too_large };
+            const opcode = header.wire_opcode(kind) orelse return .{ .failed = .invalid_opcode };
+            if (payload.len > self.max_message_bytes) return .{ .failed = .unsupported_message_length };
             const control = opcode.is_control();
-            // RFC 6455 section 5.5: a control frame is capped at 125 bytes and
-            // must not be fragmented. Both are checked here so a caller cannot
-            // put an unframable frame on the wire.
-            if (control and (payload.len > control_capacity or !fin)) {
-                return .{ .failed = .protocol_error };
+            // RFC 6455 section 5.5: a control frame is capped at 125 bytes and must not
+            // be fragmented, so a caller cannot put an unframable frame on the wire.
+            if (control and payload.len > control_capacity) {
+                return .{ .failed = .invalid_control_payload_length };
             }
+            if (control and !fin) return .{ .failed = .expected_fin };
 
             // Taken before anything is framed, which is what keeps the frame one
             // contiguous buffer with one header. `ws` decides the same way, in its sender.
             const wire = deflate.wire(&self.compress, payload, self.max_message_bytes, control, fin, compress) catch
-                return .{ .failed = .message_too_large };
+                return .{ .failed = .unsupported_message_length };
 
             const masked = self.role == .client;
             const base: zslay.types.FrameHeader = .{
@@ -108,10 +108,10 @@ pub fn transmit() type {
             // single `Buffer` of it and a caller that stitched a header to a payload
             // across an FFI call could get the header size wrong.
             const framed = std.math.add(usize, wire.bytes.len, header_capacity) catch {
-                return .{ .failed = .message_too_large };
+                return .{ .failed = .unsupported_message_length };
             };
             self.buffer.reserve(framed, self.max_message_bytes + header_capacity) catch {
-                return .{ .failed = .message_too_large };
+                return .{ .failed = .unsupported_message_length };
             };
             const written = zslay.frame.encode_header(
                 self.buffer.items[0..header_capacity],

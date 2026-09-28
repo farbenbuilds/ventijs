@@ -140,6 +140,7 @@ export type VentiAddon = {
   codecOutbound(handle: bigint): Buffer;
   codecOutboundMasked(handle: bigint): boolean;
   codecFailureCode(handle: bigint): number;
+  codecFailure(handle: bigint): number;
   codecReset(handle: bigint): void;
   codecRole(handle: bigint): number;
   /// The per-connection ceilings this codec enforces, as `[maxPayload, maxFragments]`,

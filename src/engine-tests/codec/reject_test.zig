@@ -1,9 +1,11 @@
-//! Tests for the frames RFC 6455 forbids, and the close code each one maps to.
+//! Tests for the frames RFC 6455 forbids, and the failure each one is reported as.
 //!
-//! The close code is the only thing a peer ever finds out, so getting it wrong is
-//! a protocol failure even when everything else works. The distinction these tests
-//! exist to hold is 1009 against 1002: a payload over the cap is a size limit and
-//! invalid UTF-8 is an invalid payload, and neither is a framing violation.
+//! Both halves are load bearing. The close code is the only thing a peer finds out, so
+//! getting it wrong is a protocol failure even when everything else works. The failure
+//! ordinal is what the local application gets, and it is what lets a caller tell a
+//! misbehaving peer from a bug of its own: `ws` gives every one of these a distinct
+//! `WS_ERR_*` string, and collapsing them into "protocol error" is what the codec used
+//! to do.
 
 const std = @import("std");
 const testing = std.testing;
@@ -20,13 +22,12 @@ fn trusted(max_message: usize, max_fragments: usize) limits.Limits {
 const Frame = support.Frame;
 const raw_frame = support.raw_frame;
 
-test "an unmasked frame from a peer is a protocol error" {
-    // Section 5.1: a server must close on an unmasked frame.
+test "an unmasked frame from a peer is an expected mask" {
     var peer = support.server();
     var buffer: [64]u8 = undefined;
     const encoded = (Frame{ .opcode = .text, .payload = "no mask" }).bytes(&buffer);
     try testing.expectEqual(codec.Outcome.failed, peer.feed(encoded).outcome);
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.expected_mask, peer.pending_failure().?);
     try testing.expectEqual(@as(u16, 1002), peer.failure_code());
 }
 
@@ -35,22 +36,18 @@ test "a client refuses a masked frame" {
     var buffer: [64]u8 = undefined;
     const encoded = (Frame{ .opcode = .text, .payload = "masked", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer);
     try testing.expectEqual(codec.Outcome.failed, peer.feed(encoded).outcome);
+    try testing.expectEqual(codec.Failure.unexpected_mask, peer.pending_failure().?);
     try testing.expectEqual(@as(u16, 1002), peer.failure_code());
 }
 
-test "a reserved bit without a negotiated extension is a protocol error" {
-    // Section 5.2: RSV1 only means anything once an extension defines it, and
-    // RSV2 and RSV3 never do. All three are a peer claiming something nobody agreed
-    // to, and all three close with 1002.
-    //
-    // RSV1 is named `reserved_bits` rather than `protocol_error` because the codec
-    // reads it itself -- `zslay` refuses every reserved bit without saying which, and
-    // "a reserved bit is set" is a more useful thing to hand back than "protocol
-    // error". The close code is the same either way, which is what the peer sees.
+test "each reserved bit is named, not folded into a protocol error" {
+    // Section 5.2: RSV1 only means anything once an extension defines it, and RSV2 and
+    // RSV3 never do. All three close with 1002, and none of them is the same fault as
+    // the one next to it, which is what `ws`'s three separate codes say.
     const cases = [_]struct { bit: u8, failure: codec.Failure }{
-        .{ .bit = 0x40, .failure = .reserved_bits },
-        .{ .bit = 0x20, .failure = .protocol_error },
-        .{ .bit = 0x10, .failure = .protocol_error },
+        .{ .bit = 0x40, .failure = .unexpected_rsv_1 },
+        .{ .bit = 0x20, .failure = .unexpected_rsv_2_3 },
+        .{ .bit = 0x10, .failure = .unexpected_rsv_2_3 },
     };
     for (cases) |case| {
         var buffer: [16]u8 = undefined;
@@ -65,15 +62,13 @@ test "a reserved bit without a negotiated extension is a protocol error" {
 }
 
 test "a message over the cap is 1009, not 1002" {
-    // A size limit reported as a protocol error tells the peer the wrong thing
-    // about why its connection died, which is what a conformance suite checks.
     const Small = codec.codec(4);
     var peer = Small.init(.server, trusted(16, 8)) catch unreachable;
     defer peer.deinit();
     var buffer: [64]u8 = undefined;
     const encoded = (Frame{ .opcode = .text, .payload = "0123456789abcdefghij", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer);
     try testing.expectEqual(codec.Outcome.failed, peer.feed(encoded).outcome);
-    try testing.expectEqual(codec.Failure.message_too_large, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.pending_failure().?);
     try testing.expectEqual(@as(u16, 1009), peer.failure_code());
 }
 
@@ -104,14 +99,14 @@ test "binary messages are not UTF-8 validated" {
     try testing.expectEqualSlices(u8, &payload, (try support.take_only(&peer)).payload);
 }
 
-test "a continuation with no message in progress is a protocol error" {
+test "a continuation with no message in progress is an invalid opcode" {
     var peer = support.server();
     var buffer: [64]u8 = undefined;
     _ = peer.feed((Frame{ .opcode = .continuation, .payload = "orphan", .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer));
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.invalid_opcode, peer.pending_failure().?);
 }
 
-test "a new data frame while a message is in progress is a protocol error" {
+test "a new data frame while a message is in progress is an invalid opcode" {
     var peer = support.server();
     var buffer: [64]u8 = undefined;
     const parts = [_]Frame{
@@ -119,21 +114,21 @@ test "a new data frame while a message is in progress is a protocol error" {
         .{ .fin = true, .opcode = .text, .payload = "again", .mask = .{ 2, 2, 2, 2 } },
     };
     for (parts) |part| _ = peer.feed(part.bytes(&buffer));
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.invalid_opcode, peer.pending_failure().?);
 }
 
-test "a fragmented control frame is a protocol error" {
+test "a fragmented control frame is an expected fin" {
     var peer = support.server();
     var buffer: [16]u8 = undefined;
     _ = peer.feed(raw_frame(&buffer, false, @intFromEnum(zslay.Opcode.ping), 1, true, .{ 1, 2, 3, 4 }, "x"));
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.expected_fin, peer.pending_failure().?);
 }
 
-test "a control frame over 125 bytes is a protocol error" {
-    // Section 5.5. 126 bytes needs the two-byte extended length, so this also
-    // covers the length encoding rather than only the cap.
+test "a control frame over 125 bytes is an invalid control payload length" {
+    // Section 5.5. 126 bytes needs the two-byte extended length, so this also covers the
+    // length encoding rather than only the cap.
     var peer = support.server();
     var buffer: [256]u8 = undefined;
     _ = peer.feed(raw_frame(&buffer, true, @intFromEnum(zslay.Opcode.ping), 126, true, .{ 1, 2, 3, 4 }, "x" ** 126));
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.invalid_control_payload_length, peer.pending_failure().?);
 }

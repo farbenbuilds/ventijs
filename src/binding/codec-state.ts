@@ -5,6 +5,7 @@
 //! fail, so a caller reaching for one of these is asking about the connection rather
 //! than about a message.
 
+import { CODEC_FAILURES, type CodecFailureName } from "./codec-status";
 import { callNative } from "./errors";
 import { loadAddon } from "./load";
 
@@ -12,6 +13,17 @@ import { loadAddon } from "./load";
 export function codecFailureCode(handle: bigint): number {
   const addon = loadAddon();
   return callNative(() => addon.codecFailureCode(handle));
+}
+
+/// The failure a refused frame produced, or 0 while the connection is healthy.
+///
+/// Read rather than parsed off the close code, because the two are not one-to-one: a
+/// 1002 is a dozen different faults and a caller that only has the code cannot tell a
+/// peer's bad frame from its own misconfiguration.
+export function codecFailure(handle: bigint): CodecFailureName | null {
+  const addon = loadAddon();
+  const ordinal = callNative(() => addon.codecFailure(handle));
+  return CODEC_FAILURES[ordinal - 1] ?? null;
 }
 
 /// Drops every buffered byte and event, for a connection abandoned early.

@@ -58,8 +58,8 @@ test "every encoded control frame is a legal 125-byte frame" {
     // Two header bytes, a four-byte key, and no payload.
     try testing.expectEqual(@as(usize, 6), support.framed(&peer, .ping, true, "").result.ok);
     try testing.expectEqual(@as(usize, 131), support.framed(&peer, .pong, true, "x" ** 125).result.ok);
-    try testing.expectEqual(codec.Failure.protocol_error, support.framed(&peer, .ping, true, "x" ** 126).result.failed);
-    try testing.expectEqual(codec.Failure.protocol_error, support.framed(&peer, .close, false, "").result.failed);
+    try testing.expectEqual(codec.Failure.invalid_control_payload_length, support.framed(&peer, .ping, true, "x" ** 126).result.failed);
+    try testing.expectEqual(codec.Failure.expected_fin, support.framed(&peer, .close, false, "").result.failed);
 }
 
 test "the encoder refuses a payload over the cap" {
@@ -68,7 +68,7 @@ test "the encoder refuses a payload over the cap" {
     const Small = codec.codec(2);
     var peer = Small.init(.server, trusted(8, 8)) catch unreachable;
     defer peer.deinit();
-    try testing.expectEqual(codec.Failure.message_too_large, peer.tx.encode(.text, true, "123456789", false).failed);
+    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.tx.encode(.text, true, "123456789", false).failed);
     try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false).ok);
 }
 

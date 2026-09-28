@@ -59,7 +59,7 @@ pub fn inspect(compressed: *bool, first: *u8, negotiated: bool) ?events.Failure 
     switch (meaning(@truncate(first.* & 0x0f), negotiated)) {
         .data => compressed.* = true,
         .ignored => {},
-        .refused => return .reserved_bits,
+        .refused => return .unexpected_rsv_1,
     }
     first.* &= ~mask;
     return null;

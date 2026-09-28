@@ -87,7 +87,7 @@ test "a compressed control frame is a protocol error" {
     var buffer: [32]u8 = undefined;
     const frame = with_rsv1(&buffer, true, .ping, &NOT_DEFLATE);
     _ = peer.feed(frame);
-    try testing.expectEqual(codec.Failure.reserved_bits, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.unexpected_rsv_1, peer.pending_failure().?);
     try testing.expectEqual(@as(u16, 1002), peer.failure_code());
 }
 

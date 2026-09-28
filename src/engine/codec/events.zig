@@ -1,10 +1,9 @@
 //! The event vocabulary a decoded frame turns into.
 //!
-//! The engine's own `WebSocket` resolves frames into three actions: answer a
-//! ping, note a close, or hand a message to the application. The codec needs the
-//! same three plus a few the transport does not care about, so the mapping from a
-//! completed frame to something the caller can observe is written down once here
-//! rather than inline in the state machine.
+//! The engine's own `WebSocket` resolves frames into three actions: answer a ping, note
+//! a close, or hand a message to the application. The codec needs the same three plus a
+//! few the transport does not care about, so the mapping from a completed frame to
+//! something the caller can observe is written down once here.
 
 const zslay = @import("zslay");
 
@@ -37,26 +36,28 @@ pub const Kind = enum(u8) {
     continuation = 6,
 };
 
-/// Why a frame could not be accepted, kept apart from `zslay`'s error set so the
-/// mapping to a close code is stated in one place rather than at each call site.
+/// Why a frame could not be accepted.
+///
+/// One member per condition `ws` names in a `WS_ERR_*` code, plus two of its own: a
+/// refusal with no more specific reason, and a compressed payload that is not a
+/// DEFLATE stream, which `ws` reports as a 1007 with no code. The members are the
+/// vocabulary the boundary reports as an ordinal, so `src/binding/codec-status.ts`
+/// carries the matching table and the order is the ABI.
 pub const Failure = enum(u8) {
+    /// A refusal with no more specific reason. Everything the parser could not name.
     protocol_error,
-    unexpected_opcode,
-    reserved_bits,
+    expected_fin,
+    expected_mask,
+    invalid_close_code,
+    invalid_control_payload_length,
+    invalid_opcode,
     invalid_utf8,
-    message_too_large,
-    fragmented_message_too_large,
-    /// More pieces in one message than the compiled fragment bound allows.
-    ///
-    /// Its own member rather than `protocol_error` because the close code is
-    /// different: every frame was well formed, so this is 1008 (a policy violation)
-    /// and not 1002 (a protocol error). `ws` closes 1008 for `maxFragments` too, and
-    /// a peer that cannot tell the two apart cannot tell a misconfiguration from a
-    /// malformed stream.
-    too_many_fragments,
-    /// A compressed message that is not a DEFLATE stream. Appended rather than folded
-    /// into `invalid_utf8`, which carries the same 1007, because the two are different
-    /// faults and one of them is a compression negotiation that went wrong.
+    unexpected_mask,
+    unexpected_rsv_1,
+    unexpected_rsv_2_3,
+    too_many_buffered_parts,
+    unsupported_data_payload_length,
+    unsupported_message_length,
     invalid_compressed_data,
 };
 
@@ -64,14 +65,23 @@ pub const Failure = enum(u8) {
 ///
 /// The distinction that matters is 1002 against 1007: a frame that violates the framing
 /// is a protocol error, and a well-formed frame carrying invalid UTF-8 or undecodable
-/// compressed data is an invalid payload. Collapsing both to 1002 would pass a suite
-/// that only checks "an error close happened" and fail one that checks the code.
+/// compressed data is an invalid payload.
 pub fn close_code_for(failure: Failure) u16 {
     return switch (failure) {
-        .message_too_large, .fragmented_message_too_large => CLOSE_MESSAGE_TOO_BIG,
+        .unsupported_message_length => CLOSE_MESSAGE_TOO_BIG,
         .invalid_utf8, .invalid_compressed_data => CLOSE_INVALID_PAYLOAD,
-        .too_many_fragments => CLOSE_POLICY_VIOLATION,
-        .protocol_error, .unexpected_opcode, .reserved_bits => CLOSE_PROTOCOL_ERROR,
+        .too_many_buffered_parts => CLOSE_POLICY_VIOLATION,
+        .protocol_error,
+        .expected_fin,
+        .expected_mask,
+        .invalid_close_code,
+        .invalid_control_payload_length,
+        .invalid_opcode,
+        .unexpected_mask,
+        .unexpected_rsv_1,
+        .unexpected_rsv_2_3,
+        .unsupported_data_payload_length,
+        => CLOSE_PROTOCOL_ERROR,
     };
 }
 
@@ -83,26 +93,9 @@ pub fn failure_ordinal(failure: Failure) u8 {
 }
 
 /// The highest `Kind` ordinal, which is what the boundary checks a JavaScript ordinal
-/// against.
-///
-/// Named as the last member on purpose. The previous bound was written against
-/// `rejected`, so adding a kind after it produced a kind the boundary refused to send:
-/// the refusal was a correct `unexpected_opcode` for an ordinal it considered out of
-/// range, and the only symptom was a `send` that reported a protocol error for a frame
-/// the caller had explicitly asked for.
+/// against. Named as the last member on purpose: the bound was once written against
+/// `rejected`, so a kind added after it produced a kind the boundary refused to send.
 pub const max_ordinal: u8 = @intFromEnum(Kind.continuation);
-
-/// The human-readable reason, for a message the caller can log or send. This is the only
-/// part a peer ever sees.
-pub fn describe(failure: Failure) []const u8 {
-    return switch (failure) {
-        .invalid_utf8 => "Invalid UTF-8",
-        .invalid_compressed_data => "Invalid compressed data",
-        .message_too_large, .fragmented_message_too_large => "Message too large",
-        .too_many_fragments => "Too many message fragments",
-        .protocol_error, .unexpected_opcode, .reserved_bits => "Protocol error",
-    };
-}
 
 /// Whether an opcode may carry a payload of more than 125 bytes.
 pub fn is_control(opcode: zslay.Opcode) bool {
@@ -112,19 +105,24 @@ pub fn is_control(opcode: zslay.Opcode) bool {
 /// Maps a parse failure onto this vocabulary, so the close code is decided in one
 /// place rather than at each call site.
 ///
-/// The parameter is `anyerror` rather than `zslay.Error` because each step infers
-/// its own error set from the expressions it can actually reach, and Zig does not
-/// widen an inferred set to a declared one at a call. The default arm is the
-/// policy rather than a gap: an error the codec has no specific reason for is a
-/// protocol error as far as the peer is concerned, and 1002 with "Protocol error"
-/// is the honest description of a frame it could not accept.
+/// The parameter is `anyerror` because each step infers its own error set from the
+/// expressions it can reach, and Zig does not widen an inferred set to a declared one at
+/// a call. The default arm is the policy rather than a gap: an error the codec has no
+/// name for is a protocol error as far as the peer is concerned.
 pub fn classify(err: anyerror) Failure {
     return switch (err) {
-        error.PayloadTooLarge => .message_too_large,
+        error.PayloadTooLarge => .unsupported_message_length,
         error.InvalidUtf8 => .invalid_utf8,
-        error.InvalidOpcode => .unexpected_opcode,
-        error.TooManyFragments => .too_many_fragments,
+        error.InvalidOpcode => .invalid_opcode,
+        error.TooManyFragments => .too_many_buffered_parts,
         error.CorruptPayload => .invalid_compressed_data,
+        error.PayloadNotMasked => .expected_mask,
+        error.PayloadMasked => .unexpected_mask,
+        // The parser's own ceiling on a declared length, which is a frame a peer could
+        // not have meant to send. A length past `maxPayload` is the other member, and
+        // conflating the two reported a size limit for an impossible length.
+        error.InvalidLength => .unsupported_data_payload_length,
+        error.InvalidCloseCode => .invalid_close_code,
         else => .protocol_error,
     };
 }

@@ -1,10 +1,28 @@
-export { CODEC_ENCODE_FAILURES, CODEC_KINDS, CODEC_OUTCOME, CODEC_ROLE } from "./codec-status";
+export {
+  CODEC_ENCODE_FAILURES,
+  CODEC_FAILURES,
+  CODEC_KINDS,
+  CODEC_OUTCOME,
+  CODEC_ROLE,
+} from "./codec-status";
 export { createCodec, type CodecOptions } from "./codec-create";
 
 export { codecOutbound, codecOutboundMasked, encodeCodecFrame } from "./codec-encode";
 export { codecLimits } from "./codec-limits";
-export { codecCeilings, codecFailureCode, codecRole, resetCodec } from "./codec-state";
-export type { CodecEncodeFailure, CodecKindName, CodecRole, FeedOutcome } from "./codec-status";
+export {
+  codecCeilings,
+  codecFailure,
+  codecFailureCode,
+  codecRole,
+  resetCodec,
+} from "./codec-state";
+export type {
+  CodecEncodeFailure,
+  CodecFailureName,
+  CodecKindName,
+  CodecRole,
+  FeedOutcome,
+} from "./codec-status";
 
 import { CODEC_KINDS, decodeOutcome, type CodecKindName, type FeedOutcome } from "./codec-status";
 import type { NativeCodecEvent } from "./native";

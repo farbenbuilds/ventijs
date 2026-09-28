@@ -41,6 +41,32 @@ export const CODEC_KINDS = [
 
 export type CodecKindName = (typeof CODEC_KINDS)[number];
 
+/// Why a `feed` refused a frame, mirroring `events.zig`'s `Failure`. The ordinals are
+/// the ABI and must keep that order, which is why the Zig side has a test that reads
+/// this list's length rather than trusting the two to agree.
+///
+/// Every member is a condition `ws` names in a `WS_ERR_*` code, plus the two ventijs
+/// needs: a refusal with no more specific reason, and a compressed payload that is not
+/// a DEFLATE stream.
+export const CODEC_FAILURES = [
+  "protocolError",
+  "expectedFin",
+  "expectedMask",
+  "invalidCloseCode",
+  "invalidControlPayloadLength",
+  "invalidOpcode",
+  "invalidUtf8",
+  "unexpectedMask",
+  "unexpectedRsv1",
+  "unexpectedRsv2or3",
+  "tooManyBufferedParts",
+  "unsupportedDataPayloadLength",
+  "unsupportedMessageLength",
+  "invalidCompressedData",
+] as const;
+
+export type CodecFailureName = (typeof CODEC_FAILURES)[number];
+
 /// Why an `encode` refused, mirroring `codec_encode.zig`'s `EncodeFailure`.
 export const CODEC_ENCODE_FAILURES = [
   "unexpectedOpcode",

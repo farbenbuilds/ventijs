@@ -31,3 +31,26 @@ pub fn close_reason(payload: []const u8) []const u8 {
     if (payload.len < 2) return payload[0..0];
     return payload[2..];
 }
+
+/// Whether a close payload carries a code RFC 6455 section 7.4 permits.
+///
+/// An absent code is permitted, and so is a one-byte payload in the sense that this
+/// predicate has an opinion about: it returns false, because a payload that carries no
+/// complete code is a fault the parser reports separately.
+pub fn has_valid_code(payload: []const u8) bool {
+    if (payload.len == 0) return true;
+    if (payload.len < 2) return false;
+    const code = std.mem.readInt(u16, payload[0..2][0..2], .big);
+    return is_valid_close_code(code);
+}
+
+/// The codes RFC 6455 section 7.4.1 and the IANA registry permit on the wire.
+///
+/// Spelled out here rather than taken from `zslay`, whose copy is private and answers
+/// only "valid" or "protocol error", so a caller cannot tell an illegal code from a
+/// control frame of the wrong length.
+pub fn is_valid_close_code(code: u16) bool {
+    return (code >= 1000 and code <= 1003) or
+        (code >= 1007 and code <= 1014) or
+        (code >= 3000 and code <= 4999);
+}

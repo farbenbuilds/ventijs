@@ -27,6 +27,7 @@ test {
     _ = @import("codec/encode_test.zig");
     _ = @import("codec/boundary_test.zig");
     _ = @import("codec/reject_test.zig");
+    _ = @import("codec/reject-close_test.zig");
     _ = @import("codec/fragment_test.zig");
     _ = @import("codec/backpressure_test.zig");
     _ = @import("codec/close_test.zig");
