@@ -55,7 +55,6 @@ export type SocketState = EmitterState<SocketEventMap> & {
   extensions: string;
   binaryType: BinaryTypeValue;
   readyState: ReadyState;
-  bufferedAmount: number;
   isPaused: boolean;
   isServer: boolean;
   closeCode: number;
@@ -88,6 +87,10 @@ export type SocketState = EmitterState<SocketEventMap> & {
   /// them or on a later tick. `ws`'s `allowSynchronousEvents` is the same choice, and
   /// its default is `true`, which is the synchronous path this state starts in.
   allowSynchronousEvents: boolean;
+  /// Whether a deferred delivery is waiting for its tick. On the state rather than in a
+  /// module-level `WeakSet`, because it is per-socket state and a module-level
+  /// collection is the shape a second one gets added next to.
+  deliveryPaused: boolean;
   /// The bytes a deferred delivery has not decoded yet, or null.
   ///
   /// A pause is a *parse* pause, which is what `ws` does: the frames behind the

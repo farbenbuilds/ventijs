@@ -32,7 +32,6 @@ export function controlFrame(
   }
   if (typeof payload === "number") payload = String(payload);
   if (state.readyState !== OPEN) {
-    state.bufferedAmount += toPayload(payload).bytes.length;
     defer(failure, notOpenError(state.readyState));
     return;
   }

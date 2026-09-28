@@ -4,7 +4,6 @@ import { defer, notOpenError, type SocketPayload } from "./payload";
 import { frameError, writeFrame } from "./codec-outbound";
 import { createError } from "../errors";
 import { reportFailure } from "./send-failure";
-import { queuedBytes } from "./queued";
 
 /// The `ws` send options this route reads, resolved once per call.
 ///
@@ -53,11 +52,6 @@ export function sendFramed(
   if (status === "ok") state.fragmentsOpen = !framing.fin;
   switch (status) {
     case "ok":
-      // Re-read rather than zeroed: `ws` reports the sender's queue length, and a
-      // transport that is still draining holds the bytes it was handed. Zeroing it here
-      // would report a socket with a megabyte queued as idle, which is the one number
-      // a caller polls to decide whether to stop sending.
-      state.bufferedAmount = queuedBytes(state);
       defer(callback);
       return;
     case "backpressure":
@@ -65,7 +59,6 @@ export function sendFramed(
     case "closed":
       // Not a failure: `ws` reports these through the callback and leaves the socket
       // alone, because a send that arrived too late is not a fault of the socket.
-      state.bufferedAmount = queuedBytes(state);
       defer(callback, notOpenError(state.readyState));
       return;
     case "invalid-handle":

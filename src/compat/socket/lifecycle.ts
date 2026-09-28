@@ -7,7 +7,6 @@ import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
 import { closeCodeOf } from "./close-code";
 import { toCloseReason } from "./close-reason";
 import { armCloseTimeout, closeFramed } from "./codec-close";
-import { bufferedAmountOf } from "./payload";
 import { closeFailure } from "./close-failure";
 
 const EMPTY = Buffer.alloc(0);
@@ -113,7 +112,6 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   );
   if (status === "ok") {
     state.closeFrameSent = true;
-    state.bufferedAmount = bufferedAmountOf(state);
     return;
   }
   if (status === "closing" || status === "closed") {

@@ -55,6 +55,14 @@ export function attachSocket(
       "ventijs: attachSocket requires a ventijs socket record",
     );
   }
+  // A stream that cannot be read or written is not a connection, and a socket that
+  // reports `OPEN` on one is permanently `OPEN` with nothing on the wire: every send
+  // reports success and `bufferedAmount` stays at zero. The server's upgrade path
+  // already checks this before it hands the socket over.
+  if (!transport.readable || !transport.writable) {
+    transport.destroy();
+    return;
+  }
   state.transport = transport;
   openCodec(state, role ?? CODEC_ROLE.server);
   transport.on("end", () => {

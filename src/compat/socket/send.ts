@@ -6,7 +6,7 @@ import { CONNECTING, OPEN } from "../ready-state";
 import { sendFramed } from "./codec-send";
 import { reportWithoutClosing } from "./lifecycle";
 import { notAttachedError, reportFailure } from "./send-failure";
-import { bufferedAmountOf, defer, notOpenError, statusError, toPayload } from "./payload";
+import { defer, notOpenError, statusError, toPayload } from "./payload";
 
 export function sendData(
   state: SocketState,
@@ -21,7 +21,6 @@ export function sendData(
     // `sendAfterClose`: the bytes are accounted and the callback is told, and
     // nothing else happens. Routing this through `reportFailure` would close a
     // socket that was merely mid-close.
-    accountUnsentBytes(state, payload.bytes.length);
     defer(failure, notOpenError(state.readyState));
     return;
   }
@@ -62,21 +61,6 @@ function sendBinary(options: unknown, fallback: boolean): boolean {
   return typeof binary === "boolean" ? binary : fallback;
 }
 
-/// Accumulates bytes that were accepted but will never reach the network.
-///
-/// `ws` splits this on whether a sender exists, and the split matters here. With
-/// a sender the bytes are accounted against the socket's write queue, which
-/// drains. Without one there is no queue to account against, so the counter only
-/// ever grew: a send on a closing socket from the upgrade route raised
-/// `bufferedAmount` by the payload size, nothing ever decremented it, and a
-/// caller polling the property in a close handler watched a number climb without
-/// limit. A number that only rises is indistinguishable from a leak in the
-/// caller's own accounting, so nothing is accounted when there is nothing to
-/// account against.
-function accountUnsentBytes(state: SocketState, length: number): void {
-  if (state.attachment !== null) state.bufferedAmount += length;
-}
-
 function applySendStatus(
   state: SocketState,
   status: EngineStatus,
@@ -85,7 +69,6 @@ function applySendStatus(
 ): void {
   switch (status) {
     case "ok":
-      state.bufferedAmount = bufferedAmountOf(state);
       defer(callback);
       return;
     case "backpressure":
@@ -99,7 +82,6 @@ function applySendStatus(
     case "closed":
       // The engine says the connection is gone, so this is `sendAfterClose` and
       // not a send failure: the bytes are accounted and the caller is told.
-      accountUnsentBytes(state, length);
       defer(callback, notOpenError(state.readyState));
       return;
     case "invalid-handle":

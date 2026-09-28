@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { arch, platform } from "node:process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { missingAddonMessage } from "./addon-error";
+import { missingAddonMessage, unloadableAddonMessage } from "./addon-error";
 import type { VentiAddon } from "./native";
 
 export type { VentiAddon } from "./native";
@@ -50,6 +50,15 @@ let addon: VentiAddon | undefined;
 /// the library works fine -- that is a worse first impression than a load on first
 /// use.
 export function loadAddon(): VentiAddon {
-  addon ??= require(resolveAddonPath()) as VentiAddon;
+  if (addon !== undefined) return addon;
+  const path = resolveAddonPath();
+  try {
+    addon = require(path) as VentiAddon;
+  } catch (cause) {
+    // An artifact that exists and will not `dlopen` is the first thing anyone hits after
+    // a toolchain or libc change, and the raw error for it is a symbol they have never
+    // heard of, from a file they did not know existed. The cause keeps the diagnosis.
+    throw Object.assign(new Error(unloadableAddonMessage(path, platform, arch)), { cause });
+  }
   return addon;
 }

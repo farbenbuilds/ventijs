@@ -7,6 +7,21 @@
 /// test: `load.ts` reaches it through the filesystem, and a test that had to reproduce
 /// a broken install to reach the message would not be a test of the message.
 
+/// The message an addon that is present but will not load produces.
+///
+/// Distinct from a missing one because the cause is different and so is the answer: the
+/// artifact exists, so this is a toolchain or libc change rather than a platform
+/// mismatch, and the underlying error -- an unresolved symbol, a wrong ELF class -- is the
+/// whole diagnosis. It is kept as `cause` so the message does not have to repeat it.
+export function unloadableAddonMessage(path: string, platform: string, arch: string): string {
+  return (
+    `ventijs: the native addon at ${path} was found but could not be loaded, so it was ` +
+    `built for a different ${platform}-${arch} or against a different libc. In a checkout ` +
+    'the fix is "pnpm build:binding"; in an install, a package built for this platform. ' +
+    "The loader's own error is the cause."
+  );
+}
+
 /// Where the caller should look next, given how far the search got.
 ///
 /// `root` is the package root the search started from, or `undefined` when there was no

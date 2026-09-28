@@ -1,10 +1,13 @@
 import type { Duplex } from "node:stream";
 import { codecFailure, codecFailureCode, codecFeedResume, feedCodec } from "../../binding/codec";
 import type { SocketState } from "../../types/socket";
-import { codecOf } from "./codec-handle";
+import { closeCodec, codecOf } from "./codec-handle";
 import { isDeliveryPaused } from "./codec-deferral";
 import { failureByCode, refuseByCodec } from "./codec-refusal";
 import { deliver, drainReleased } from "./codec-events";
+import { createError } from "../errors";
+import { CLOSED } from "../ready-state";
+import { failConnection } from "./lifecycle";
 
 /// Folds the transport's bytes into the socket's codec and delivers what comes out.
 /// `pending` is what arrived with the upgrade response, if anything did.
@@ -43,9 +46,20 @@ export function ingest(state: SocketState, chunk: Buffer): void {
   // full queue, or a deferred delivery all end the loop.
   while (rest.length > 0) {
     const outcome = feedCodec(handle, rest);
-    deliver(state, () => {
-      resume(state);
-    });
+    // A listener that throws is the application's own bug, and it must not also cost
+    // the connection. `rest` is the undecoded tail of this read and it is a local, so
+    // an exception out of the dispatch loses it: the codec is left holding half a frame
+    // and the next read starts a fresh one, which delivers a garbled message or refuses
+    // the connection for a framing fault the peer never committed. Finishing the socket
+    // first turns one throwing handler into one dead connection instead.
+    try {
+      deliver(state, () => {
+        resume(state);
+      });
+    } catch (error) {
+      failOnThrow(state, error);
+      throw error;
+    }
     if (outcome.kind === "failed") {
       // The codec latched why, and both ends of the connection get a reason: the peer
       // the close code, the application the `ws` error code.
@@ -65,6 +79,21 @@ export function ingest(state: SocketState, chunk: Buffer): void {
       return;
     }
   }
+}
+
+/// Ends a connection whose dispatch threw, then lets the throw continue.
+///
+/// The application's own exception keeps propagating, so a throw from a `message` listener
+/// is still a throw from a `message` listener rather than a silent close; what stops
+/// here is the corruption.
+function failOnThrow(state: SocketState, error: unknown): void {
+  if (state.readyState === CLOSED) return;
+  failConnection(
+    state,
+    error instanceof Error ? error : createError("ERR_PROTOCOL", String(error)),
+  );
+  closeCodec(state);
+  state.transport?.destroy();
 }
 
 /// What a deferred delivery resumes with.

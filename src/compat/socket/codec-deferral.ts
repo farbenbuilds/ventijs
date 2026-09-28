@@ -19,11 +19,10 @@ import type { SocketState } from "../../types/socket";
 /// Its own module because the policy is one bit of state and a timer, and neither
 /// belongs in the dispatcher: the dispatcher answers "what does one decoded event
 /// mean" and this answers "when does the application get to hear about it".
-const paused = new WeakSet<SocketState>();
 
 /// Whether this socket's delivery is paused waiting for a tick.
 export function isDeliveryPaused(state: SocketState): boolean {
-  return paused.has(state);
+  return state.deliveryPaused;
 }
 
 /// Pauses delivery for one tick and schedules the resume, returning true.
@@ -34,14 +33,16 @@ export function isDeliveryPaused(state: SocketState): boolean {
 ///
 /// `setImmediate` and not `queueMicrotask`: a microtask runs before the transport's
 /// next read in the same turn of the loop, so the application would still be running
-/// handlers inside the read that produced them, which is the thing the option exists
-/// to stop.
+/// handlers inside the read that produced them, which is the option's whole point.
 export function pauseUntilNextTick(state: SocketState, resume: () => void): boolean {
-  if (paused.has(state)) return true;
-  paused.add(state);
-  setImmediate(() => {
-    paused.delete(state);
+  if (state.deliveryPaused) return true;
+  state.deliveryPaused = true;
+  const unref = setImmediate(() => {
+    state.deliveryPaused = false;
     resume();
   });
+  // A pending resume must not be the reason a process stays up, for the same reason the
+  // close deadline is not: a socket library has no business holding a loop open.
+  unref.unref?.();
   return true;
 }
