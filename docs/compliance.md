@@ -41,6 +41,11 @@ that would add it.
   file that records the divergence.
 - `partial` is not a polite word for `todo`. It means the surface exists, a
   caller can reach it, and something observable is missing. The note says what.
+- A comparison is evidence only if its reference leg can fail. A conformance
+  scenario that runs both implementations against a stub, or against a harness
+  that answers `send` and `close` from memory, asserts nothing about the
+  ordering the row is about; the fix is a real peer on each leg, and the row
+  says so when the evidence changes.
 - Update the affected row in the same change that moves the status.
 
 ## Where the surface stands
@@ -60,8 +65,9 @@ the client role, because a client masks and a server must not. The rejected
 alternatives are in
 [ADR 0001](adr/0001-transport-and-framing-ownership.md).
 
-`COMPATIBILITY.md` carries a "What is still outstanding" section naming the rows that
-are not `done`, what each one is missing, and where the gap would be covered.
+`COMPATIBILITY.md` carries a "What is still outstanding" section. A row is listed there
+when it is short of `ws` behaviour rather than short of evidence, and the section says
+which of the two it is.
 
 ## Re-recording the Autobahn baseline
 

@@ -40,8 +40,9 @@ The code in the first column is also the `error.code` on the socket's `error` ev
 | `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`      | A message over `maxPayload`                                                                | 1009       | `RangeError` | `done` |
 
 `ws`'s message is `Invalid WebSocket frame: ` plus its own detail for every framing
-fault, and the bare `Too many message fragments` and `Too many buffered chunks` for
-the two count limits.
+fault, and a bare message for the two count limits, `Too many message fragments` and
+`Too many buffered chunks`. ventijs reports the first of those on both paths; see the
+paragraph on `WS_ERR_TOO_MANY_BUFFERED_PARTS` below.
 
 Three messages are `ws`'s in wording but not in full. `ws` interpolates the offending
 number into `WS_ERR_INVALID_CLOSE_CODE`, `WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH`, and
@@ -56,16 +57,24 @@ DEFLATE stream, which `ws` reports as a bare `zlib` error with no code. The clos
 is 1007 either way; the addition is what keeps a broken compressed stream from reading
 as `WS_ERR_INVALID_UTF8`, which a caller would act on by checking text.
 
-`WS_ERR_TOO_MANY_BUFFERED_PARTS` covers two conditions in `ws`, and only one of them
-is reachable. `maxFragments` is enforced per connection and reports the code. The
-`maxBufferedChunks` half is `unreachable` by construction: in `ws` it bounds the
-receiver's queue of un-decoded socket reads (`node_modules/ws/lib/receiver.js`,
-`Receiver.prototype._write`), and ventijs holds at most one read's un-decoded tail,
-`state.pendingInput`, bounded by Node's high-water mark
-(`src/compat/socket/codec-inbound.ts:82`). That is already far stricter than `ws`'s
-default of 262144, so there is nothing left for the option to bound.
-`src/compat/server/server.ts:47` echoes the option on `server.options` at the `ws`
-default so `Object.keys(server.options)` matches, and it is not enforced.
+`WS_ERR_TOO_MANY_BUFFERED_PARTS` covers two conditions in `ws`, and both are reachable
+here. `maxFragments` is enforced per connection and reports the code. `maxBufferedChunks`
+bounds the receiver's queue of un-decoded socket reads, which in `ws` is
+`Receiver._buffers` (`node_modules/ws/lib/receiver.js:100`) and here is
+`state.pendingInput`; a read arriving while an `allowSynchronousEvents: false` delivery
+is deferred is queued rather than dropped, and the bound is checked at
+`src/compat/socket/codec-inbound.ts:41` against `ws`'s 262144 default, which
+`src/compat/server/server.ts:47` also echoes on `server.options` so
+`Object.keys(server.options)` matches.
+`tests/compat/socket/inbound-queue.test.ts` covers that path.
+
+The two differ in one observable way, which is a divergence and not a gap: `ws` gives the
+two a message each, `Too many buffered chunks` and `Too many message fragments`
+(`node_modules/ws/lib/receiver.js:106` and `:507`), while `REFUSALS` has one
+`tooManyBufferedParts` entry for both (`src/compat/socket/refusal-table.ts:72`), so the
+`maxBufferedChunks` path reports `Too many message fragments`. The `error.code`, the
+`RangeError`, and the 1008 are `ws`'s on both paths; a caller keying on the code is
+unaffected and a caller matching on the message is not.
 
 `ERR_PROTOCOL` is the one ventijs keeps for a fault it has no more specific name for:
 a non-minimal length field, and anything else the parser cannot attribute. It is a
@@ -94,7 +103,7 @@ when a staged control record cannot cross the engine's publish topic, mapped thr
 
 | Variable               | Effect in `ws`                                               | ventijs                                         | Status        |
 | ---------------------- | ------------------------------------------------------------ | ----------------------------------------------- | ------------- |
-| `WS_NO_BUFFER_UTIL`    | Guards `require("bufferutil")` in `ws/lib/buffer-util.js`    | Masking is `uWebZockets.websocket_mask` in Zig  | `unreachable` |
+| `WS_NO_BUFFER_UTIL`    | Guards `require("bufferutil")` in `ws/lib/buffer-util.js`    | Masking is `zslay.frame.mask` in the codec      | `unreachable` |
 | `WS_NO_UTF_8_VALIDATE` | Guards `require("utf-8-validate")` in `ws/lib/validation.js` | UTF-8 validation is `src/engine/codec/utf8.zig` | `unreachable` |
 
 Both guard an optional native acceleration module, and ventijs compiles no such
