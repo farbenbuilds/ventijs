@@ -71,6 +71,10 @@ export type NormalizedClientOptions = {
   readonly closeTimeout: number;
   readonly origin: string | undefined;
   readonly headers: Readonly<Record<string, string>> | undefined;
+  /// The caller's own options, forwarded to `http.request` as `ws` forwards them: a copy of
+  /// the source, because `@types/ws` types `ClientOptions` as extending
+  /// `SecureContextOptions` and the request options. See `client/transport-options.ts`.
+  readonly requestOptions: Readonly<Record<string, unknown>>;
   /// `ws`'s `finishRequest`: the caller owns the `end()`. Declared by `@types/ws`, so
   /// unlike `maxFragments` a typed caller reaches it without a cast.
   readonly finishRequest: FinishRequestCallback | undefined;

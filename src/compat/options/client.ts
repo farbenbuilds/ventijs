@@ -38,6 +38,10 @@ export function normalizeClientOptions(options?: ClientOptions): NormalizedClien
     perMessageDeflate: normalizePerMessageDeflate(source.perMessageDeflate, true),
     origin: source.origin,
     headers: source.headers === undefined ? undefined : { ...source.headers },
+    // The whole source, because `ws` spreads the caller's options into `http.request`
+    // (`websocket.js:759`) and `@types/ws` types them as the request and TLS options. Reading
+    // a fixed key list downstream is what keeps a getter on an unrelated key from running.
+    requestOptions: { ...source },
     finishRequest: source.finishRequest,
     generateMask: source.generateMask,
   };
