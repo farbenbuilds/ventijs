@@ -14,8 +14,12 @@ import { rawUpgrade, request, UPGRADE_HEADERS } from "../server/upgrade-support"
 test.each([
   ["no configuration can satisfy the offer", "permessage-deflate; client_max_window_bits=1"],
   [
-    "a window below the legal range in every configuration",
-    "permessage-deflate; client_max_window_bits=8",
+    "a server window this build cannot emit in every configuration",
+    "permessage-deflate; server_max_window_bits=8, permessage-deflate; server_max_window_bits=10",
+  ],
+  [
+    "a server window this compressor cannot produce",
+    "permessage-deflate; server_max_window_bits=10",
   ],
   ["a malformed header", "permessage-deflate; p=(1)"],
 ])(

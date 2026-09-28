@@ -1,12 +1,9 @@
 //! `permessage-deflate` negotiation, in both directions.
 //!
-//! Separate from `grammar.test.ts` because the two answer different questions. That one
-//! asks whether a header is well formed; this one asks what is done with one, and the
-//! answers are `ws`'s answers, which is the whole point of the module under test.
-//!
-//! The reduced-window refusals are the only place this build knowingly differs from
-//! `ws`, and each case names why: the compressor is one-shot libdeflate, so a window
-//! below 15 is a promise the codec cannot keep.
+//! Separate from `grammar.test.ts` because the two answer different questions. That one asks
+//! whether a header is well formed; this one asks what is done with one, and the answers are
+//! `ws`'s answers. Window handling is in `deflate-window.test.ts`, which splits from this
+//! file only because the rules there are long enough to need the room.
 
 import { describe, expect, test } from "vitest";
 import { acceptAsServer } from "../../../src/compat/extensions/deflate";
@@ -80,40 +77,6 @@ describe("a server reading a client offer", () => {
     expect(outcome).toHaveProperty("refusal");
   });
 
-  test("a window this compressor cannot use is refused, not accepted", () => {
-    // The one deliberate divergence from `ws`. A streaming zlib can honour a window
-    // below 15; a one-shot libdeflate compressor emits a full window, so accepting 10
-    // would produce a stream the peer's 10-bit inflater rejects on a back-reference.
-    const outcome = acceptAsServer(
-      configurations("permessage-deflate; client_max_window_bits=10"),
-      DEFAULTS,
-    );
-    expect(outcome).toHaveProperty("refusal");
-  });
-
-  test("a second configuration is tried when the first names an unusable window", () => {
-    // RFC 7692 section 7.1.1.1 exists for this: a client offers two configurations so a
-    // narrow server can decline the first. Refusing the connection on the first offer
-    // would be strictly worse than reading the second.
-    const outcome = acceptAsServer(
-      configurations("permessage-deflate; client_max_window_bits=8, permessage-deflate"),
-      DEFAULTS,
-    );
-    expect(acceptedHeader(outcome)).toBe(
-      "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
-    );
-  });
-
-  test("an offer every configuration refuses is a refusal", () => {
-    const outcome = acceptAsServer(
-      configurations(
-        "permessage-deflate; client_max_window_bits=8, permessage-deflate; client_max_window_bits=9",
-      ),
-      DEFAULTS,
-    );
-    expect(outcome).toHaveProperty("refusal");
-  });
-
   test("a client that will not accept a named window is skipped", () => {
     // `ws` refuses to answer a `clientMaxWindowBits` number with an offer that names no
     // window, because the client asked for a guarantee the offer does not give.
@@ -129,11 +92,5 @@ describe("a server reading a client offer", () => {
       server,
     );
     expect(outcome).toHaveProperty("refusal");
-  });
-
-  test("the extension off is never negotiated, whatever the client offers", () => {
-    expect(
-      acceptAsServer(configurations("permessage-deflate; client_max_window_bits"), false),
-    ).toBeNull();
   });
 });
