@@ -10,6 +10,7 @@
 const napi = @import("napi-zig");
 const instance = @import("../server/instance.zig");
 const queues = @import("../socket/queues.zig");
+const handles = @import("../socket/handles.zig");
 
 /// Removes the oldest parsed message and copies it into a JavaScript-owned
 /// buffer.
@@ -19,6 +20,16 @@ const queues = @import("../socket/queues.zig");
 /// engine memory is ever reachable from JavaScript. A null return means nothing
 /// is staged, which is the normal case when a wakeup was coalesced or the event
 /// channel dropped its notification.
+///
+/// **The connection handle is not resolved.** A peer that sends a message and a
+/// close frame in one read has both staged before Node runs, and `on_close`
+/// releases the slab slot on the engine thread, so by the time the take happens
+/// the handle is stale and the message is unreachable: a parsed message the
+/// application never sees. The record carries the `(index, generation)` it was
+/// staged with and `take_inbound` matches on that, so a released connection's
+/// message is still that connection's message. A pair that matches nothing
+/// returns null, and a slot that has since been reused is a different
+/// generation, so no record can be claimed twice.
 ///
 /// The slot is released by a `defer` rather than on the success path alone. A
 /// failed `createBuffer` or `createArrayWithLength` would otherwise return with
@@ -31,7 +42,7 @@ const queues = @import("../socket/queues.zig");
 /// message's opcode with the next message's bytes.
 pub fn take_socket_message(env: napi.Env, server: u40, connection: u64) !?napi.Val {
     const target = instance.lookup(env, server) orelse return error.UnknownServer;
-    const handle = instance.resolve_connection(target, connection) orelse return null;
+    const handle = handles.Handle.from_int(connection);
     const view = queues.take_inbound(&target.sockets, handle.index, handle.generation) orelse {
         return null;
     };
