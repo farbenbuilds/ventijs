@@ -49,13 +49,13 @@ test "a close payload with a reserved code is an invalid close code" {
     }
 }
 
-test "a close payload one byte long is a protocol error, not a bad code" {
-    // The length is wrong before the code is readable, which is the order `ws` checks
-    // them in and the reason the two faults stay apart.
+test "a close payload one byte long is an invalid control payload length" {
+    // The length is wrong before the code is readable, and `ws` names both faults in
+    // the same `createError` call, so the length is the one reported here.
     var peer = support.server();
     var buffer: [16]u8 = undefined;
     _ = peer.feed(raw_frame(&buffer, true, @intFromEnum(zslay.Opcode.close), 1, true, .{ 1, 2, 3, 4 }, "\x03"));
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.invalid_control_payload_length, peer.pending_failure().?);
 }
 
 test "a close reason that is not UTF-8 is 1007" {

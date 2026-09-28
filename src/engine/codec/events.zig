@@ -98,6 +98,7 @@ pub fn classify(err: anyerror) Failure {
         // two reported a size limit for a length no peer could have sent.
         error.InvalidLength => .unsupported_data_payload_length,
         error.InvalidCloseCode => .invalid_close_code,
+        error.InvalidControlPayloadLength => .invalid_control_payload_length,
         else => .protocol_error,
     };
 }

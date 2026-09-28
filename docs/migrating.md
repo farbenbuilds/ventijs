@@ -78,9 +78,9 @@ compressed are read correctly, so interoperability is unaffected in both directi
 
 ## What is deliberately different
 
-Every one of these is a divergence from `ws` in the direction of refusing to do
-something unsafe, and each is recorded in [COMPATIBILITY.md](../COMPATIBILITY.md) with
-the `ws` behaviour it replaces.
+Each is recorded in [COMPATIBILITY.md](../COMPATIBILITY.md) with the `ws` behaviour it
+replaces. Most are a refusal to do something unsafe; two are stricter limits and one
+is an addition.
 
 - **A `WebSocket` subclass that is not a ventijs socket record** fails with
   `ERR_INVALID_HANDLE` from inside an `upgrade` listener, where `ws` fails with a
@@ -96,8 +96,14 @@ the `ws` behaviour it replaces.
   `verifyClient` headers and status codes are dropped; a rejection status outside
   400-599 is clamped to 500, where `ws` writes the literal string
   `HTTP/1.1 700 undefined`.
-- **Errors carry a stable `ERR_*` code.** This is additive: every `ws` error class and
-  message is preserved, and a `.code` is added.
+- **`maxBufferedChunks` is not enforced.** It is echoed on `server.options` at the
+  `ws` default so `Object.keys(server.options)` matches, but the codec holds at most
+  one read's un-decoded tail, which is already far below the 262144 `ws` bounds.
+  Lowering it changes nothing; `maxFragments` and `maxPayload` are the limits that
+  do something.
+- **Errors carry a stable `code`.** A refused frame reports `ws`'s own `WS_ERR_*`
+  code, constructor, and message, so a caller keying on `error.code` reads what it
+  always did. Where `ws` reports nothing, ventijs adds an `ERR_*` code.
 
 ## Testing against both
 

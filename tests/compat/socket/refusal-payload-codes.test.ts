@@ -43,13 +43,13 @@ test(
 );
 
 test(
-  "a close payload one byte long is the plain protocol error",
+  "a close payload one byte long is an invalid control payload length",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const seen = await refused(new WebSocketServer({ noServer: true }), (send) => {
       send(rawFrame([0x88, 0x80 | 1, ...MASK, 0x03]));
     });
-    expect(seen.code).toBe("ERR_PROTOCOL");
+    expect(seen.code).toBe("WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH");
     expect(seen.closeCode).toBe(1002);
   },
 );

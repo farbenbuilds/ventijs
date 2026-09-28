@@ -1,81 +1,90 @@
 # ws error codes and environment variables
 
-The vendored reference at [ventijs.md](ventijs.md) documents twelve `WS_ERR_*`
-codes and two environment variables. This file records whether each can occur in
-ventijs, and why. The status vocabulary is defined in
-[compliance.md](compliance.md).
+The vendored reference at [ventijs.md](ventijs.md) documents twelve `WS_ERR_*` codes
+and two environment variables. This file records whether each can occur in ventijs,
+and why. The status vocabulary is defined in [compliance.md](compliance.md).
 
-## Why none of the twelve is reachable
+## Where the codes come from
 
 `ws` emits every `WS_ERR_*` code from its JavaScript frame receiver, the module that
-reads bytes off the socket and decodes frames. ventijs has no such receiver, and that is
-the architecture rather than a missing feature: frames are parsed in Zig, by the codec in
-`src/engine/codec/`, and the condition each code names is answered with a close frame
-instead of a thrown error.
+reads bytes off the socket and decodes frames. ventijs decodes frames in Zig, by the
+codec in `src/engine/codec/`, and that codec runs on the Node `Duplex` the upgrade
+route adopts (`src/compat/socket/attach.ts` hands the transport to
+`src/compat/socket/codec-inbound.ts`). The classification the parser already made
+crosses the boundary as an ordinal in `CodecFailureName` and becomes
+`error.code` through `src/compat/socket/refusal-table.ts`, so a refused frame is
+`ws`-shaped to the application and RFC-shaped to the peer.
 
-`src/compat/socket/attach.ts` now hands the adopted `Duplex` to that codec, so frames
-_are_ read on the upgrade route; the conclusion still holds for a different reason, and
-the previous version of this file recorded the earlier one. A refusal ends the connection
-with the close code RFC 6455 section 7.4.1 assigns the condition, and the observable
-surface is that code and its reason.
-
-Every code below is therefore `unreachable`, with one exception: a message over
-`maxPayload` is a caller-side condition, so the facade reports it as
-`ERR_MAX_PAYLOAD` through the send callback or an `error` event rather than only
-as a close code a peer sees. The note gives the code a peer observes instead, so
-the row is useful rather than merely negative.
+All twelve are `done`. The close code and the close reason are RFC 6455 section 7.4.1
+and cannot change; the `error.code`, the constructor, and the message are `ws`'s, and
+are pinned by `tests/compat/socket/refusal-codes.test.ts` and
+`tests/compat/socket/refusal-payload-codes.test.ts`.
 
 ## `WS_ERR_*` codes
 
-| Code                                     | Condition in `ws`                      | ventijs                                                                                                                                                                                                                       | Status                            |
-| ---------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `WS_ERR_EXPECTED_FIN`                    | FIN unset where a final frame was due  | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_EXPECTED_MASK`                   | Unmasked frame sent to a server        | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_INVALID_CLOSE_CODE`              | Close frame with an invalid close code | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH`  | Control frame above 125 bytes          | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_INVALID_OPCODE`                  | Reserved or unknown opcode             | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_INVALID_UTF8`                    | Invalid UTF-8 in a text or close frame | Zig codec; the peer sees `1007`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_UNEXPECTED_MASK`                 | Masked frame sent to a client          | No client exists, so the condition cannot arise                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_UNEXPECTED_RSV_1`                | RSV1 set with no negotiated extension  | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_UNEXPECTED_RSV_2_3`              | RSV2 or RSV3 set                       | Zig codec; the peer sees `1002`                                                                                                                                                                                               | `unreachable`                     |
-| `WS_ERR_TOO_MANY_BUFFERED_PARTS`         | Buffered chunk or fragment count limit | Inbound, a message split into more than `maxFragments` frames is closed with 1008 rather than `WS_ERR_TOO_MANY_BUFFERED_PARTS`, which is what `ws` does; outbound, the bound is a byte-bounded ring rather than a chunk count | `unreachable`                     |
-| `WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH` | Frame length above 2^53 - 1            | The engine route's compiled 64 KiB message cap rejects the frame first, with `1009`                                                                                                                                           | `unreachable`                     |
-| `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`      | Message above `maxPayload`             | The codec route enforces the option per connection and closes with `1009`                                                                                                                                                     | `reachable`, as `ERR_MAX_PAYLOAD` |
+The code in the first column is also the `error.code` on the socket's `error` event.
 
-## Errors ventijs does raise
+| Code                                     | Condition                                                                                                | Close code | Constructor  | Status |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------- | ------------ | ------ |
+| `WS_ERR_EXPECTED_FIN`                    | Control frame with FIN clear                                                                             | 1002       | `RangeError` | `done` |
+| `WS_ERR_EXPECTED_MASK`                   | Unmasked frame to a server                                                                               | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNEXPECTED_MASK`                 | Masked frame to a client                                                                                 | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_OPCODE`                  | Reserved opcode, a continuation with no message open, a new data frame inside one                        | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_CLOSE_CODE`              | Close code RFC 6455 section 7.4 does not permit on the wire (1005, 1006, 1015, 1016, 2999)               | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH`  | Control frame over 125 bytes, or a one-byte close payload                                                | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNEXPECTED_RSV_1`                | RSV1 set with no negotiated extension, or on a control frame                                             | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNEXPECTED_RSV_2_3`              | RSV2 or RSV3 set                                                                                         | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH` | Declared 64-bit length above 2^53 - 1                                                                    | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_UTF8`                    | Invalid UTF-8 in a text message or a close reason, and a compressed payload that is not a DEFLATE stream | 1007       | `Error`      | `done` |
+| `WS_ERR_TOO_MANY_BUFFERED_PARTS`         | More fragments in one message than `maxFragments` allows                                                 | 1008       | `RangeError` | `done` |
+| `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`      | A message over `maxPayload`                                                                              | 1009       | `RangeError` | `done` |
 
-ventijs uses its own `ERR_*` codes, declared in `src/types/errors.ts` and
-produced by `src/compat/errors.ts`. Every thrown error carries a stable string
-code, which is an additive divergence from `ws` and is recorded in
-[COMPATIBILITY.md](../COMPATIBILITY.md). The codes reachable from the facade are
-`ERR_INVALID_OPTION`, `ERR_INVALID_STATE`, `ERR_SOCKET_NOT_OPEN`,
-`ERR_SOCKET_CLOSED`, `ERR_INVALID_HANDLE`, `ERR_BACKPRESSURE`,
-`ERR_INVALID_CLOSE_CODE`, `ERR_INVALID_CLOSE_REASON`, `ERR_MAX_PAYLOAD`, and
-`ERR_PROTOCOL`. `ERR_MAX_PAYLOAD` is the one the engine reports: staging a frame
-larger than `max_frame_bytes` returns the `payload_too_large` status, which
-becomes `ERR_MAX_PAYLOAD` on the send callback.
+`ws`'s message is `Invalid WebSocket frame: ` plus its own detail for every framing
+fault, and the bare `Too many message fragments` and `Too many buffered chunks` for
+the two count limits.
 
-`ERR_POLICY_VIOLATION` is declared and mapped from the engine's
-`policy_violation` status, but nothing in `src/engine/` returns that status, so
-the code is unreachable today.
+`WS_ERR_TOO_MANY_BUFFERED_PARTS` covers two conditions in `ws`, and only one of them
+is reachable. `maxFragments` is enforced per connection and reports the code. The
+`maxBufferedChunks` half is `unreachable` by construction: in `ws` it bounds the
+receiver's queue of un-decoded socket reads (`node_modules/ws/lib/receiver.js`,
+`Receiver.prototype._write`), and ventijs holds at most one read's un-decoded tail,
+`state.pendingInput`, bounded by Node's high-water mark
+(`src/compat/socket/codec-inbound.ts:82`). That is already far stricter than `ws`'s
+default of 262144, so there is nothing left for the option to bound.
+`src/compat/server/server.ts:47` echoes the option on `server.options` at the `ws`
+default so `Object.keys(server.options)` matches, and it is not enforced.
 
-Two reachability facts this file previously recorded as engine-only are now
-also true of the codec route, because the codec route is the one a caller
-reaches: `ERR_MAX_PAYLOAD` is reported through a send callback when a frame is
-larger than the compiled `max_frame_bytes`, and an inbound message above the
-compiled `message_capacity` closes with `1009`. Those two report different codes
-for the same condition, which is a divergence a caller keying on the code should
-know about; `COMPATIBILITY.md` records it.
+`ERR_PROTOCOL` is the one ventijs keeps for a fault it has no more specific name for:
+a non-minimal length field, and anything else the parser cannot attribute. It is a
+1002 and a `RangeError`, and `ws` names none of these.
+
+## Errors ventijs adds
+
+`ws` leaves many thrown errors uncoded. ventijs adds a stable string `code` to every
+error it raises, declared in `src/types/errors.ts` and produced by
+`src/compat/errors.ts`. `ERR_INVALID_OPTION`, `ERR_INVALID_STATE`,
+`ERR_INVALID_HANDLE`, `ERR_SOCKET_NOT_OPEN`, `ERR_SOCKET_CLOSED`,
+`ERR_INVALID_CLOSE_CODE`, `ERR_INVALID_CLOSE_REASON`, `ERR_MAX_PAYLOAD`,
+`ERR_BACKPRESSURE`, `ERR_POLICY_VIOLATION`, and `ERR_PROTOCOL` each answer a
+condition `ws` reports some other way, so the addition is additive.
+
+Two of them exist because there is no peer to tell. `ERR_MAX_PAYLOAD` is reported on
+a local `send` the codec refuses, through the send callback or an `error` event, and
+the socket stays open (`tests/compat/socket/max-payload-options.test.ts`); the
+receive path for the same limit reports `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`, because
+there the peer is the one being answered. `ERR_POLICY_VIOLATION` comes from the
+engine's `policy_violation` status, which `src/engine/ffi/socket_pump.zig:41` returns
+when a staged control record cannot cross the engine's publish topic, mapped through
+`src/binding/socket.ts:23` and `src/compat/errors.ts:11`.
 
 ## Environment variables
 
-| Variable               | Effect in `ws`                                         | ventijs                                                        | Status     |
-| ---------------------- | ------------------------------------------------------ | -------------------------------------------------------------- | ---------- |
-| `WS_NO_BUFFER_UTIL`    | Suppresses the optional `bufferutil` native module     | No such module is compiled in, so there is nothing to suppress | `deferred` |
-| `WS_NO_UTF_8_VALIDATE` | Suppresses the optional `utf-8-validate` native module | No such module is compiled in; the engine parses in Zig        | `deferred` |
+| Variable               | Effect in `ws`                                               | ventijs                                         | Status        |
+| ---------------------- | ------------------------------------------------------------ | ----------------------------------------------- | ------------- |
+| `WS_NO_BUFFER_UTIL`    | Guards `require("bufferutil")` in `ws/lib/buffer-util.js`    | Masking is `uWebZockets.websocket_mask` in Zig  | `unreachable` |
+| `WS_NO_UTF_8_VALIDATE` | Guards `require("utf-8-validate")` in `ws/lib/validation.js` | UTF-8 validation is `src/engine/codec/utf8.zig` | `unreachable` |
 
-Both are `ws` implementation details for its optional native acceleration, and
-neither is part of the API surface. They become `unreachable` rather than
-`deferred` if the engine never gains those optional modules; the prerequisite
-for keeping the `deferred` label is a native acceleration module appearing in a
-published build.
+Both guard an optional native acceleration module, and ventijs compiles no such
+module. A `bufferutil`-shaped escape hatch would be a second, unaccelerated route to
+the same answer, which is the opposite of the design, so both are `unreachable` by
+construction rather than waiting on a prerequisite.

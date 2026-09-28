@@ -37,25 +37,31 @@ another architecture is `zig build -Dtarget=<triple>`.
 
 Run every command through pnpm; do not invoke package binaries directly.
 
-| Command               | Tool     | Purpose                                                             | State on this branch |
-| --------------------- | -------- | ------------------------------------------------------------------- | -------------------- |
-| `pnpm install`        | pnpm     | Install development dependencies                                    | Wired                |
-| `pnpm dev`            | tsdown   | Rebuild the TypeScript bundle in watch mode                         | Wired                |
-| `pnpm build`          | napi-zig | Build the native addon, bundle `dist/`, check declarations          | Wired                |
-| `pnpm build:binding`  | napi-zig | Build the native addon only                                         | Wired                |
-| `pnpm test`           | vitest   | Unit, integration, and boundary tests                               | Wired                |
-| `pnpm test:watch`     | vitest   | Rerun tests on change                                               | Wired                |
-| `pnpm test:compat`    | vitest   | Run the `ws` behavioral conformance suite                           | Wired                |
-| `pnpm test:autobahn`  | node     | Run the Autobahn suite; add `-- --full` for all 517 cases           | Wired                |
-| `pnpm bench`          | node     | Compare against `ws` on the same host: `node bench/index.ts --gate` | Wired                |
-| `pnpm typecheck`      | tsc      | Strict check of `src` and `tests`, no emit                          | Wired                |
-| `pnpm typecheck:dist` | tsc      | `tsc -p tsconfig.dist-types.json`; needs `tsdown` output first      | Wired                |
-| `pnpm lint`           | oxlint   | Lint, then the convention checks in `scripts/`                      | Wired                |
-| `pnpm lint:fix`       | oxlint   | Apply the safe lint fixes                                           | Wired                |
-| `pnpm format`         | oxfmt    | Format TypeScript, JSON, and Markdown                               | Wired                |
-| `pnpm format:check`   | oxfmt    | Verify formatting without writing files                             | Wired                |
-| `pnpm release`        | bumpp    | Bump the version across the versioned surfaces                      | Wired                |
-| `pnpm prepublishOnly` | pnpm     | Build before publish                                                | Wired                |
+| Command                 | Tool     | Purpose                                                             |
+| ----------------------- | -------- | ------------------------------------------------------------------- |
+| `pnpm install`          | pnpm     | Install development dependencies                                    |
+| `pnpm dev`              | tsdown   | Rebuild the TypeScript bundle in watch mode                         |
+| `pnpm build`            | napi-zig | Build the native addon, bundle `dist/`, check declarations          |
+| `pnpm build:binding`    | napi-zig | Build the native addon only                                         |
+| `pnpm test`             | vitest   | Unit, integration, and boundary tests                               |
+| `pnpm test:watch`       | vitest   | Rerun tests on change                                               |
+| `pnpm test:compat`      | vitest   | Run the `ws` behavioral conformance suite                           |
+| `pnpm test:autobahn`    | node     | Run the Autobahn suite; add `-- --full` for all 517 cases           |
+| `pnpm bench`            | node     | Compare against `ws` on the same host: `node bench/index.ts --gate` |
+| `pnpm typecheck`        | tsc      | Strict check of `src` and `tests`, no emit                          |
+| `pnpm typecheck:dist`   | tsc      | `tsc -p tsconfig.dist-types.json`; needs `tsdown` output first      |
+| `pnpm lint`             | oxlint   | Lint, then the convention checks in `scripts/`                      |
+| `pnpm lint:fix`         | oxlint   | Apply the safe lint fixes                                           |
+| `pnpm format`           | oxfmt    | Format TypeScript, JSON, and Markdown                               |
+| `pnpm format:check`     | oxfmt    | Verify formatting without writing files                             |
+| `pnpm finalize:exports` | node     | Add the `types` conditions to the generated `exports` map           |
+| `pnpm release`          | bumpp    | Bump the version across the versioned surfaces                      |
+| `pnpm prepublishOnly`   | pnpm     | Build before publish                                                |
+
+`pnpm finalize:exports` adds the `types` conditions `tsdown` leaves out of the
+generated `exports` map. The bundler knows which runtime files it produced and
+`tsdown` rewrites the map on every build, so the type conditions have to be a step
+rather than a hand-edit the next build would drop.
 
 `pnpm typecheck:dist` resolves the built declarations through the package
 `exports` map, so `tsdown` has to have run first. `pnpm build` does both in

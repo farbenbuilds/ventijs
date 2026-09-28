@@ -34,12 +34,12 @@ test "a close frame with invalid UTF-8 in the reason is 1007" {
     try testing.expectEqual(@as(u16, 1007), peer.failure_code());
 }
 
-test "a one-byte close payload is a protocol error" {
+test "a one-byte close payload is an invalid control payload length" {
     const payload = [_]u8{0x03};
     var peer = support.server();
     var buffer: [64]u8 = undefined;
     _ = peer.feed((Frame{ .opcode = .close, .payload = &payload, .mask = .{ 1, 2, 3, 4 } }).bytes(&buffer));
-    try testing.expectEqual(codec.Failure.protocol_error, peer.pending_failure().?);
+    try testing.expectEqual(codec.Failure.invalid_control_payload_length, peer.pending_failure().?);
 }
 
 test "a failure is latched so every later call reports the same reason" {

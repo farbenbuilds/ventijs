@@ -72,10 +72,11 @@ fn finish_control(comptime State: type, peer: *State, opcode: zslay.Opcode, payl
     };
 }
 
-/// The three close-payload faults. `zslay` validates all three but reports two as one
-/// `ProtocolError`, so the code check happens here; the order matches `ws`.
+/// The three close-payload faults. `zslay` validates all three but reports two of them
+/// as one `ProtocolError`, so both the length and the code are checked here first; the
+/// order is the one `ws` uses at `node_modules/ws/lib/receiver.js`.
 fn validate_close(payload: []const u8) !void {
-    if (payload.len == 1) return error.ProtocolError;
+    if (payload.len == 1) return error.InvalidControlPayloadLength;
     if (!close_payload.has_valid_code(payload)) return error.InvalidCloseCode;
     zslay.frame.validate_close_payload(payload) catch |err| {
         return if (err == error.InvalidUtf8) error.InvalidUtf8 else error.ProtocolError;
