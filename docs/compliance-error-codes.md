@@ -24,24 +24,37 @@ are pinned by `tests/compat/socket/refusal-codes.test.ts` and
 
 The code in the first column is also the `error.code` on the socket's `error` event.
 
-| Code                                     | Condition                                                                                                | Close code | Constructor  | Status |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------- | ------------ | ------ |
-| `WS_ERR_EXPECTED_FIN`                    | Control frame with FIN clear                                                                             | 1002       | `RangeError` | `done` |
-| `WS_ERR_EXPECTED_MASK`                   | Unmasked frame to a server                                                                               | 1002       | `RangeError` | `done` |
-| `WS_ERR_UNEXPECTED_MASK`                 | Masked frame to a client                                                                                 | 1002       | `RangeError` | `done` |
-| `WS_ERR_INVALID_OPCODE`                  | Reserved opcode, a continuation with no message open, a new data frame inside one                        | 1002       | `RangeError` | `done` |
-| `WS_ERR_INVALID_CLOSE_CODE`              | Close code RFC 6455 section 7.4 does not permit on the wire (1005, 1006, 1015, 1016, 2999)               | 1002       | `RangeError` | `done` |
-| `WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH`  | Control frame over 125 bytes, or a one-byte close payload                                                | 1002       | `RangeError` | `done` |
-| `WS_ERR_UNEXPECTED_RSV_1`                | RSV1 set with no negotiated extension, or on a control frame                                             | 1002       | `RangeError` | `done` |
-| `WS_ERR_UNEXPECTED_RSV_2_3`              | RSV2 or RSV3 set                                                                                         | 1002       | `RangeError` | `done` |
-| `WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH` | Declared 64-bit length above 2^53 - 1                                                                    | 1002       | `RangeError` | `done` |
-| `WS_ERR_INVALID_UTF8`                    | Invalid UTF-8 in a text message or a close reason, and a compressed payload that is not a DEFLATE stream | 1007       | `Error`      | `done` |
-| `WS_ERR_TOO_MANY_BUFFERED_PARTS`         | More fragments in one message than `maxFragments` allows                                                 | 1008       | `RangeError` | `done` |
-| `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`      | A message over `maxPayload`                                                                              | 1009       | `RangeError` | `done` |
+| Code                                     | Condition                                                                                  | Close code | Constructor  | Status |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ | ---------- | ------------ | ------ |
+| `WS_ERR_EXPECTED_FIN`                    | Control frame with FIN clear                                                               | 1002       | `RangeError` | `done` |
+| `WS_ERR_EXPECTED_MASK`                   | Unmasked frame to a server                                                                 | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNEXPECTED_MASK`                 | Masked frame to a client                                                                   | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_OPCODE`                  | Reserved opcode, a continuation with no message open, a new data frame inside one          | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_CLOSE_CODE`              | Close code RFC 6455 section 7.4 does not permit on the wire (1005, 1006, 1015, 1016, 2999) | 1002       | `RangeError` | `done` |
+| `WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH`  | Control frame over 125 bytes, or a one-byte close payload                                  | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNEXPECTED_RSV_1`                | RSV1 set with no negotiated extension, or on a control frame                               | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNEXPECTED_RSV_2_3`              | RSV2 or RSV3 set                                                                           | 1002       | `RangeError` | `done` |
+| `WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH` | Declared 64-bit length above 2^53 - 1                                                      | 1009       | `RangeError` | `done` |
+| `WS_ERR_INVALID_UTF8`                    | Invalid UTF-8 in a text message or a close reason                                          | 1007       | `Error`      | `done` |
+| `WS_ERR_TOO_MANY_BUFFERED_PARTS`         | More fragments in one message than `maxFragments` allows                                   | 1008       | `RangeError` | `done` |
+| `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`      | A message over `maxPayload`                                                                | 1009       | `RangeError` | `done` |
 
 `ws`'s message is `Invalid WebSocket frame: ` plus its own detail for every framing
 fault, and the bare `Too many message fragments` and `Too many buffered chunks` for
 the two count limits.
+
+Three messages are `ws`'s in wording but not in full. `ws` interpolates the offending
+number into `WS_ERR_INVALID_CLOSE_CODE`, `WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH`, and
+`WS_ERR_INVALID_OPCODE`, and the codec reports the fault rather than the number, so
+those three read without it. A `WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH` message is
+`ws`'s exactly, but it is the one fault `ws` prefixes with `Unsupported WebSocket
+frame: ` rather than `Invalid WebSocket frame: `, because the length is a number the
+frame could not have meant.
+
+`ERR_INVALID_COMPRESSED_DATA` is a code ventijs adds for a payload that is not a
+DEFLATE stream, which `ws` reports as a bare `zlib` error with no code. The close code
+is 1007 either way; the addition is what keeps a broken compressed stream from reading
+as `WS_ERR_INVALID_UTF8`, which a caller would act on by checking text.
 
 `WS_ERR_TOO_MANY_BUFFERED_PARTS` covers two conditions in `ws`, and only one of them
 is reachable. `maxFragments` is enforced per connection and reports the code. The
