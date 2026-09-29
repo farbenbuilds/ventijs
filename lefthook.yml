@@ -5,6 +5,19 @@
 min_version: 2.1.14
 glob_matcher: doublestar
 
+# A commit message must not carry a CI skip marker. GitHub matches one anywhere in a
+# message, and a squash merge concatenates every commit body into the message on `main`,
+# so a body that merely explains the marker silences every workflow on the next merge --
+# and a skipped push starts no workflow that could report it. This is the only place the
+# mistake is still catchable.
+#
+# `bump.yml` writes the marker into its own commit subject, and is unaffected: CI does
+# not install these hooks.
+commit-msg:
+  commands:
+    no-skip-marker:
+      run: node scripts/check-commit-msg.mjs {1}
+
 pre-commit:
   parallel: true
   jobs:
