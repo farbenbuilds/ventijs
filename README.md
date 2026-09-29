@@ -12,7 +12,7 @@ observable behaviour rather than its source. ventiws is not affiliated with the
 as the pinned contract, credited in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**ventiws is at `1.0.0-alpha`.** The surface may change between alpha
+**ventiws is at `1.0.0-alpha.1`.** The surface may change between alpha
 releases. What "alpha" means here is bounded: the `ws` compatibility
 contract is tracked row by row in
 [COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventiws knowingly
@@ -53,14 +53,16 @@ Working in the tree:
 ```sh
 git clone git@github.com:farbenbuilds/ventiws.git
 cd ventiws
-nix develop
+direnv allow
 pnpm install
 pnpm build
 ```
 
-`nix develop` pins Node.js, pnpm, and Zig 0.16.0. The first `pnpm build` compiles
-the vendored C dependencies, which takes minutes and about a gigabyte; later
-builds are incremental.
+`direnv allow` runs `.envrc`, which enters the pinned Nix shell with Node.js,
+pnpm, and Zig 0.16.0, and re-enters it on every later `cd`. Without
+[direnv](https://direnv.net) installed, run `nix develop` once per shell
+instead. The first `pnpm build` compiles the vendored C dependencies, which
+takes minutes and about a gigabyte; later builds are incremental.
 
 ## Usage
 
