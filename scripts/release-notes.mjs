@@ -25,17 +25,18 @@ export function previousRelease() {
   return found.trim().replace(/^v/, "");
 }
 
-/// Every changelog section, newest first, as a `[version, body]` pair.
+/// Every changelog section, newest first, as a `[version, text]` pair.
 ///
-/// Split on the headings rather than parsed, because a section is prose and the only field
-/// worth extracting is the version the heading already states in one place.
+/// `text` is the heading and body exactly as written, sliced between headings rather than
+/// re-rendered from a parsed version. A release page that reformats the changelog has
+/// already lost something: the date on every heading here, and any wording a maintainer
+/// chose for a section. The changelog is the record and the release page quotes it.
 function sections(changelog) {
-  // `(?![\s\S])` rather than `\Z`, which is a Python anchor JavaScript does not have and
-  // reads here as a literal `Z`: the last section would never terminate and would swallow
-  // the rest of the file.
-  return [...changelog.matchAll(/^## \[([^\]]+)\][^\n]*\n([\s\S]*?)(?=^## \[|(?![\s\S]))/gm)].map(
-    (match) => [match[1], match[2]],
-  );
+  const heads = [...changelog.matchAll(/^## \[([^\]]+)\]/gm)];
+  return heads.map((head, index) => {
+    const end = heads[index + 1]?.index ?? changelog.length;
+    return [head[1], changelog.slice(head.index, end)];
+  });
 }
 
 /// The sections above `previous`, which is what this release introduces.
@@ -62,7 +63,9 @@ function main() {
   }
 
   const notes = notesBetween(readFileSync(CHANGELOG, "utf8"), previous);
-  const body = notes.map(([released, section]) => `## ${released}\n${section.trim()}`).join("\n\n");
+  // Trimmed and rejoined with one blank line between sections: the slice carries the
+  // trailing blank line of the section before it, which would otherwise double up.
+  const body = notes.map(([, text]) => text.trim()).join("\n\n");
   const text =
     body === "" ? `No changelog entries between ${previous} and ${version}.\n` : `${body}\n`;
 
