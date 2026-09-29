@@ -8,7 +8,7 @@
 
 import { commentViolations } from "./comment-budget.mjs";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -56,7 +56,13 @@ function walk(directory) {
 }
 
 function check(path) {
-  const name = relative(ROOT, path);
+  // POSIX separators, because every prefix and exempt entry below is written with a
+  // forward slash. `relative` returns the host separator, so on Windows a path came
+  // back as `tests\binding\addon.test.ts`, matched no `tests/` prefix, and was then
+  // held to the stricter source budget: the whole `tests/` tree failed the gate on a
+  // Windows checkout while passing in CI, which is what made `pnpm lint` unusable
+  // there rather than merely noisier.
+  const name = relative(ROOT, path).split(sep).join("/");
   if (EXEMPT.has(name)) return;
   if (GENERATED_ROOTS.some((root) => name.startsWith(root))) return;
   const extension = name.slice(name.lastIndexOf("."));
