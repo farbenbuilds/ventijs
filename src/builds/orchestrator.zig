@@ -1,6 +1,7 @@
 const std = @import("std");
 const napi_zig = @import("napi_zig");
 const default_target = @import("targets/default.zig");
+const platforms = @import("platforms.zig");
 const testing = @import("testing.zig");
 const vendor = @import("vendor.zig");
 
@@ -28,6 +29,19 @@ pub fn inject(b: *std.Build) void {
             .{ .name = "uWebZockets", .module = engine },
             .{ .name = "zslay", .module = zslay },
             .{ .name = "build_options", .module = options_module },
+        },
+        // The npm config only takes effect under `-Dnpm=true`, which the release build
+        // adds. It is what cross-compiles the addon per platform and scaffolds the
+        // `@ventiws/binding-*` packages, so the per-platform artifact is a build-graph
+        // decision rather than something the loader and a workflow agree on by hand.
+        // `dts` stays `.none` because TypeScript owns the published types; the loader
+        // the toolchain would generate here is also not the one that ships.
+        .npm = .{
+            .scope = platforms.scope,
+            .description = "A drop-in replacement for ws for Node.js, built on the first-party µWebZockets Zig engine via napi-zig.",
+            .license = "MIT",
+            .repository = "farbenbuilds/ventiws",
+            .platforms = platforms.resolve(b),
         },
     });
 

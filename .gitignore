@@ -10,6 +10,9 @@ zig-cache/
 zig-pkg/
 ventiws.js
 
+# staged npm packages for a release; build output, never source
+npm/
+
 # node
 node_modules/
 dist/

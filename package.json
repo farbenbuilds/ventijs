@@ -33,6 +33,8 @@
   "scripts": {
     "build": "pnpm run build:binding && tsdown && node scripts/finalize-exports.mjs && pnpm run typecheck:dist",
     "build:binding": "napi-zig build --optimize safe",
+    "build:bindings": "node scripts/build-bindings.mjs",
+    "stage:publish": "node scripts/stage-publish.mjs",
     "dev": "tsdown --watch",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

@@ -1,0 +1,248 @@
+name: Publish
+
+# A release is a tag, because `pnpm release` bumps the version and the tag is what says
+# the version is decided. The workflow reads the version out of `package.json` and
+# refuses to run when the tag disagrees, so a tag pushed by hand cannot publish a
+# version nobody released.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Stage and pack every package without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Two releases must not race for the same version. Not cancellable: a publish that is
+# half through uploading to npm cannot be recalled, so a second run waits for the first.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bindings:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # A cold build compiles BoringSSL, lsquic, libdeflate, and zlib from source. The
+    # default 360 minutes is a job timeout nobody reads.
+    timeout-minutes: 120
+    strategy:
+      # One shard failing must not cancel the others: the publish job reports every
+      # missing platform by name, which is the diagnosis, rather than only the first
+      # failure a fail-fast run would show.
+      fail-fast: false
+      matrix:
+        include:
+          # One runner per published platform, and each runner is native for its
+          # platform. That is a constraint rather than a preference: the engine builds
+          # its vendored BoringSSL, lsquic, libdeflate, and zlib for the host target,
+          # and the release path links those host archives into a cross-compiled addon.
+          # A cross build links and then misbehaves, which no amount of CI green proves
+          # away. The Linux arm64 runner is free on a public repository and hard-fails
+          # the workflow on a private one.
+          - name: linux-x64-gnu
+            os: ubuntu-24.04
+            platform: linux-x64-gnu
+          - name: linux-arm64-gnu
+            os: ubuntu-24.04-arm
+            platform: linux-arm64-gnu
+          - name: darwin-x64
+            os: macos-15-intel
+            platform: darwin-x64
+          - name: darwin-arm64
+            os: macos-15
+            platform: darwin-arm64
+          # No `win32-x64` shard: `napi_zig` 0.2.8 requests an ABI-less
+          # `x86_64-windows-none`, so it cannot link `ws2_32` and no Windows package can
+          # be built. It returns with the in-repo shim or a fixed upstream release, and
+          # `src/builds/platforms.zig` names the reason where the list lives.
+    environment:
+      name: Release
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/setup@v2
+        with:
+          version: 12.4.2
+          runtime: node@24
+          cache: true
+          install: false
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: false
+
+      - name: Restore Zig caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .zig-cache
+            zig-pkg
+          # `matrix.platform` is in the key because `runner.os` is not enough: the two
+          # macOS shards share it, and a cache written by an arm64 build holds the wrong
+          # object files for an x86_64 build.
+          key: zig-0.16.0-${{ runner.os }}-${{ matrix.platform }}-${{ github.repository }}-${{ hashFiles('build.zig', 'build.zig.zon', 'src/builds/**') }}
+          restore-keys: |
+            zig-0.16.0-${{ runner.os }}-${{ matrix.platform }}-${{ github.repository }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the platform package
+        # Also builds the host addon into `zig-out/lib`, because `addLib` installs the
+        # host artifact whether or not the npm scaffold is on.
+        run: node scripts/build-bindings.mjs --platform=${{ matrix.platform }}
+
+      - name: Prove the addon loads on this platform
+        # The alternative is publishing binaries that were compiled and never loaded.
+        # This loads the artifact the shard just built, reads the compiled capacities, and
+        # round-trips frames through the native codec, which is the evidence that a
+        # per-platform binary is correct. Deliberately no loopback client: a release gate
+        # that also depends on the runner's network configuration blocks a release for a
+        # reason that has nothing to do with the artifact. The socket suites run in
+        # `zig-test.yml`, on a runner whose networking is known.
+        run: pnpm exec vitest run --no-file-parallelism tests/binding/addon.test.ts tests/binding/codec
+
+      - name: Upload the platform package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.name }}
+          path: npm/ventiws
+          include-hidden-files: true
+          if-no-files-found: error
+
+  bindings-musl:
+    name: linux-x64-musl
+    runs-on: ubuntu-24.04
+    # A musl host, because the alternative is a glibc-built BoringSSL inside an Alpine
+    # binary. `node:24-alpine` is musl and already carries a Node the JavaScript actions
+    # can run, which a bare `alpine` image does not.
+    container: node:24-alpine
+    timeout-minutes: 120
+    environment:
+      name: Release
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Zig
+        run: |
+          apk add --no-cache curl xz
+          curl -fsSL https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz \
+            | tar -xJ -C /opt
+          echo "/opt/zig-x86_64-linux-0.16.0" >> "$GITHUB_PATH"
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.4.2 --activate
+
+      - name: Restore Zig caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .zig-cache
+            zig-pkg
+          key: zig-0.16.0-linux-x64-musl-${{ github.repository }}-${{ hashFiles('build.zig', 'build.zig.zon', 'src/builds/**') }}
+          restore-keys: |
+            zig-0.16.0-linux-x64-musl-${{ github.repository }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the platform package
+        run: node scripts/build-bindings.mjs --platform=linux-x64-musl
+
+      - name: Prove the addon loads on this platform
+        # The one job where the loader's libc probe decides between two package names, so
+        # it is also the only place a wrong `-gnu`/`-musl` answer would be caught.
+        run: pnpm exec vitest run --no-file-parallelism tests/binding/addon.test.ts tests/binding/codec
+
+      - name: Upload the platform package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-linux-x64-musl
+          path: npm/ventiws
+          include-hidden-files: true
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: [bindings, bindings-musl]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # `id-token` is the trusted-publishing credential: npm exchanges this workflow's OIDC
+    # token for a short-lived publish token, so the job holds no npm secret at all.
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: npm
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/setup@v2
+        with:
+          version: 12.4.2
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Download every platform package
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bindings-*
+          merge-multiple: true
+          # Each shard contributes its own `@ventiws/binding-*` directory and an identical
+          # scaffolded `package.json`, so merging on top of each other is what assembles
+          # the one package the loader resolves against.
+          path: npm/ventiws
+
+      - name: Check the tag against the version
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: node scripts/check-release-tag.mjs
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the bundle
+        # No host addon on this runner, and none is needed: `tsdown` copies the artifact
+        # only when the build produced one, and the release ships the platform packages.
+        run: pnpm exec tsdown
+
+      - name: Check the built declarations
+        run: pnpm run typecheck:dist
+
+      - name: Assemble the packages
+        run: pnpm run stage:publish
+
+      - name: Pack without publishing
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true' }}
+        run: |
+          mkdir -p pnpm-pack
+          for dir in npm/ventiws npm/ventiws/@ventiws/*; do
+            (cd "$dir" && pnpm pack --pack-destination "$GITHUB_WORKSPACE/pnpm-pack")
+          done
+          ls -l pnpm-pack
+
+      - name: Publish to npm
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true') }}
+        # Publishes the platform packages first and the main package last, so a main
+        # package is never on the registry pointing at bindings that are not there yet.
+        run: pnpm exec napi-zig publish
+
+      - name: Upload the published tarballs
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs
+          path: pnpm-pack
+          if-no-files-found: warn
