@@ -277,7 +277,13 @@ jobs:
     # A dry run has published nothing, so there is no version to describe. Skipping the job
     # renders it grey with a reason, where a skipped step inside a green job would be
     # indistinguishable from having made a release.
-    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
+    #
+    # `workflow_dispatch` as well as `push`, because `bump.yml` starts this workflow by
+    # dispatching it at the tag: a push made with `GITHUB_TOKEN` creates no run, so the tag
+    # never reaches the `push` trigger. The tag ref is the real gate -- a dispatch at a
+    # branch has no version to describe, and a dry run's publish job is skipped rather than
+    # successful.
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -291,12 +297,18 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PKG: ventiws
           TAG: ${{ github.ref_name }}
         run: |
           # A prerelease is marked as one, so the release list does not present an alpha as
           # the newest stable thing. The tag is the version: the publish job already refused
           # a tag that disagrees with the manifest, so this cannot describe a version that
           # was never published.
-          flags=(--title "$TAG" --notes-file release-notes.md --verify-tag)
+          #
+          # The title names the package, because the list is every release in the repository
+          # and `v1.0.0-alpha.2` alone does not say which of them this is. The tag stays
+          # `v<version>`: that is the form `check-release-tag.mjs` checks, and the form npm
+          # and the version assertions expect.
+          flags=(--title "$PKG $TAG" --notes-file release-notes.md --verify-tag)
           if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
           gh release create "$TAG" "${flags[@]}"
