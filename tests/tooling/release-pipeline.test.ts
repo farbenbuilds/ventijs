@@ -53,6 +53,13 @@ test("the OIDC grant sits on the publish job alone", () => {
   expect(job).not.toContain("id-token");
 });
 
+test("the publish job installs the npm client trusted publishing lives in", () => {
+  // `pnpm/setup` strips the bundled npm from the Node runtime, so without this the runner
+  // image's npm 10 runs the publish and every attempt fails ENEEDAUTH.
+  expect(publishJob).toContain("pnpm add -g npm@^12");
+  expect(publishJob).toContain("npm --version");
+});
+
 test("the publish job stages and publishes the six packages", () => {
   expect(publishJob).toContain("actions/download-artifact@v4");
   expect(publishJob).toContain("node scripts/check-release-tag.mjs");
