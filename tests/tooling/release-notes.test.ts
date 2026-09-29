@@ -49,13 +49,28 @@ function repo(versions: readonly string[], tagged: number): string {
   return root;
 }
 
-/// The notes the script writes, and how many sections it claimed.
+/// The notes the script writes, and which versions they claim.
 function notes(root: string): { readonly text: string; readonly versions: string[] } {
   const out = join(root, "notes.md");
   execFileSync(process.execPath, [SCRIPT, out], { cwd: root, stdio: "pipe" });
   const text = readFileSync(out, "utf8");
-  return { text, versions: [...text.matchAll(/^## (\S+)$/gm)].map((match) => match[1] ?? "") };
+  return {
+    text,
+    versions: [...text.matchAll(/^## \[([^\]]+)\]/gm)].map((match) => match[1] ?? ""),
+  };
 }
+
+test("the notes quote the changelog rather than re-render it", () => {
+  // Every heading in the changelog carries a date, and a section body is prose a maintainer
+  // wrote. Reformatting the version out of the heading and reassembling the body loses both,
+  // and the release page is the one place a reader sees the record outside the repository.
+  const result = notes(repo(["1.0.0-alpha.1", "1.0.0-alpha.2"], 1));
+  expect(result.text).toContain("## [1.0.0-alpha.2] - 2026-09-29");
+  expect(result.text).not.toContain("## 1.0.0-alpha.2\n");
+  // A heading followed immediately by its body still renders, but a blank line is what the
+  // changelog has and what a markdown reader expects.
+  expect(result.text).toContain("## [1.0.0-alpha.2] - 2026-09-29\n\n### Added");
+});
 
 test("a release takes only the sections above the previous tag", () => {
   // One merge since the last release: one section, and the released one is claimed already.
