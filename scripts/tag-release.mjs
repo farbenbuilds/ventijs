@@ -50,10 +50,10 @@ function main() {
 
   push(["tag", tag]);
   try {
-    // The branch goes with the tag because a bump commit is usually still local-only, and
-    // publishing a tag whose version bump never reached the remote would fail the
-    // workflow's own tag-against-version check.
-    push(["push", "origin", branch, "--follow-tags"]);
+    // The tag ref is pushed explicitly: `--follow-tags` carries annotated tags, and this
+    // lightweight tag on a branch that is already up to date is exactly what it leaves
+    // behind, which is how the release silently never started.
+    push(["push", "origin", branch, `refs/tags/${tag}`]);
   } catch (error) {
     // The tag outlives a failed push as a landmine: the retry that fixes connectivity
     // would refuse it as already existing, so the release would need a manual `git tag -d`

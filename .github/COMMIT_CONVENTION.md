@@ -32,9 +32,10 @@ including `bump.yml`, which exists only to react to a merge. Nothing inside a
 workflow can catch it, because a skipped push starts no workflow to hold the
 check, which is why the rule lives in a local hook.
 
-`bump.yml` writes the marker into its own commit subject on purpose. That is
-the one place it belongs, and the hook never sees it: CI does not install these
-hooks.
+`bump.yml` writes no marker into its own subject, deliberately: a release tag
+can point at that commit, and GitHub reads a marker anywhere in a tagged
+commit's message, so one would skip the run that publishes the tag. The hook
+never sees that commit either: CI does not install these hooks.
 
 The hook cannot tell a commit that _uses_ the marker from one that writes
 about it, because GitHub cannot either -- both are the same five characters. A

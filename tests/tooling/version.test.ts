@@ -16,6 +16,7 @@ const README = read("README.md");
 const CHANGELOG = read("CHANGELOG.md");
 const BUMP_SCRIPT = read("scripts/bump-version.mjs");
 const BUMP_WORKFLOW = read(".github/workflows/bump.yml");
+const TAG_SCRIPT = read("scripts/tag-release.mjs");
 
 /// The five forms GitHub recognises, shared with `check-commit-msg.mjs`. A check that knew
 /// four works right up until the fifth is used, which is why this is a list.
@@ -67,8 +68,9 @@ test("the loop guard matches the commit the bump makes", () => {
   // differs between them is an infinite bump rather than a visible failure.
   const marker = /const MARKER = "([^"]+)"/.exec(BUMP_SCRIPT)?.[1];
   expect(marker).toBeDefined();
-  expect(BUMP_WORKFLOW).toContain(`head_commit.message, '${marker}'`);
-  expect(BUMP_WORKFLOW).toContain(`git commit -m "${marker} v`);
+  expect(BUMP_WORKFLOW).toContain(`!startsWith(github.event.head_commit.message, '${marker}')`);
+  expect(BUMP_WORKFLOW).toContain(`git commit -m "${marker} v$VERSION"`);
+  expect(BUMP_WORKFLOW).toContain("VERSION: ${{ steps.bump.outputs.version }}");
 });
 
 test("the commit the tag points at carries no CI skip marker", () => {
@@ -79,26 +81,28 @@ test("the commit the tag points at carries no CI skip marker", () => {
   for (const marker of MARKERS) expect(commit.includes(`[${marker}]`), commit).toBe(false);
 });
 
-test("the bump starts the publish run, and carries the token the caller must have", () => {
-  // A push made with `GITHUB_TOKEN` creates no workflow run, so the tag never reaches
-  // `publish.yml`'s `push` trigger. `workflow_dispatch` is a documented exception -- and npm
-  // then checks a trusted publisher against the *calling* workflow's filename, so each package
-  // needs this file configured too, and this job needs `id-token: write` for the child to have a
-  // token to exchange. Without both, `npm publish` fails with ENEEDAUTH naming neither half.
-  expect(BUMP_WORKFLOW).toContain("actions: write");
-  expect(BUMP_WORKFLOW).toContain("id-token: write");
-  expect(BUMP_WORKFLOW).toContain('gh workflow run publish.yml --ref "$TAG"');
-  expect(BUMP_WORKFLOW).toContain("secrets.GITHUB_TOKEN");
+test("the bump neither tags nor starts a publish run", () => {
+  // A release is a tag pushed by a maintainer. A tag pushed with `GITHUB_TOKEN` starts no
+  // workflow run, and `publish.yml` takes no dispatch, so a tagging or dispatching step
+  // here would be a release path that can never reach the registry.
+  expect(BUMP_WORKFLOW).not.toContain("git tag");
+  expect(BUMP_WORKFLOW).not.toContain("gh workflow run");
+  expect(BUMP_WORKFLOW).not.toContain("id-token");
+  expect(BUMP_WORKFLOW).not.toMatch(/refs\/tags/);
 });
 
-test("the bump tags the version, and does so idempotently", () => {
-  // Tagging is what publishes, so a run that failed between the commit and the tag leaves
-  // `main` bumped but untagged. The tag step must consult the remote's tags, not assume a
-  // fresh clone, or a re-run refuses on work already done.
-  expect(BUMP_WORKFLOW).toContain('git tag "$TAG"');
-  expect(BUMP_WORKFLOW).toContain('git push origin "$TAG"');
+test("the bump keeps the history the changelog scan reads", () => {
+  // `bump-version` finds the previous bump commit through `git log`, so a depth-1 checkout
+  // writes no changelog section at all.
   expect(BUMP_WORKFLOW).toContain("fetch-depth: 0");
-  expect(BUMP_WORKFLOW).toContain("already exists");
+});
+
+test("a release pushes the tag itself, not only what --follow-tags carries", () => {
+  // `--follow-tags` carries annotated tags; this release tag is lightweight on a branch
+  // that is already up to date, which is exactly the tag it leaves behind.
+  expect(TAG_SCRIPT).toContain('push(["push", "origin", branch,');
+  expect(TAG_SCRIPT).toContain("refs/tags/${tag}`]);");
+  expect(TAG_SCRIPT).not.toMatch(/"--follow-tags"/);
 });
 
 test("a release tags the version it finds rather than choosing one", () => {

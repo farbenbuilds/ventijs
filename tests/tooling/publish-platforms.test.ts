@@ -66,16 +66,18 @@ test("every published platform is built by a runner in the release workflow", ()
 });
 
 test("each platform is built on a runner that is native for it", () => {
-  // The engine builds its vendored archives for the host target, so a cross-compiled
-  // addon links a foreign BoringSSL. It links, and it then misbehaves, which is the one
-  // failure a green pipeline cannot catch, so the pairing has to be right in the file.
-  const family: Record<string, string> = { linux: "ubuntu-", darwin: "macos-", win32: "windows-" };
+  // Family alone is not the claim: `ubuntu-24.04` is x64 and `ubuntu-24.04-arm` is arm64,
+  // and a cross-compiled addon links a foreign BoringSSL that misbehaves later. The
+  // pairing is asserted target by target, so the wrong architecture fails here.
+  const native: Record<string, string> = {
+    "linux-x64-gnu": "ubuntu-24.04",
+    "linux-arm64-gnu": "ubuntu-24.04-arm",
+    "darwin-x64": "macos-15-intel",
+    "darwin-arm64": "macos-15",
+  };
   const shards = scheduledShards();
   expect(shards.length).toBeGreaterThan(0);
-  for (const shard of shards) {
-    const expected = family[shard.platform.split("-")[0] ?? ""] ?? "!";
-    expect(shard.os.startsWith(expected)).toBe(true);
-  }
+  for (const shard of shards) expect(shard.os).toBe(native[shard.platform]);
 });
 
 test("the musl platform is built in a musl container, not on a glibc runner", () => {

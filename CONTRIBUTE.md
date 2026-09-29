@@ -48,7 +48,7 @@ plus `pnpm install`.
 | `pnpm finalize:exports` | node     | Add the `types` conditions `tsdown` leaves out of `exports`   |
 | `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
 | `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
-| `pnpm release`          | node     | Tag the version the tree carries, to recover a failed run     |
+| `pnpm release`          | node     | Tag and push the version the tree carries; the release step   |
 | `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
 
 `tsdown` rewrites the `exports` map on every build, so the `types` conditions
@@ -131,51 +131,47 @@ pnpm lockfile.
 
 ## Releasing
 
-1. Merge the work. That is the whole procedure.
+1. Merge the work. `bump.yml` advances the prerelease counter, writing
+   `package.json`, `build.zig.zon`, `README.md`, and the `CHANGELOG.md` section
+   for that merge's commits, and commits it to `main`. It stops there.
 2. Pass lint, format, typecheck, unit, and build, then run the `ws` conformance
    suite and Autobahn and retain the benchmark report.
 3. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
    artifacts.
+4. Pull `main` and push the tag with `pnpm release`. That is the release
+   decision: `.github/workflows/publish.yml` builds the six platform packages
+   across five runners, checks the tag against `package.json`, assembles `npm/`,
+   publishes, and writes the GitHub Release.
 
-`.github/workflows/bump.yml` does the rest on the merge: it advances the
-prerelease counter, writing `package.json`, `build.zig.zon`, `README.md`, and
-the `CHANGELOG.md` section for that merge's commits; commits that; and tags it.
-The tag is what `publish.yml` waits for, so it builds the six platform packages
-across five runners, checks the tag against `package.json`, assembles `npm/`,
-publishes, and writes the GitHub Release. No machine has to authenticate to npm
-or push a tag, which is what lets the Linux workstation stay a development
-machine.
+The tag is pushed by a person because a tag pushed with `GITHUB_TOKEN` starts no
+workflow run, and `publish.yml` takes no dispatch; a merge therefore cannot
+publish on its own. Several merges can make one release, or each can be its own.
 
 The counter is deliberately unconditional: a pre-alpha's number tells a reader
 nothing, so inferring the bump from commit subjects would tie the published
 version to how a change happened to be described. Reaching `1.0.0` is a manual
 edit of the three versioned files, because it claims the surface is settled.
-`pnpm bump` runs the version step by hand and `pnpm release` tags by hand, both
-for recovering a run that failed partway;
-`tests/tooling/version.test.ts` fails if the versioned surfaces disagree.
-
-Because a merge is a release, several merges are several releases. Batch them
-by disabling the workflow, or hold the merges, if one release per merge is too
-often.
-
-The tag is what publishes. `.github/workflows/publish.yml` builds the six
-platform packages across five runners, checks the tag against `package.json`,
-assembles `npm/`, and publishes. A run of that workflow by hand defaults to a
-dry run that packs every tarball without publishing, so the matrix can be
-validated without touching the registry.
+`pnpm bump` runs the version step by hand for recovering a run that failed
+partway, and `tests/tooling/version.test.ts` fails if the versioned surfaces
+disagree.
 
 The publish job holds no npm secret. `id-token: write` is the whole credential,
 because each of the six packages has a trusted publisher on npm naming
-`publish.yml` and the `npm` environment. npm requires an interactive 2FA
+`publish.yml` and the `npm` environment. All six need the record, the five
+binding packages included: a missing one fails the publish at that package with
+`ENEEDAUTH`, before the main package is reached. npm requires an interactive 2FA
 challenge to configure one and refuses a bypass-2FA token, so it is a maintainer
 step:
 
 ```sh
-npm trust github ventiws --file publish.yml --repo farbenbuilds/ventiws --env npm --allow-publish --yes
+for p in ventiws @ventiws/binding-linux-x64-gnu @ventiws/binding-linux-arm64-gnu \
+         @ventiws/binding-linux-x64-musl @ventiws/binding-darwin-x64 @ventiws/binding-darwin-arm64; do
+  npm trust github "$p" --file publish.yml --repo farbenbuilds/ventiws --env npm --allow-publish --yes
+done
 ```
 
-npm allows one trusted publisher per package and can only attach it to a package
-that already exists, which is why the first release had to use a token.
+npm allows several trusted publishers per package and can only attach one to a
+package that already exists, which is why the first release had to use a token.
 
 A release publishes six packages: `ventiws` plus one per platform. A platform
 that fails to build fails the release rather than shipping a version that cannot
@@ -186,8 +182,7 @@ The same run then creates the GitHub Release, with the changelog sections betwee
 this tag and the previous one as its notes, marked a prerelease while the version
 carries a prerelease component. It is a separate job that needs the publish
 result: a release page for a version that is not on the registry advertises an
-install that fails, which is worse than no page. A `workflow_dispatch` dry run
-creates no page, because it published nothing.
+install that fails, which is worse than no page.
 
 The registry takes about three minutes to make a newly published version
 readable. Verifying with `npm view` in that window reports the previous version

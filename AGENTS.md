@@ -87,7 +87,7 @@ inside `nix develop` (Node 24, pnpm 12, Zig 0.16.0, zls).
 | Zig unit tests                | `zig build test` (runs `src/engine-tests/`)                                        |
 | Zig formatting                | `zig fmt --check --exclude zig-pkg src build.zig`                                  |
 | Advance the prerelease        | `pnpm bump` (CI does this on merge)                                                |
-| Tag the current version       | `pnpm release` (CI does this on merge)                                             |
+| Tag the current version       | `pnpm release` (the release step; pushed by hand)                                  |
 
 The first `pnpm build:binding` compiles BoringSSL, lsquic, libdeflate, and
 zlib from pinned package dependencies into `.zig-cache/` (roughly a gigabyte);
@@ -196,13 +196,14 @@ declarations through the package `exports` map; it needs `tsdown` output.
   `tsdown` copies the host `.node` into `dist/` only when a build produced one,
   so a checkout is runnable and a release is not carrying a foreign binary.
   `.github/workflows/publish.yml` builds every published platform on a runner
-  that is native for it and publishes six packages. It holds no npm secret:
+  that is native for it and publishes six packages, and it runs only for a `v*`
+  tag a maintainer pushes with `pnpm release`. It holds no npm secret:
   `id-token: write` is the whole credential, because every package's trusted
   publisher on npm is configured against this workflow's filename and the `npm`
-  environment. A merge to `main` is a release: `.github/workflows/bump.yml`
-  advances the prerelease counter, commits it, and tags it, and the tag is what
-  `publish.yml` waits for, so no machine authenticates to npm or pushes a tag.
-  That commit carries no CI skip marker, because the tag points at it and GitHub
-  reads a marker anywhere in a tagged commit's message.
+  environment. `.github/workflows/bump.yml` advances the prerelease counter on a
+  merge and commits it, and stops there: a tag pushed with `GITHUB_TOKEN` starts
+  no workflow run, so the tag that releases is pushed by a person. That commit
+  carries no CI skip marker, because a release tag points at it and GitHub reads
+  a marker anywhere in a tagged commit's message.
   `tests/tooling/version.test.ts` holds the three version sources, the
   changelog's shape, the bump loop guard, and that marker rule together.

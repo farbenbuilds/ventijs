@@ -21,7 +21,7 @@ Describe the change and why it belongs in ventiws. Link the issue it closes.
 
 ## Checklist
 
-- [ ] I have read [CONTRIBUTING.md](../CONTRIBUTE.md) and
+- [ ] I have read [CONTRIBUTE.md](../CONTRIBUTE.md) and
       [CODING_CONVENTION.md](../CODING_CONVENTION.md).
 - [ ] No classes, `this`, `extends`, or prototype mutation were introduced.
 - [ ] Every touched source file stays near or below 150 lines.

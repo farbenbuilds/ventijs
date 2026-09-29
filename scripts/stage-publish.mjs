@@ -11,9 +11,9 @@
 // build actually produces.
 //
 // The version is the repository's, applied to every manifest under `npm/`. The
-// scaffold writes `0.0.0` as a placeholder for `napi-zig bump` to fill, and a release
-// here is versioned by `pnpm release` instead, so the placeholder is replaced rather
-// than left to become the published version of a binding.
+// scaffold writes `0.0.0` as a placeholder for `napi-zig bump` to fill, and this project
+// versions on merge instead, so the placeholder is replaced rather than left to become
+// the published version of a binding.
 
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,8 +1,9 @@
 # ventiws CI/CD Pipeline
 
-Eight workflows gate the repository. Seven gate a change; the eighth publishes a
-release. A passing pipeline is evidence for the configurations it exercised; it
-is not proof that no memory or security defect remains.
+Nine workflows touch the repository. Seven gate a change, `bump.yml` advances
+the version a release tag will name, and `publish.yml` publishes a release. A
+passing pipeline is evidence for the configurations it exercised; it is not
+proof that no memory or security defect remains.
 
 ## Job matrix
 
@@ -15,7 +16,8 @@ is not proof that no memory or security defect remains.
 | `zig-test.yml` | Zig unit tests, Binding lifecycle tests    | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite |
 | `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                       |
 | `perf.yml`     | Echo throughput against `ws`               | push and pull request on a Zig, manifest, or `bench/` path, manual                   | the benchmark report, uploaded as an artifact              |
-| `publish.yml`  | Platform build matrix, publish to npm      | a `v*` tag, manual                                                                   | every platform builds and its addon loads and echoes       |
+| `bump.yml`     | Advance the prerelease                     | push to `main`, manual                                                               | nothing; it commits the next version and stops             |
+| `publish.yml`  | Platform build matrix, publish to npm      | a `v*` tag pushed by a maintainer                                                    | every platform builds and its addon loads and echoes       |
 
 Every gating workflow runs on `ubuntu-24.04`. Node is `node@24` and pnpm
 `12.4.2` through `pnpm/setup@v2`, Zig is `0.16.0` through
@@ -30,7 +32,7 @@ rather than to gate a change, so its matrix is the published set.
 
 ## Release and native matrix
 
-`publish.yml` runs on a `v*` tag and on demand. It is the only workflow that
+`publish.yml` runs on a `v*` tag a maintainer pushes. It is the only workflow that
 builds anything but Linux, and the reason is that a published addon has to exist
 for every platform the package claims to support.
 
@@ -96,18 +98,14 @@ cannot run in CI:
 ```sh
 for p in ventiws @ventiws/binding-linux-x64-gnu @ventiws/binding-linux-arm64-gnu \
          @ventiws/binding-linux-x64-musl @ventiws/binding-darwin-x64 @ventiws/binding-darwin-arm64; do
-  for f in publish.yml bump.yml; do
-    npm trust github "$p" --file "$f" --repo farbenbuilds/ventiws --env npm --allow-publish --yes
-  done
+  npm trust github "$p" --file publish.yml --repo farbenbuilds/ventiws --env npm --allow-publish --yes
 done
 ```
 
-Each package needs **two**. npm validates a trusted publisher against the
-_calling_ workflow's filename when one workflow dispatches another, and
-`bump.yml` is what dispatches `publish.yml` at the tag -- a push made with
-`GITHUB_TOKEN` creates no run, so a `push` trigger would never fire. The
-dispatching job needs `id-token: write` for the same reason: without it the child
-has no OIDC token, and `npm publish` fails with `ENEEDAUTH` naming neither half.
+All six packages need the record, the five binding packages included. A missing
+one fails the publish at that package with `ENEEDAUTH`, which names neither the
+package nor the missing configuration, so the failure reads as a credential
+problem rather than one absent record.
 
 npm allows several trusted publishers per package, and one can only be attached
 to a package that already exists, which is why the first release necessarily used
@@ -116,10 +114,9 @@ a token.
 `publish.yml` publishes the per-platform packages before the main package, so a
 main package is never on the registry pointing at bindings that are not there
 yet. It checks the tag against `package.json` first, so a tag pushed by hand
-cannot publish a version nobody released. A `workflow_dispatch` run defaults to a
-dry run that packs every tarball and uploads them without publishing, and skips
-the npm credential step entirely, so the matrix can be validated before the
-secret exists.
+cannot publish a version nobody released. The tag is the only way to start it:
+`bump.yml` advances the version on a merge and stops there, and a tag pushed with
+`GITHUB_TOKEN` starts no run, so the tag that releases is pushed by a person.
 
 The publish is not transactional: a failure part way leaves the earlier packages
 on the registry. `napi-zig publish` treats an already-published version as a
