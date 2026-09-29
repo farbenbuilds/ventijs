@@ -34,7 +34,7 @@ jobs:
     # No `needs`, so this starts with the dispatch rather than after the platform matrix.
     # Every claim npm validates a trusted publisher against is in the token, so printing them
     # answers "which workflow does npm think called this" without a 25-minute build first.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -289,7 +289,11 @@ jobs:
           ls -l pnpm-pack
 
       - name: Publish to npm
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true') }}
+        # `inputs.dry-run` and not `inputs.dry-run == 'true'`: the input is `type: boolean`,
+        # so the context holds a boolean and GitHub coerces the string `'true'` to 0, making
+        # the comparison always false. That silently made every dispatch a real publish, which
+        # is how a dry run once reached npm.
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run) }}
         # Publishes the platform packages first and the main package last, so a main
         # package is never on the registry pointing at bindings that are not there yet.
         run: pnpm exec napi-zig publish
