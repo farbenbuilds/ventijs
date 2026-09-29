@@ -14,6 +14,10 @@ on:
         description: Stage and pack every package without publishing
         type: boolean
         default: true
+      diagnose:
+        description: Print the OIDC token claims npm will authenticate with
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,6 +29,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  diagnose:
+    name: OIDC claims
+    # No `needs`, so this starts with the dispatch rather than after the platform matrix.
+    # Every claim npm validates a trusted publisher against is in the token, so printing them
+    # answers "which workflow does npm think called this" without a 25-minute build first.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    # The same environment the publish job uses, because the `environment` claim is part of
+    # what npm matches and a claim from a different environment would be a false answer.
+    environment:
+      name: npm
+    steps:
+      - name: Report the client and the token
+        run: |
+          echo "npm:            $(npm --version)"
+          echo "node:           $(node --version)"
+          echo "registry:       $(npm config get registry)"
+          echo "oidc endpoint:  ${ACTIONS_ID_TOKEN_REQUEST_URL:+set}${ACTIONS_ID_TOKEN_REQUEST_URL:-unset}"
+          node --input-type=module -e '
+            const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+            if (!url) process.exit(0);
+            const res = await fetch(`${url}&audience=npm%3Aregistry.npmjs.org`, {
+              headers: { authorization: `bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+            });
+            const body = await res.json();
+            if (!body.id_token) {
+              console.log(`  token request failed: ${JSON.stringify(body)}`);
+              process.exit(0);
+            }
+            const claims = JSON.parse(Buffer.from(body.id_token.split(".")[1], "base64").toString());
+            for (const key of ["aud", "sub", "repository", "environment", "job_workflow_ref", "workflow_ref"])
+              console.log(`  ${key}: ${claims[key] ?? "(absent)"}`);
+          '
+
   bindings:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
