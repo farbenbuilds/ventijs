@@ -45,6 +45,19 @@ jobs:
     environment:
       name: npm
     steps:
+      - uses: actions/checkout@v6
+
+      # The same setup the publish job has, and the reason this job exists: without it the
+      # report describes the runner's default Node and npm rather than the client
+      # `napi-zig publish` shells out to, which is the one question worth asking. The runner
+      # ships Node 22 with npm 10, and npm 10 predates OIDC support entirely, so a report taken
+      # anywhere else would name a client that never publishes.
+      - uses: pnpm/setup@v2
+        with:
+          version: 12.4.2
+          runtime: node@24
+          install: false
+
       - name: Report the client and the token
         run: |
           echo "npm:            $(npm --version)"
