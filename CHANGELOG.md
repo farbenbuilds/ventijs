@@ -5,14 +5,85 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-alpha.1] - 2026-09-29
+
+The first release with per-platform addons. `1.0.0-alpha` shipped a tarball with
+a single platform's compiled addon baked in, so it installed only where that
+platform's binary happened to fit; this one ships the addon as a package npm
+selects per host, and the release itself is a tag rather than a manual publish.
+
+### Added
+
+- **The addon ships for five platforms.** The package no longer bakes one platform's
+  compiled addon into its own tarball. `src/builds/platforms.zig` declares the published
+  set and `napi_zig.addLib`'s npm config produces one `@ventiws/binding-*` package per
+  target, so `pnpm add ventiws` installs on Linux x64 (glibc and musl), Linux arm64,
+  macOS x64, and macOS arm64 with no compiler on the reader's machine. npm selects the
+  package from its `os`, `cpu`, and `libc` fields, and a host outside the five installs
+  cleanly and is told which platforms exist rather than reaching a missing file.
+
+- **Windows is not supported, and that is a regression from the previous published
+  tarball, which carried a Windows x64 addon.** There are two independent reasons and
+  both are recorded. The addon cannot be packaged: `napi_zig` 0.2.8 resolves a Windows
+  target to `x86_64-windows-none`, an ABI-less target with no `ws2_32` to link. And it
+  cannot be served: the engine's listener binds and the kernel accepts, then the
+  vendored `xev` event loop fails `accept` and `read` with `error.Unexpected` and resets
+  the peer. A Windows user of the alpha cannot run a server on either a published or a
+  locally built addon. The follow-ups are recorded in `src/builds/platforms.zig` and
+  `CI_CD_PIPELINE.md`.
+
+### Changed
+
+- **A release is a tag.** `.github/workflows/publish.yml` builds every published platform
+  on a runner that is native for it, proves each addon loads and round-trips frames
+  through the native codec, and publishes six packages. The publish job authenticates
+  with a granular `NPM_TOKEN` rather than trusted publishing, because npm can only
+  configure trusted publishing for a package that already exists and the five
+  `@ventiws/binding-*` packages do not. A workflow dispatch defaults to a dry run that
+  packs every tarball without publishing and needs no credential. This supersedes the
+  manual `npm publish` in `CONTRIBUTE.md`.
+
+### Fixed
+
+- **`port: 0` reported `0` on Windows, so a server on an ephemeral port was unusable.**
+  `bound_port` in `src/engine/server/server.zig` read the port back from the listener on
+  POSIX and returned the _requested_ port on Windows, on the stated belief that its
+  listener is not a POSIX descriptor. It is: the engine is a native Zig TCP stack on
+  `xev`, and `TcpServer.listener` is an `xev.TCP` carrying a descriptor on every
+  platform. A Windows `WebSocketServer` given `port: 0` therefore reported `address().port`
+  as `0`, and every test that bound an ephemeral port and dialled the result connected to
+  port 0. The branch is deleted and the port is read back on every platform.
+
+- **`zig build test` could not compile on Windows.** `ports_test.zig` passed a literal
+  `-1` as an invalid descriptor, and `std.posix.socket_t` is a handle rather than an
+  integer there, so the test suite that gates the engine did not build. It is now a
+  descriptor that is invalid on both shapes.
+
+- **`pnpm lint` failed on every Windows checkout.** `scripts/check-conventions.mjs`
+  compared `relative()`'s output against `tests/`, and on Windows that is
+  `tests\binding\...` with backslashes, so no test file matched the `tests/` prefix and
+  the whole tree was held to the stricter source comment budget instead of the test one.
+  Sixty violations that pass in CI failed locally. A `.gitattributes` pins the tree to LF
+  so `zig fmt --check`, which rejects CRLF, passes on Windows as well.
+
+### Known limitations
+
+- **WebSocket traffic does not work on Windows.** Sixteen suite files fail there, on
+  `main` as much as on this branch, and the cause is the vendored `xev` event loop: the
+  listener binds and the kernel accepts, then `accept` and `read` complete with
+  `error.Unexpected` and the peer is reset. The port fix below removes the first thing
+  that stood in the way, and the loop is what remains. `zig build test` and every suite
+  that does not open a socket pass on Windows.
+
 ## [1.0.0-alpha] - 2026-09-29
 
 The first versioned line. `ws` 8.21.3 and `@types/ws` 8.18.1 are the compatibility
 contract, and `docs/migrating.md` is the short version of where that contract holds and
 where it does not.
 
-Nothing is published to npm yet: the package ships one platform's compiled addon, so a
-`pnpm install` builds it. See the README.
+The published tarball at this version carries a Windows x64 addon only, so a `pnpm
+install` on any other platform needs a local `pnpm build`. The platform packages arrive
+in the version after this one.
 
 ### Changed
 

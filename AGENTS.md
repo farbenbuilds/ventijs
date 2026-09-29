@@ -54,7 +54,8 @@ will own parsing, buffers, and backpressure.
   `SKILL.md`) specify the intended architecture. When they disagree with
   `package.json`, `tsconfig.json`, `flake.nix`, or `src/`, trust the config
   and code.
-- Every script is wired: `build`, `build:binding`, `dev`, `format`,
+- Every script is wired: `build`, `build:binding`, `build:bindings`,
+  `stage:publish`, `dev`, `format`,
   `format:check`, `lint`, `lint:fix`, `test`, `test:compat`, `test:watch`,
   `test:autobahn`, `bench`, `typecheck`, `typecheck:dist`, `release`, and
   `prepublishOnly`. `pnpm typecheck` checks `src`, `tests/types`, and
@@ -183,7 +184,17 @@ declarations through the package `exports` map; it needs `tsdown` output.
 - `ws` behavior is the compatibility contract. When adding a surface, check
   what `ws` does and test both implementations once the conformance harness
   exists. `ws` may be a devDependency only, never a runtime dependency.
-- `package.json` `files` ships only `dist/`; `tsdown` copies the host
-  `.node` artifact into `dist/`, so the built package is self-contained for
-  the build platform. Per-platform artifacts must land before any real
-  publish.
+- `package.json` `files` ships only `dist/`; the addon itself ships as the
+  `@ventiws/binding-*` package for the reader's platform, selected by npm from
+  the `os`, `cpu`, and `libc` fields the build graph writes.
+  `src/builds/platforms.zig` is the one list of published platforms, and
+  `src/binding/target.ts` is the loader's copy of it;
+  `tests/tooling/publish-platforms.test.ts` holds the two together. Windows is
+  absent from both on purpose, because the pinned `napi-zig` cannot link a
+  Windows target, and that file says so.
+  `tsdown` copies the host `.node` into `dist/` only when a build produced one,
+  so a checkout is runnable and a release is not carrying a foreign binary.
+  `.github/workflows/publish.yml` builds every published platform on a runner
+  that is native for it and publishes six packages with `NPM_TOKEN`, not
+  trusted publishing: npm can only configure that for a package that already
+  exists, and the five binding packages do not yet.

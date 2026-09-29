@@ -29,5 +29,12 @@ test "port_of ignores non-IP families" {
 }
 
 test "bound_port rejects an invalid descriptor" {
-    try std.testing.expectEqual(@as(?u16, null), ports.bound_port(-1));
+    // `socket_t` is an integer on POSIX and a handle on Windows, so a literal invalid
+    // descriptor does not compile on both. A descriptor that is not open is the same
+    // case either way: `getsockname` fails and the port is reported as unknown.
+    const invalid: std.posix.socket_t = if (@typeInfo(std.posix.socket_t) == .pointer)
+        @ptrFromInt(std.math.maxInt(usize))
+    else
+        @as(std.posix.socket_t, -1);
+    try std.testing.expectEqual(@as(?u16, null), ports.bound_port(invalid));
 }

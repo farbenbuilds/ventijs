@@ -46,6 +46,8 @@ plus `pnpm install`.
 | `pnpm format`           | oxfmt    | Format TypeScript, JSON, and Markdown                         |
 | `pnpm format:check`     | oxfmt    | Verify formatting without writing                             |
 | `pnpm finalize:exports` | node     | Add the `types` conditions `tsdown` leaves out of `exports`   |
+| `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
+| `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
 | `pnpm release`          | bumpp    | Bump the version across the versioned surfaces                |
 | `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
 
@@ -136,5 +138,30 @@ pnpm lockfile.
 3. Pass lint, format, typecheck, unit, and build on the release commit, then run
    the `ws` conformance suite and Autobahn and retain the benchmark report.
 4. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
-   artifacts, then tag `v<version>`, publish with provenance, and inspect the
-   tarball before announcing.
+   artifacts, then tag `v<version>` and push the tag.
+
+The tag is what publishes. `.github/workflows/publish.yml` builds the six
+platform packages across five runners, checks the tag against `package.json`,
+assembles `npm/`, and publishes. A run of that workflow by hand defaults to a
+dry run that packs every tarball without publishing and needs no credentials,
+so the matrix can be validated before any secret exists.
+
+The publish job authenticates with `NPM_TOKEN`, a granular automation token
+scoped to the six packages. Trusted publishing is not usable yet, and the order
+matters: npm can only configure trusted publishing _for a package that already
+exists_, and the five `@ventiws/binding-*` packages do not. The first release
+therefore has to create them with a token.
+
+Once they exist, trusted publishing can replace the token. It needs a checkout
+with a populated `npm/` tree, because `napi-zig npm-init` reads it to find the
+packages to configure, and it is interactive:
+
+```sh
+node scripts/build-bindings.mjs --platform=<one of the five>
+npx napi-zig npm-init --repo farbenbuilds/ventiws --workflow publish.yml
+```
+
+A release publishes six packages: `ventiws` plus one per platform. A platform
+that fails to build fails the release rather than shipping a version that cannot
+be installed on it, which is what `pnpm stage:publish` checks for and what makes
+the per-shard upload a gate rather than a convenience.

@@ -1,0 +1,20 @@
+# LF in the index and in every checkout, so the tree a Windows contributor edits is the
+# tree CI formats. Without this, `core.autocrlf=true` writes CRLF and `zig fmt --check`
+# fails on every file in `src/`, which makes the Zig formatting gate unusable on Windows
+# rather than merely noisy. `text=auto` leaves a detected binary alone, so the vendored
+# archives and the banner still round-trip.
+* text=auto eol=lf
+
+# A `.node` addon, a Zig object, and a static archive are read by a loader rather than by
+# a diff, and `zig-pkg/` holds them in the repository during a release build.
+*.node binary
+*.a binary
+*.o binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.lib binary
+*.pdb binary
+*.tar.gz binary
+*.tgz binary
+*.zip binary

@@ -6,7 +6,6 @@
 //! cannot touch freed memory.
 
 const std = @import("std");
-const builtin = @import("builtin");
 const napi = @import("napi-zig");
 const cleanup = @import("server_cleanup.zig");
 const connections = @import("connections.zig");
@@ -117,11 +116,12 @@ fn run_engine(target: *instance.Instance) void {
     if (acquired) target.channel.release();
 }
 
-/// Best-effort local port of the bound listener. POSIX reads it back from the
-/// socket so `port: 0` reports the ephemeral port; Windows keeps the requested
-/// port because its listener is not a POSIX descriptor.
+/// Best-effort local port of the bound listener, read back from the socket so
+/// `port: 0` reports the ephemeral port. The engine's listener is an `xev.TCP`,
+/// which carries a descriptor on every platform including Windows, so this is one
+/// path rather than a per-OS branch: a Windows server handed port 0 used to report
+/// 0, and a caller reading the listening port then had nothing to connect to.
 fn bound_port(target: *instance.Instance) u16 {
-    if (builtin.os.tag == .windows) return target.config.listen.port;
     const app = target.cluster.worker(0) orelse return target.config.listen.port;
     const server = app.server orelse return target.config.listen.port;
     return ports.bound_port(server.listener.fd) orelse target.config.listen.port;

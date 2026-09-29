@@ -12,9 +12,8 @@ observable behaviour rather than its source. ventiws is not affiliated with the
 as the pinned contract, credited in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**ventiws is at `1.0.0-alpha`.** Nothing is published to npm yet, so an
-install builds the addon for one platform, and the surface may change between
-alpha releases. What "alpha" means here is bounded: the `ws` compatibility
+**ventiws is at `1.0.0-alpha.1`.** The surface may change between alpha
+releases. What "alpha" means here is bounded: the `ws` compatibility
 contract is tracked row by row in
 [COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventiws knowingly
 differs from `ws` are listed in [CHANGELOG.md](CHANGELOG.md) under "Known
@@ -22,25 +21,48 @@ divergences from `ws`".
 
 ## Install
 
+```sh
+pnpm add ventiws
+```
+
+The addon arrives as a per-platform package that npm installs only on a host
+it matches, so the install needs no compiler:
+
+| Platform                    | Package                            |
+| --------------------------- | ---------------------------------- |
+| Linux x64, glibc            | `@ventiws/binding-linux-x64-gnu`   |
+| Linux x64, musl (Alpine)    | `@ventiws/binding-linux-x64-musl`  |
+| Linux arm64, glibc          | `@ventiws/binding-linux-arm64-gnu` |
+| macOS x64                   | `@ventiws/binding-darwin-x64`      |
+| macOS arm64 (Apple silicon) | `@ventiws/binding-darwin-arm64`    |
+
+Any other host installs ventiws with no addon behind it, and the first
+`WebSocketServer` says so by name and lists the platforms above.
+
+**Windows is not supported yet, at either layer.** There is no published addon,
+because the pinned `napi-zig` asks the build for an ABI-less
+`x86_64-windows-none` that has no `ws2_32` to link. More fundamentally, the
+engine cannot serve a socket there: its listener binds and the kernel accepts,
+then the event loop fails `accept` and `read` with `error.Unexpected`, and the
+peer is reset. Building in a checkout does not change that, so a Windows
+checkout is a place to edit the code, not to run a server. The frame codec
+itself is platform-independent and its suites do pass there.
+
 Working in the tree:
 
 ```sh
 git clone git@github.com:farbenbuilds/ventiws.git
 cd ventiws
-nix develop
+direnv allow
 pnpm install
 pnpm build
 ```
 
-Published usage, once a release lands:
-
-```sh
-pnpm add ventiws
-```
-
-`nix develop` pins Node.js, pnpm, and Zig 0.16.0. The first `pnpm build` compiles
-the vendored C dependencies, which takes minutes and about a gigabyte; later
-builds are incremental.
+`direnv allow` runs `.envrc`, which enters the pinned Nix shell with Node.js,
+pnpm, and Zig 0.16.0, and re-enters it on every later `cd`. Without
+[direnv](https://direnv.net) installed, run `nix develop` once per shell
+instead. The first `pnpm build` compiles the vendored C dependencies, which
+takes minutes and about a gigabyte; later builds are incremental.
 
 ## Usage
 

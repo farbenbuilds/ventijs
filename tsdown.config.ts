@@ -1,4 +1,11 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "tsdown";
+
+/// A checkout copies the freshly built host artifact into `dist`, so `pnpm build` leaves
+/// a tree that runs. A release build has no host artifact at all: the addon ships as the
+/// `@ventiws/binding-*` package for the reader's platform, so the copy is skipped rather
+/// than failing a build whose whole purpose is the platform packages.
+const hostAddon = "zig-out/lib/ventiws.node";
 
 /// The published shape.
 ///
@@ -27,7 +34,7 @@ export default defineConfig({
   exports: true,
   format: ["esm", "cjs"],
   platform: "node",
-  copy: ["zig-out/lib/ventiws.node"],
+  copy: existsSync(hostAddon) ? [hostAddon] : [],
   /// `ws` is `module.exports = WebSocket` with the rest hung off it, so
   /// `const WebSocket = require("ws")` gives the class. A bundler's CJS output is a
   /// namespace object instead, which makes that line a silent `undefined` rather than
