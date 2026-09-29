@@ -23,11 +23,11 @@ offered.
 
 ## Supported versions
 
-| Version                                | Supported                                      |
-| -------------------------------------- | ---------------------------------------------- |
-| `main`                                 | Yes                                            |
-| Any published release                  | None; the version is `0.0.0` and no tag exists |
-| Anything older than the current `main` | No                                             |
+| Version                                | Supported                                    |
+| -------------------------------------- | -------------------------------------------- |
+| `main`                                 | Yes                                          |
+| Any published release                  | None; releases are pre-alpha and unsupported |
+| Anything older than the current `main` | No                                           |
 
 ventiws is pre-alpha, so a fix lands on `main` and is not backported. A consumer
 who pins a commit has to apply the patch themselves, and gets no coverage on a
