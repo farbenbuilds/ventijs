@@ -14,6 +14,11 @@ on:
 
 permissions:
   contents: write
+  # To start the publish run. A push made with `GITHUB_TOKEN` deliberately creates no
+  # workflow run, so the tag this job pushes is invisible to `publish.yml`'s `push` trigger
+  # and the release would end at a tag with nothing on npm. `workflow_dispatch` and
+  # `repository_dispatch` are the two documented exceptions to that suppression.
+  actions: write
 
 # Two merges in quick succession both rewrite `package.json`, and the second would tag a
 # version the first never tagged. Queued rather than cancelled, because a cancelled run
@@ -80,4 +85,20 @@ jobs:
           fi
           git tag "$TAG"
           git push origin "$TAG"
-          echo "tagged $TAG, which is what publish.yml waits for"
+          echo "tagged $TAG"
+
+      - name: Start the publish run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.bump.outputs.version }}
+        run: |
+          # Dispatched at the tag rather than at the branch, so `github.ref` is the tag ref and
+          # every gate in publish.yml already holds: the tag-against-version check runs, the
+          # dry-run guards do not (no input is passed), and the release job waits for the
+          # publish result. Nothing in that workflow had to change to be startable this way.
+          #
+          # The tag is already pushed, so this is not what makes the release real; it is what
+          # makes the release happen. Re-dispatch it by hand if this step is ever the only
+          # thing that failed.
+          gh workflow run publish.yml --ref "$TAG"
+          echo "dispatched publish.yml at $TAG"

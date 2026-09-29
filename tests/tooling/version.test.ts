@@ -1,6 +1,6 @@
 //! The version is stated in three files that cannot import each other, and the marker that
 //! stops the bump from re-entering itself is a string that has to match elsewhere. Both are
-//! the bug this repository has shipped three times: one fact stated twice, one of them stale.
+//! the bug this repository has shipped three times: one fact stated twice, one stale.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
@@ -26,8 +26,7 @@ const MARKERS = ["skip ci", "ci skip", "no ci", "skip actions", "actions skip"];
 /// diffed as text.
 const HEADING = /^## \[([^\]]+)\]/gm;
 
-/// The prerelease counter, or 0 for a stable version: a stable heading sorts ahead of the
-/// prereleases it supersedes, which is 0 and therefore first.
+/// The prerelease counter, or 0 for a stable version: a stable heading sorts first.
 const counterOf = (version: string) => Number(/(\d+)$/.exec(version)?.[1] ?? 0);
 
 type Entry = { readonly version: string; readonly counter: number };
@@ -40,8 +39,7 @@ function logged(): Entry[] {
   });
 }
 
-/// Adjacent pairs, newest first: a `[a, b]` assertion names the direction, where `toEqual`
-/// reports a reversed list as a failure of the whole value rather than of its order.
+/// Adjacent pairs, newest first: `[a, b]` names the direction, where `toEqual` does not.
 function descending(values: readonly number[]): [number, number][] {
   return values.slice(1).map((value, index) => [values[index] ?? 0, value]);
 }
@@ -82,10 +80,20 @@ test("the commit the tag points at carries no CI skip marker", () => {
   for (const marker of MARKERS) expect(commit.includes(`[${marker}]`), commit).toBe(false);
 });
 
+test("the bump starts the publish run, because a GITHUB_TOKEN push does not", () => {
+  // A push made with `GITHUB_TOKEN` creates no workflow run, so the tag this job pushes never
+  // reaches `publish.yml`'s `push` trigger: a tag on main and nothing on npm. `workflow_dispatch`
+  // is a documented exception, and dispatching at the tag makes every gate in that workflow
+  // hold without editing it.
+  expect(BUMP_WORKFLOW).toContain("actions: write");
+  expect(BUMP_WORKFLOW).toContain('gh workflow run publish.yml --ref "$TAG"');
+  expect(BUMP_WORKFLOW).toContain("secrets.GITHUB_TOKEN");
+});
+
 test("the bump tags the version, and does so idempotently", () => {
   // Tagging is what publishes, so a run that failed between the commit and the tag leaves
-  // `main` bumped but untagged: both steps tolerate a re-run, and the tag step must see the
-  // remote's tags rather than assume a fresh clone.
+  // `main` bumped but untagged. The tag step must consult the remote's tags, not assume a
+  // fresh clone, or a re-run refuses on work already done.
   expect(BUMP_WORKFLOW).toContain('git tag "$TAG"');
   expect(BUMP_WORKFLOW).toContain('git push origin "$TAG"');
   expect(BUMP_WORKFLOW).toContain("fetch-depth: 0");
