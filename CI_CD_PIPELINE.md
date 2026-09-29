@@ -96,13 +96,22 @@ cannot run in CI:
 ```sh
 for p in ventiws @ventiws/binding-linux-x64-gnu @ventiws/binding-linux-arm64-gnu \
          @ventiws/binding-linux-x64-musl @ventiws/binding-darwin-x64 @ventiws/binding-darwin-arm64; do
-  npm trust github "$p" --file publish.yml --repo farbenbuilds/ventiws --env npm --allow-publish --yes
+  for f in publish.yml bump.yml; do
+    npm trust github "$p" --file "$f" --repo farbenbuilds/ventiws --env npm --allow-publish --yes
+  done
 done
 ```
 
-npm allows one trusted publisher per package, and it can only be attached to a
-package that already exists, which is why the first release necessarily used a
-token.
+Each package needs **two**. npm validates a trusted publisher against the
+_calling_ workflow's filename when one workflow dispatches another, and
+`bump.yml` is what dispatches `publish.yml` at the tag -- a push made with
+`GITHUB_TOKEN` creates no run, so a `push` trigger would never fire. The
+dispatching job needs `id-token: write` for the same reason: without it the child
+has no OIDC token, and `npm publish` fails with `ENEEDAUTH` naming neither half.
+
+npm allows several trusted publishers per package, and one can only be attached
+to a package that already exists, which is why the first release necessarily used
+a token.
 
 `publish.yml` publishes the per-platform packages before the main package, so a
 main package is never on the registry pointing at bindings that are not there

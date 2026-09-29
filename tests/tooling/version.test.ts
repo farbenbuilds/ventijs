@@ -79,12 +79,14 @@ test("the commit the tag points at carries no CI skip marker", () => {
   for (const marker of MARKERS) expect(commit.includes(`[${marker}]`), commit).toBe(false);
 });
 
-test("the bump starts the publish run, because a GITHUB_TOKEN push does not", () => {
-  // A push made with `GITHUB_TOKEN` creates no workflow run, so the tag this job pushes never
-  // reaches `publish.yml`'s `push` trigger: a tag on main and nothing on npm. `workflow_dispatch`
-  // is a documented exception, and dispatching at the tag makes every gate in that workflow
-  // hold without editing it.
+test("the bump starts the publish run, and carries the token the caller must have", () => {
+  // A push made with `GITHUB_TOKEN` creates no workflow run, so the tag never reaches
+  // `publish.yml`'s `push` trigger. `workflow_dispatch` is a documented exception -- and npm
+  // then checks a trusted publisher against the *calling* workflow's filename, so each package
+  // needs this file configured too, and this job needs `id-token: write` for the child to have a
+  // token to exchange. Without both, `npm publish` fails with ENEEDAUTH naming neither half.
   expect(BUMP_WORKFLOW).toContain("actions: write");
+  expect(BUMP_WORKFLOW).toContain("id-token: write");
   expect(BUMP_WORKFLOW).toContain('gh workflow run publish.yml --ref "$TAG"');
   expect(BUMP_WORKFLOW).toContain("secrets.GITHUB_TOKEN");
 });

@@ -19,6 +19,11 @@ permissions:
   # and the release would end at a tag with nothing on npm. `workflow_dispatch` and
   # `repository_dispatch` are the two documented exceptions to that suppression.
   actions: write
+  # Because this workflow dispatches the one that publishes. npm validates a trusted
+  # publisher against the *calling* workflow's filename, so `id-token: write` is required
+  # here as well as in `publish.yml`; without it the child has no OIDC token to exchange and
+  # `npm publish` fails with ENEEDAUTH.
+  id-token: write
 
 # Two merges in quick succession both rewrite `package.json`, and the second would tag a
 # version the first never tagged. Queued rather than cancelled, because a cancelled run
