@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-alpha.10] - 2026-09-29
+
+### Fixed
+
+- fix(ci): install the npm client that trusted publishing lives in (#54)
+
 ## [1.0.0-alpha.3] - 2026-09-29
 
 ### Fixed
