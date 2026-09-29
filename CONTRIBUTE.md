@@ -131,21 +131,25 @@ pnpm lockfile.
 
 ## Releasing
 
-1. Merge the work. `bump.yml` advances the prerelease counter, writing
-   `package.json`, `build.zig.zon`, `README.md`, and the `CHANGELOG.md` section
-   for that merge's commits, and commits it to `main`. It stops there.
+1. Merge the work. `bump.yml` does the rest: it advances the prerelease counter,
+   writing `package.json`, `build.zig.zon`, `README.md`, and the `CHANGELOG.md`
+   section for that merge's commits; commits it; and pushes the `v<version>`
+   tag. `.github/workflows/publish.yml` then builds the six platform packages
+   across five runners, checks the tag against `package.json`, assembles `npm/`,
+   publishes, and writes the GitHub Release.
 2. Pass lint, format, typecheck, unit, and build, then run the `ws` conformance
    suite and Autobahn and retain the benchmark report.
 3. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
    artifacts.
-4. Pull `main` and push the tag with `pnpm release`. That is the release
-   decision: `.github/workflows/publish.yml` builds the six platform packages
-   across five runners, checks the tag against `package.json`, assembles `npm/`,
-   publishes, and writes the GitHub Release.
 
-The tag is pushed by a person because a tag pushed with `GITHUB_TOKEN` starts no
-workflow run, and `publish.yml` takes no dispatch; a merge therefore cannot
-publish on its own. Several merges can make one release, or each can be its own.
+The tag is pushed with the release app's installation token rather than
+`GITHUB_TOKEN`, because a `GITHUB_TOKEN` push starts no workflow run and
+`publish.yml` takes no dispatch. The app is a one-time maintainer step: create a
+GitHub App with `Contents: Read and write` and no webhook, install it on this
+repository only, then store its Client ID as the `RELEASE_APP_CLIENT_ID`
+repository variable and its private key as the `RELEASE_APP_PRIVATE_KEY` secret.
+`pnpm release` (`scripts/tag-release.mjs`) pushes the tag by hand and remains the
+recovery path for a run that failed before its tag.
 
 The counter is deliberately unconditional: a pre-alpha's number tells a reader
 nothing, so inferring the bump from commit subjects would tie the published

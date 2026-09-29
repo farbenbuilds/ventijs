@@ -1,8 +1,8 @@
 name: Publish
 
-# The tag is the release decision, and the only way in: `bump.yml` advances the version on
-# a merge and stops there, and a tag pushed with `GITHUB_TOKEN` starts no run, so the tag
-# that publishes is one a maintainer pushed with `pnpm release`.
+# The tag is the release decision, and the only way in: `bump.yml` pushes it with the
+# release app's installation token, because a tag pushed with `GITHUB_TOKEN` starts no run.
+# `pnpm release` remains the hand-pushed path.
 on:
   push:
     tags:
