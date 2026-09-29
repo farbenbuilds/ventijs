@@ -182,8 +182,9 @@ jobs:
     # token for a short-lived publish token, so the job holds no npm secret at all.
     permissions:
       contents: read
-      # Provenance, not authentication: the attestation is signed with this workflow's
-      # OIDC token, while the credential npm accepts is `NPM_TOKEN` below.
+      # Both authentication and provenance come from this one grant. The token is what npm
+      # exchanges for a publish token, and the same token signs the provenance attestation,
+      # so the artifact on the registry names the commit and the workflow that built it.
       id-token: write
     environment:
       name: npm
@@ -198,20 +199,12 @@ jobs:
           cache: true
           install: false
 
-      - name: Authenticate to npm
-        # A granular automation token, not a personal one, scoped to the six packages
-        # this workflow publishes. Trusted publishing cannot be used yet: it can only be
-        # configured for a package that already exists on npm, and the five
-        # `@ventiws/binding-*` packages do not. Once they are published, run
-        # `napi-zig npm-init` from a checkout that has a populated `npm/` tree and this
-        # step can be deleted in favour of `permissions: id-token: write` alone.
-        #
-        # Skipped on a dry run, which only packs tarballs, so the matrix can be
-        # validated before the secret exists.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true') }}
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No authentication step. `id-token: write` above is the whole credential: npm
+      # exchanges this run's OIDC token for a short-lived publish token, so the job holds no
+      # npm secret and there is no long-lived credential in the repository to leak, rotate,
+      # or scope. Trusted publishing is configured per package on npm against this
+      # workflow's filename and the `npm` environment, so a job that is not this one cannot
+      # publish even with a valid OIDC token.
 
       - name: Download every platform package
         uses: actions/download-artifact@v4
