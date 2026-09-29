@@ -1,10 +1,10 @@
 //! The release pipeline is a chain of hand-offs between two workflows, and every link is a
-//! string in a YAML file rather than a call a compiler sees. The bug all five share is the
-//! one this repository has shipped three times: a fact stated twice, one not in effect. A
-//! page for an unpublished version advertises an install that fails; a `push`-only gate skips
-//! the page on every release, because `bump.yml` dispatches at the tag; an `id-token` in the
-//! release job would let the job that writes a page also publish; a bare tag does not say
-//! which package it is; and an unmarked prerelease reads as the newest stable thing.
+//! string in a YAML file rather than a call a compiler sees. The bug they all share is the one
+//! this repository has shipped repeatedly: a fact stated twice, one not in effect. A page for an
+//! unpublished version advertises an install that fails; a `push`-only gate skips it on every
+//! release, because `bump.yml` dispatches at the tag; an `id-token` in the release job would let
+//! the job that writes a page also publish; a bare tag does not name its package; and a boolean
+//! input compared as a string is a condition that is never taken, so the flag does nothing.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
@@ -14,8 +14,7 @@ const WORKFLOW = readFileSync(
   "utf8",
 );
 
-/// The release job alone, so a permission assertion cannot be satisfied by the publish job
-/// above it, which legitimately holds `id-token` and must.
+/// The release job alone, so a permission assertion cannot be satisfied by the publish job above.
 const job = WORKFLOW.slice(WORKFLOW.indexOf("\n  release:"));
 const header = job.slice(0, job.indexOf("steps:"));
 
@@ -43,4 +42,13 @@ test("the page names the package and is tagged with the version", () => {
 test("a prerelease is marked as one", () => {
   expect(job).toContain('[[ "$TAG" == *-* ]]');
   expect(job).toContain("--prerelease");
+});
+
+test("a boolean dispatch input is tested as a boolean", () => {
+  // A `type: boolean` input compared as a string is *always* false, so the flag does nothing and
+  // a dry run publishes for real. Only `if:` lines are read: the comment quoting this pattern
+  // is the reason a whole-file search would report the file itself.
+  const conditions = WORKFLOW.split("\n").filter((line) => line.trimStart().startsWith("if:"));
+  expect(conditions.length).toBeGreaterThan(0);
+  for (const line of conditions) expect(line).not.toMatch(/inputs\.[\w-]+\s*==\s*'true'/);
 });
