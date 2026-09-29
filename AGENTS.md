@@ -86,7 +86,8 @@ inside `nix develop` (Node 24, pnpm 12, Zig 0.16.0, zls).
 | Typecheck                     | `pnpm typecheck`                                                                   |
 | Zig unit tests                | `zig build test` (runs `src/engine-tests/`)                                        |
 | Zig formatting                | `zig fmt --check --exclude zig-pkg src build.zig`                                  |
-| Version bump                  | `pnpm release`                                                                     |
+| Advance the prerelease        | `pnpm bump`                                                                        |
+| Tag the current version       | `pnpm release`                                                                     |
 
 The first `pnpm build:binding` compiles BoringSSL, lsquic, libdeflate, and
 zlib from pinned package dependencies into `.zig-cache/` (roughly a gigabyte);
@@ -195,6 +196,10 @@ declarations through the package `exports` map; it needs `tsdown` output.
   `tsdown` copies the host `.node` into `dist/` only when a build produced one,
   so a checkout is runnable and a release is not carrying a foreign binary.
   `.github/workflows/publish.yml` builds every published platform on a runner
-  that is native for it and publishes six packages with `NPM_TOKEN`, not
-  trusted publishing: npm can only configure that for a package that already
-  exists, and the five binding packages do not yet.
+  that is native for it and publishes six packages. It holds no npm secret:
+  `id-token: write` is the whole credential, because every package's trusted
+  publisher on npm is configured against this workflow's filename and the `npm`
+  environment. `.github/workflows/bump.yml` advances the prerelease counter on
+  every merge to `main`, so `pnpm release` only tags the version the tree
+  already carries; `tests/tooling/version.test.ts` holds the three version
+  sources, the changelog's shape, and the bump loop guard together.

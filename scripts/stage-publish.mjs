@@ -115,6 +115,12 @@ function main() {
     throw new Error("stage-publish: dist/ is missing; run tsdown first");
   }
   cpSync("dist", join(STAGE, "dist"), { recursive: true });
+  // npm force-includes `package.json`, `README`, and `LICENSE` from whatever directory it
+  // packs, and force-inclusion is the only reason `files` does not already name them. It
+  // does not pull them from the repository: the copy is the part that puts them in the
+  // tarball. Without it the published package ships a readme-less page that renders as a
+  // bare name and a version, which is the first thing a reader arriving from npm sees.
+  for (const file of ["README.md", "LICENSE"]) cpSync(file, join(STAGE, file));
   for (const file of SCAFFOLDED) rmSync(join(STAGE, file), { force: true });
 
   const optional = {};

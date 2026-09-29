@@ -40,6 +40,11 @@ function scaffold(built: readonly string[] = TARGETS): string {
   mkdirSync(join(root, "dist"), { recursive: true });
   writeFileSync(join(root, "dist", "index.mjs"), "export {};\n");
 
+  // The two files npm force-includes from whatever directory it packs. The stage copies
+  // them, so a fixture without them is a tree the real repository never is.
+  writeFileSync(join(root, "README.md"), "# ventiws\n");
+  writeFileSync(join(root, "LICENSE"), "MIT\n");
+
   const stage = join(root, "npm", "ventiws");
   mkdirSync(join(stage, SCOPE), { recursive: true });
   // A shard's scaffolded manifest declares only the platform that shard built, which is
@@ -121,4 +126,14 @@ test("the staged manifest drops what a tarball must not carry", () => {
   expect(existsSync(join(root, "npm", "ventiws", "binding.js"))).toBe(false);
   expect(existsSync(join(root, "npm", "ventiws", "index.js"))).toBe(false);
   expect(existsSync(join(root, "npm", "ventiws", "dist", "index.mjs"))).toBe(true);
+});
+
+test("the staged package carries the readme npm renders on the package page", () => {
+  // npm force-includes `README` and `LICENSE` from the directory it packs, which is why
+  // `files` does not name them and why the stage has to copy them. A published tarball
+  // without them is a blank page on npmjs.com.
+  const root = scaffold();
+  expect(run(root).code).toBe(0);
+  for (const file of ["README.md", "LICENSE"])
+    expect(existsSync(join(root, "npm", "ventiws", file))).toBe(true);
 });

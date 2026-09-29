@@ -35,6 +35,7 @@
     "build:binding": "napi-zig build --optimize safe",
     "build:bindings": "node scripts/build-bindings.mjs",
     "stage:publish": "node scripts/stage-publish.mjs",
+    "bump": "node scripts/bump-version.mjs",
     "dev": "tsdown --watch",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
@@ -48,7 +49,7 @@
     "bench": "node bench/index.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "typecheck:dist": "tsc -p tsconfig.dist-types.json",
-    "release": "bumpp",
+    "release": "node scripts/tag-release.mjs",
     "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
