@@ -8,8 +8,8 @@
 // nothing in CI can report it. This is the only place the mistake can still be caught.
 //
 // It runs from a `commit-msg` hook, so it covers a human commit and not the one
-// `bump.yml` writes: CI does not install the hooks, which is exactly why that commit is
-// allowed to carry the marker it needs.
+// `bump.yml` writes: CI does not install the hooks, and that commit deliberately carries
+// no marker, because a release tag can point at it.
 
 import { readFileSync } from "node:fs";
 import { argv } from "node:process";

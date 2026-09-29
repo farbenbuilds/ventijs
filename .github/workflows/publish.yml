@@ -1,105 +1,36 @@
 name: Publish
 
-# A release is a tag, because `pnpm release` bumps the version and the tag is what says
-# the version is decided. The workflow reads the version out of `package.json` and
-# refuses to run when the tag disagrees, so a tag pushed by hand cannot publish a
-# version nobody released.
+# The tag is the release decision, and the only way in: `bump.yml` advances the version on
+# a merge and stops there, and a tag pushed with `GITHUB_TOKEN` starts no run, so the tag
+# that publishes is one a maintainer pushed with `pnpm release`.
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      dry-run:
-        description: Stage and pack every package without publishing
-        type: boolean
-        default: true
-      diagnose:
-        description: Print the OIDC token claims npm will authenticate with
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
-# Two releases must not race for the same version. Not cancellable: a publish that is
-# half through uploading to npm cannot be recalled, so a second run waits for the first.
+# A publish that is part way through uploading cannot be recalled, so a second run for the
+# same ref waits rather than cancelling the first.
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  diagnose:
-    name: OIDC claims
-    # No `needs`, so this starts with the dispatch rather than after the platform matrix.
-    # Every claim npm validates a trusted publisher against is in the token, so printing them
-    # answers "which workflow does npm think called this" without a 25-minute build first.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      id-token: write
-    # The same environment the publish job uses, because the `environment` claim is part of
-    # what npm matches and a claim from a different environment would be a false answer.
-    environment:
-      name: npm
-    steps:
-      - uses: actions/checkout@v6
-
-      # The same setup the publish job has, and the reason this job exists: without it the
-      # report describes the runner's default Node and npm rather than the client
-      # `napi-zig publish` shells out to, which is the one question worth asking. The runner
-      # ships Node 22 with npm 10, and npm 10 predates OIDC support entirely, so a report taken
-      # anywhere else would name a client that never publishes.
-      - uses: pnpm/setup@v2
-        with:
-          version: 12.4.2
-          runtime: node@24
-          install: false
-
-      - name: Report the client and the token
-        run: |
-          echo "npm:            $(npm --version)"
-          echo "node:           $(node --version)"
-          echo "registry:       $(npm config get registry)"
-          echo "oidc endpoint:  ${ACTIONS_ID_TOKEN_REQUEST_URL:+set}${ACTIONS_ID_TOKEN_REQUEST_URL:-unset}"
-          node --input-type=module -e '
-            const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
-            if (!url) process.exit(0);
-            const res = await fetch(`${url}&audience=npm%3Aregistry.npmjs.org`, {
-              headers: { authorization: `bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-            });
-            const body = await res.json();
-            if (!body.id_token) {
-              console.log(`  token request failed: ${JSON.stringify(body)}`);
-              process.exit(0);
-            }
-            const claims = JSON.parse(Buffer.from(body.id_token.split(".")[1], "base64").toString());
-            for (const key of ["aud", "sub", "repository", "environment", "job_workflow_ref", "workflow_ref"])
-              console.log(`  ${key}: ${claims[key] ?? "(absent)"}`);
-          '
-
   bindings:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    # A cold build compiles BoringSSL, lsquic, libdeflate, and zlib from source. The
-    # default 360 minutes is a job timeout nobody reads.
     timeout-minutes: 120
     strategy:
-      # One shard failing must not cancel the others: the publish job reports every
-      # missing platform by name, which is the diagnosis, rather than only the first
-      # failure a fail-fast run would show.
+      # One shard failing must not cancel the others: the publish job reports every missing
+      # platform by name, which is the diagnosis.
       fail-fast: false
       matrix:
         include:
-          # One runner per published platform, and each runner is native for its
-          # platform. That is a constraint rather than a preference: the engine builds
-          # its vendored BoringSSL, lsquic, libdeflate, and zlib for the host target,
-          # and the release path links those host archives into a cross-compiled addon.
-          # A cross build links and then misbehaves, which no amount of CI green proves
-          # away. The Linux arm64 runner is free on a public repository and hard-fails
-          # the workflow on a private one.
+          # One runner per published platform, native for that platform. The engine builds
+          # its vendored BoringSSL and lsquic for the host, so a cross build links a foreign
+          # library and misbehaves later, which no green pipeline catches.
           - name: linux-x64-gnu
             os: ubuntu-24.04
             platform: linux-x64-gnu
@@ -112,10 +43,8 @@ jobs:
           - name: darwin-arm64
             os: macos-15
             platform: darwin-arm64
-          # No `win32-x64` shard: `napi_zig` 0.2.8 requests an ABI-less
-          # `x86_64-windows-none`, so it cannot link `ws2_32` and no Windows package can
-          # be built. It returns with the in-repo shim or a fixed upstream release, and
-          # `src/builds/platforms.zig` names the reason where the list lives.
+          # No win32-x64 shard: napi-zig 0.2.8 asks for an ABI-less x86_64-windows-none
+          # target that cannot link ws2_32. src/builds/platforms.zig records the reason.
     environment:
       name: Release
       url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -140,9 +69,6 @@ jobs:
           path: |
             .zig-cache
             zig-pkg
-          # `matrix.platform` is in the key because `runner.os` is not enough: the two
-          # macOS shards share it, and a cache written by an arm64 build holds the wrong
-          # object files for an x86_64 build.
           key: zig-0.16.0-${{ runner.os }}-${{ matrix.platform }}-${{ github.repository }}-${{ hashFiles('build.zig', 'build.zig.zon', 'src/builds/**') }}
           restore-keys: |
             zig-0.16.0-${{ runner.os }}-${{ matrix.platform }}-${{ github.repository }}-
@@ -151,18 +77,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build the platform package
-        # Also builds the host addon into `zig-out/lib`, because `addLib` installs the
-        # host artifact whether or not the npm scaffold is on.
         run: node scripts/build-bindings.mjs --platform=${{ matrix.platform }}
 
       - name: Prove the addon loads on this platform
-        # The alternative is publishing binaries that were compiled and never loaded.
-        # This loads the artifact the shard just built, reads the compiled capacities, and
-        # round-trips frames through the native codec, which is the evidence that a
-        # per-platform binary is correct. Deliberately no loopback client: a release gate
-        # that also depends on the runner's network configuration blocks a release for a
-        # reason that has nothing to do with the artifact. The socket suites run in
-        # `zig-test.yml`, on a runner whose networking is known.
+        # Load the artifact this shard built and round-trip frames through it. A package
+        # published on compilation alone is a package nobody loaded.
         run: pnpm exec vitest run --no-file-parallelism tests/binding/addon.test.ts tests/binding/codec
 
       - name: Upload the platform package
@@ -176,9 +95,8 @@ jobs:
   bindings-musl:
     name: linux-x64-musl
     runs-on: ubuntu-24.04
-    # A musl host, because the alternative is a glibc-built BoringSSL inside an Alpine
-    # binary. `node:24-alpine` is musl and already carries a Node the JavaScript actions
-    # can run, which a bare `alpine` image does not.
+    # A musl host, or the addon links glibc into an Alpine binary. node:24-alpine already
+    # carries a Node the JavaScript actions can run.
     container: node:24-alpine
     timeout-minutes: 120
     environment:
@@ -216,8 +134,8 @@ jobs:
         run: node scripts/build-bindings.mjs --platform=linux-x64-musl
 
       - name: Prove the addon loads on this platform
-        # The one job where the loader's libc probe decides between two package names, so
-        # it is also the only place a wrong `-gnu`/`-musl` answer would be caught.
+        # The one job where the loader's libc probe decides between two package names, so it
+        # is also the only place a wrong gnu/musl answer would be caught.
         run: pnpm exec vitest run --no-file-parallelism tests/binding/addon.test.ts tests/binding/codec
 
       - name: Upload the platform package
@@ -233,13 +151,12 @@ jobs:
     needs: [bindings, bindings-musl]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # `id-token` is the trusted-publishing credential: npm exchanges this workflow's OIDC
-    # token for a short-lived publish token, so the job holds no npm secret at all.
+    # No npm secret anywhere: `id-token` is the whole credential, and npm exchanges this
+    # run's OIDC token for a short-lived publish token and signs provenance with the same
+    # token. Trusted publishing is configured per package against this filename and the
+    # `npm` environment, so no other workflow can publish even holding a valid token.
     permissions:
       contents: read
-      # Both authentication and provenance come from this one grant. The token is what npm
-      # exchanges for a publish token, and the same token signs the provenance attestation,
-      # so the artifact on the registry names the commit and the workflow that built it.
       id-token: write
     environment:
       name: npm
@@ -254,33 +171,27 @@ jobs:
           cache: true
           install: false
 
-      # No authentication step. `id-token: write` above is the whole credential: npm
-      # exchanges this run's OIDC token for a short-lived publish token, so the job holds no
-      # npm secret and there is no long-lived credential in the repository to leak, rotate,
-      # or scope. Trusted publishing is configured per package on npm against this
-      # workflow's filename and the `npm` environment, so a job that is not this one cannot
-      # publish even with a valid OIDC token.
-
       - name: Download every platform package
         uses: actions/download-artifact@v4
         with:
           pattern: bindings-*
-          merge-multiple: true
           # Each shard contributes its own `@ventiws/binding-*` directory and an identical
-          # scaffolded `package.json`, so merging on top of each other is what assembles
-          # the one package the loader resolves against.
+          # scaffolded `package.json`, so merging on top of each other assembles the one
+          # package the loader resolves against.
+          merge-multiple: true
           path: npm/ventiws
 
       - name: Check the tag against the version
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        # A hand-pushed tag that disagrees with the manifest publishes nothing: npm uses the
+        # manifest version, not the tag.
         run: node scripts/check-release-tag.mjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build the bundle
-        # No host addon on this runner, and none is needed: `tsdown` copies the artifact
-        # only when the build produced one, and the release ships the platform packages.
+        # No host addon on this runner, and none is needed: the release ships the platform
+        # packages, and tsdown copies an artifact only when a build produced one.
         run: pnpm exec tsdown
 
       - name: Check the built declarations
@@ -290,10 +201,9 @@ jobs:
         run: pnpm run stage:publish
 
       - name: Pack the tarballs
-        # Both paths, because `napi-zig publish` packs its own and then deletes each
-        # tarball, so a real run leaves nothing to upload. Packing here also means the
-        # dry run and the real run assemble byte-identical archives, and the artifact is
-        # what a failed publish is inspected with.
+        # `napi-zig publish` packs its own tarballs and deletes each one, so a real run
+        # leaves nothing to inspect. Packing here also makes these archives what a failed
+        # publish is reviewed with.
         run: |
           mkdir -p pnpm-pack
           for dir in npm/ventiws npm/ventiws/@ventiws/*; do
@@ -302,18 +212,13 @@ jobs:
           ls -l pnpm-pack
 
       - name: Publish to npm
-        # `inputs.dry-run` and not `inputs.dry-run == 'true'`: the input is `type: boolean`,
-        # so the context holds a boolean and GitHub coerces the string `'true'` to 0, making
-        # the comparison always false. That silently made every dispatch a real publish, which
-        # is how a dry run once reached npm.
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run) }}
-        # Publishes the platform packages first and the main package last, so a main
-        # package is never on the registry pointing at bindings that are not there yet.
+        # Bindings first, main package last, so the registry never points at a binding that
+        # is not there yet.
         run: pnpm exec napi-zig publish
 
       - name: Upload the packed tarballs
-        # `always()` because a failed publish is exactly when someone wants to see what
-        # was about to go out.
+        # `always()` because a failed publish is exactly when someone wants to see what was
+        # about to go out.
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
@@ -323,33 +228,20 @@ jobs:
 
   release:
     name: GitHub Release
-    # After the publish, not instead of it: a release page for a version that is not on the
-    # registry advertises an install that fails, which is worse than no page.
     needs: [bindings, bindings-musl, publish]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # `contents: write` creates the release and pushes its tag. No npm scope: this job
-    # cannot publish, and trusted publishing is bound to this workflow's publish job
-    # anyway.
+    # The page is written only for a tag whose publish succeeded: a page for a version that
+    # is not on the registry advertises an install that fails. `contents: write` and no
+    # OIDC grant, so the job that writes a page cannot publish.
     permissions:
       contents: write
-    # A dry run has published nothing, so there is no version to describe. Skipping the job
-    # renders it grey with a reason, where a skipped step inside a green job would be
-    # indistinguishable from having made a release.
-    #
-    # `needs.publish.result` cannot be the whole gate: a dry run *skips the publish step*, so
-    # the publish job still reports success and the page would be written for a version that
-    # never reached npm. The dry-run exclusion is therefore mirrored from the publish step
-    # below, which is what makes the two agree.
-    #
-    # `workflow_dispatch` is accepted as well as `push`, because `bump.yml` starts this
-    # workflow by dispatching it at the tag: a push made with `GITHUB_TOKEN` creates no run.
-    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !(github.event_name == 'workflow_dispatch' && inputs.dry-run) && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
     steps:
       - uses: actions/checkout@v6
         with:
-          # The notes are the changelog sections between this tag and the one before it, and
-          # `git describe --tags HEAD^` needs the earlier tag to be present locally.
+          # The notes are the changelog sections between this tag and the previous one, so
+          # the earlier tag has to be present locally.
           fetch-depth: 0
 
       - name: Write the release notes
@@ -362,14 +254,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           # A prerelease is marked as one, so the release list does not present an alpha as
-          # the newest stable thing. The tag is the version: the publish job already refused
-          # a tag that disagrees with the manifest, so this cannot describe a version that
-          # was never published.
-          #
-          # The title names the package, because the list is every release in the repository
-          # and `v1.0.0-alpha.2` alone does not say which of them this is. The tag stays
-          # `v<version>`: that is the form `check-release-tag.mjs` checks, and the form npm
-          # and the version assertions expect.
+          # the newest stable thing.
           flags=(--title "$PKG $TAG" --notes-file release-notes.md --verify-tag)
           if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
           gh release create "$TAG" "${flags[@]}"

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Refuses a release whose tag and manifest disagree.
 //
-// `pnpm release` bumps `package.json` and tags `v<version>` together, so the two are the
-// same string by construction and this never fires. It exists for the tag pushed by
-// hand, where npm would publish under the manifest's version while the tag, the commit
-// message, and the changelog all say something else, and the mismatch is only visible
-// afterwards on the registry.
+// The version advances on merge and the tag is pushed at release time, so the two are
+// written by different steps. npm publishes under the manifest's version whatever the tag
+// says, so a tag that disagrees would put a version on the registry whose tag, commit
+// message, and changelog all name something else, and the mismatch would only be visible
+// afterwards.
 
 import { readFileSync } from "node:fs";
 

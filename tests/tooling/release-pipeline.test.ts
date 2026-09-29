@@ -1,10 +1,9 @@
-//! The release pipeline is a chain of hand-offs between two workflows, and every link is a
-//! string in a YAML file rather than a call a compiler sees. The bug they all share is the one
-//! this repository has shipped repeatedly: a fact stated twice, one not in effect. A page for an
-//! unpublished version advertises an install that fails; a `push`-only gate skips it on every
-//! release, because `bump.yml` dispatches at the tag; an `id-token` in the release job would let
-//! the job that writes a page also publish; a bare tag does not name its package; and a boolean
-//! input compared as a string is a condition that is never taken, so the flag does nothing.
+//! The release pipeline is a chain of hand-offs between a maintainer's tag and the
+//! registry, and every link is a string in a YAML file rather than a call a compiler sees.
+//! The bug this repository has shipped repeatedly is a fact stated twice, one not in
+//! effect: a page for an unpublished version advertises an install that fails, a second
+//! trigger is a way in nothing uses, and a prerelease that is not marked as one reads as
+//! the newest stable thing.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
@@ -14,35 +13,51 @@ const WORKFLOW = readFileSync(
   "utf8",
 );
 
+/// The publish job alone, because the assertions below must name it, not the jobs above it.
+const publishJob = WORKFLOW.slice(
+  WORKFLOW.indexOf("\n  publish:"),
+  WORKFLOW.indexOf("\n  release:"),
+);
+
 /// The release job alone, so a permission assertion cannot be satisfied by the publish job above.
 const job = WORKFLOW.slice(WORKFLOW.indexOf("\n  release:"));
 const header = job.slice(0, job.indexOf("steps:"));
 
+test("the tag is the only way to start a release", () => {
+  // Compared as a whole block: a second key under `on:`, a second trigger, or a dispatch
+  // input all break the equality, where a substring check would not.
+  const trigger = WORKFLOW.slice(WORKFLOW.indexOf("\non:"), WORKFLOW.indexOf("permissions:"))
+    .replace(/^\s*#.*$/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  expect(trigger).toBe('on: push: tags: - "v*"');
+  expect(WORKFLOW).not.toContain("inputs.");
+});
+
 test("a release page follows a successful publish", () => {
-  expect(WORKFLOW).toContain("needs: [bindings, bindings-musl, publish]");
+  expect(header).toContain("needs: [bindings, bindings-musl, publish]");
   expect(header).toContain("needs.publish.result == 'success'");
   expect(header).toContain("startsWith(github.ref, 'refs/tags/v')");
 });
 
-test("a dry run writes no release page", () => {
-  // `needs.publish.result` is the *job*, and a dry run skips only the publish *step*, so the
-  // job still reports success. Without its own dry-run guard the page is written for a version
-  // that never reached npm, which is the outcome the comment above it forbids. Asserting the
-  // condition's text was not enough: the previous test passed while this was true.
-  expect(header).toContain("inputs.dry-run");
-  expect(header).toContain("!cancelled()");
-  // Mirrored from the publish step, so the two cannot disagree about what a dry run is.
-  const publish = WORKFLOW.slice(0, WORKFLOW.indexOf("\n  release:"));
-  expect(publish).toContain("inputs.dry-run");
-});
-
-test("the release job accepts a dispatch, because that is how it is started", () => {
-  expect(header).toContain("github.event_name == 'workflow_dispatch'");
-});
-
 test("the release job cannot publish", () => {
-  expect(header).toContain("contents: write");
+  // Matched as a block: the comment above it contains the same words, and a deleted
+  // `permissions:` key would otherwise still satisfy a substring check.
+  expect(header).toMatch(/permissions:\n\s+contents: write/);
   expect(header).not.toContain("id-token");
+});
+
+test("the OIDC grant sits on the publish job alone", () => {
+  expect(publishJob).toContain("id-token: write");
+  expect(WORKFLOW.slice(0, WORKFLOW.indexOf("\n  publish:"))).not.toContain("id-token");
+  expect(job).not.toContain("id-token");
+});
+
+test("the publish job stages and publishes the six packages", () => {
+  expect(publishJob).toContain("actions/download-artifact@v4");
+  expect(publishJob).toContain("node scripts/check-release-tag.mjs");
+  expect(publishJob).toContain("pnpm run stage:publish");
+  expect(publishJob).toContain("pnpm exec napi-zig publish");
 });
 
 test("the page names the package and is tagged with the version", () => {
@@ -54,13 +69,4 @@ test("the page names the package and is tagged with the version", () => {
 test("a prerelease is marked as one", () => {
   expect(job).toContain('[[ "$TAG" == *-* ]]');
   expect(job).toContain("--prerelease");
-});
-
-test("a boolean dispatch input is tested as a boolean", () => {
-  // A `type: boolean` input compared as a string is *always* false, so the flag does nothing and
-  // a dry run publishes for real. Only `if:` lines are read: the comment quoting this pattern
-  // is the reason a whole-file search would report the file itself.
-  const conditions = WORKFLOW.split("\n").filter((line) => line.trimStart().startsWith("if:"));
-  expect(conditions.length).toBeGreaterThan(0);
-  for (const line of conditions) expect(line).not.toMatch(/inputs\.[\w-]+\s*==\s*'true'/);
 });
