@@ -1,0 +1,3 @@
+{
+  "platforms": ["linux-x64-gnu", "linux-arm64-gnu", "linux-x64-musl", "darwin-x64", "darwin-arm64"]
+}

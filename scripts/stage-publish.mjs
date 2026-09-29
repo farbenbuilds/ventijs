@@ -41,19 +41,23 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function bindingTargets(scaffold) {
-  return Object.keys(scaffold.optionalDependencies ?? {})
-    .filter((name) => name.startsWith(`${SCOPE_DIR}/${BINDING_PREFIX}`))
-    .map((name) => name.slice(`${SCOPE_DIR}/${BINDING_PREFIX}`.length))
-    .sort();
+/// The platforms a release must contain, from the same file the build graph reads.
+///
+/// Deliberately not the scaffolded manifest. `napi_zig` generates that manifest from
+/// `.npm.platforms`, which a shard narrows to the one target its runner owns, so each
+/// shard's manifest declares exactly one platform and the merged tree declares one in
+/// total. A gate that trusted it rejected a release that had built all of them.
+function declaredTargets() {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../src/builds/platforms.json", import.meta.url), "utf8"),
+  );
+  return [...manifest.platforms].sort();
 }
 
-/// Both sides of the comparison are targets, not directory names. The manifest names a
-/// package `@ventiws/binding-darwin-arm64` and the toolchain lays it down as a
-/// `binding-darwin-arm64` directory, so comparing one spelling against the other never
-/// matches and a complete release reports every platform as missing. A directory that
-/// does not carry the prefix is left whole, so it surfaces as undeclared rather than
-/// silently matching a target it was never built for.
+/// Both sides of the comparison are targets, not directory names. The toolchain lays a
+/// package out as a `binding-darwin-arm64` directory, so comparing a directory name
+/// against a target never matches. A directory without the prefix is left whole, so it
+/// surfaces as undeclared rather than matching a target it was never built for.
 function builtTargets() {
   const scope = join(STAGE, SCOPE_DIR);
   if (!existsSync(scope)) return [];
@@ -102,8 +106,7 @@ function main() {
       `stage-publish: ${scaffoldPath} is missing; run scripts/build-bindings.mjs first`,
     );
   }
-  const scaffold = readJson(scaffoldPath);
-  const declared = bindingTargets(scaffold);
+  const declared = declaredTargets();
   const built = builtTargets();
   verifyCompleteness(declared, built);
   verifyAddons(declared);
