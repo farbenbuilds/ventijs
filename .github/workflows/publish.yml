@@ -182,6 +182,8 @@ jobs:
     # token for a short-lived publish token, so the job holds no npm secret at all.
     permissions:
       contents: read
+      # Provenance, not authentication: the attestation is signed with this workflow's
+      # OIDC token, while the credential npm accepts is `NPM_TOKEN` below.
       id-token: write
     environment:
       name: npm
@@ -195,6 +197,21 @@ jobs:
           runtime: node@24
           cache: true
           install: false
+
+      - name: Authenticate to npm
+        # A granular automation token, not a personal one, scoped to the six packages
+        # this workflow publishes. Trusted publishing cannot be used yet: it can only be
+        # configured for a package that already exists on npm, and the five
+        # `@ventiws/binding-*` packages do not. Once they are published, run
+        # `napi-zig npm-init` from a checkout that has a populated `npm/` tree and this
+        # step can be deleted in favour of `permissions: id-token: write` alone.
+        #
+        # Skipped on a dry run, which only packs tarballs, so the matrix can be
+        # validated before the secret exists.
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true') }}
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Download every platform package
         uses: actions/download-artifact@v4

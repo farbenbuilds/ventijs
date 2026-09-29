@@ -141,23 +141,27 @@ pnpm lockfile.
    artifacts, then tag `v<version>` and push the tag.
 
 The tag is what publishes. `.github/workflows/publish.yml` builds the six
-platform packages across four runners, checks the tag against `package.json`,
-assembles `npm/`, and publishes under npm trusted publishing, which needs no
-token in the repository. A run of that workflow by hand defaults to a dry run
-that packs every tarball without publishing.
+platform packages across five runners, checks the tag against `package.json`,
+assembles `npm/`, and publishes. A run of that workflow by hand defaults to a
+dry run that packs every tarball without publishing and needs no credentials,
+so the matrix can be validated before any secret exists.
 
-Each package has to be configured for trusted publishing once, by a maintainer
-with npm 2FA enabled and npm 11.16 or newer:
+The publish job authenticates with `NPM_TOKEN`, a granular automation token
+scoped to the six packages. Trusted publishing is not usable yet, and the order
+matters: npm can only configure trusted publishing _for a package that already
+exists_, and the five `@ventiws/binding-*` packages do not. The first release
+therefore has to create them with a token.
+
+Once they exist, trusted publishing can replace the token. It needs a checkout
+with a populated `npm/` tree, because `napi-zig npm-init` reads it to find the
+packages to configure, and it is interactive:
 
 ```sh
+node scripts/build-bindings.mjs --platform=<one of the five>
 npx napi-zig npm-init --repo farbenbuilds/ventiws --workflow publish.yml
 ```
 
-That is the step with no dry run. It publishes a first version of any package
-that does not exist yet and points the rest of them at the workflow, so run it
-before the first release rather than during one.
-
 A release publishes six packages: `ventiws` plus one per platform. A platform
-that fails to build fails the release rather than shipping a version that
-cannot be installed on it, which is what `pnpm stage:publish` checks for and
-what makes the per-shard upload a gate rather than a convenience.
+that fails to build fails the release rather than shipping a version that cannot
+be installed on it, which is what `pnpm stage:publish` checks for and what makes
+the per-shard upload a gate rather than a convenience.

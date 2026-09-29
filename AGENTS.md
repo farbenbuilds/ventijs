@@ -195,4 +195,6 @@ declarations through the package `exports` map; it needs `tsdown` output.
   `tsdown` copies the host `.node` into `dist/` only when a build produced one,
   so a checkout is runnable and a release is not carrying a foreign binary.
   `.github/workflows/publish.yml` builds every published platform on a runner
-  that is native for it and publishes through npm trusted publishing.
+  that is native for it and publishes six packages with `NPM_TOKEN`, not
+  trusted publishing: npm can only configure that for a package that already
+  exists, and the five binding packages do not yet.

@@ -30,10 +30,13 @@ same information in a form `git log` can filter.
 ### Changed
 
 - **A release is a tag.** `.github/workflows/publish.yml` builds every published platform
-  on a runner that can also run it, proves each addon loads and echoes a frame before
-  publishing it, and publishes through npm trusted publishing, so the repository holds no
-  npm secret. A workflow dispatch defaults to a dry run that packs every tarball without
-  publishing. This supersedes the manual `npm publish` in `CONTRIBUTE.md`.
+  on a runner that is native for it, proves each addon loads and round-trips frames
+  through the native codec, and publishes six packages. The publish job authenticates
+  with a granular `NPM_TOKEN` rather than trusted publishing, because npm can only
+  configure trusted publishing for a package that already exists and the five
+  `@ventiws/binding-*` packages do not. A workflow dispatch defaults to a dry run that
+  packs every tarball without publishing and needs no credential. This supersedes the
+  manual `npm publish` in `CONTRIBUTE.md`.
 
 ### Fixed
 

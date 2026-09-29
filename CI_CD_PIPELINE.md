@@ -83,17 +83,28 @@ there, which is what the release smoke test is scoped to.
 
 ## Publishing
 
-`publish.yml` publishes with npm trusted publishing: the job holds
-`id-token: write`, npm exchanges the workflow's OIDC token for a short-lived
-publish token, and there is no `NPM_TOKEN` secret in the repository. Each
-package is configured once, by a maintainer, with
-`napi-zig npm-init --repo farbenbuilds/ventiws --workflow publish.yml`.
+`publish.yml` authenticates with `NPM_TOKEN`, a granular automation token scoped
+to the six packages. It cannot use trusted publishing yet: npm can only
+configure trusted publishing for a package that already exists on npm, and the
+five `@ventiws/binding-*` packages do not, so the first release has to create
+them with a token. The job holds `id-token: write` separately, which signs the
+provenance attestation rather than the publish. Once the binding packages exist,
+`napi-zig npm-init` can replace the token with trusted publishing; it is
+interactive and needs a checkout with a populated `npm/` tree, so it is a
+maintainer step, not a workflow one.
 
 `publish.yml` publishes the per-platform packages before the main package, so a
 main package is never on the registry pointing at bindings that are not there
 yet. It checks the tag against `package.json` first, so a tag pushed by hand
-cannot publish a version nobody released, and it defaults `workflow_dispatch` to
-a dry run that packs every tarball and uploads them without publishing.
+cannot publish a version nobody released. A `workflow_dispatch` run defaults to a
+dry run that packs every tarball and uploads them without publishing, and skips
+the npm credential step entirely, so the matrix can be validated before the
+secret exists.
+
+The publish is not transactional: a failure part way leaves the earlier packages
+on the registry. `napi-zig publish` treats an already-published version as a
+skip rather than an error, so a re-run of the same tag is safe, but a release
+that half-succeeded is repaired by re-running it rather than by hand.
 
 ## Lint and type gates
 
