@@ -18,6 +18,31 @@ written from the same subjects `git log` filters on.
 The header is mandatory. The scope is optional. Body and footer are optional,
 but a breaking change requires a footer.
 
+### Do not put a CI skip marker in a commit message
+
+A commit message must not contain `[skip ci]`, `[ci skip]`, `[no ci]`,
+`[skip actions]`, or `[actions skip]` -- not in the body, not in a footer,
+and not while explaining one.
+
+GitHub matches these anywhere in a commit message, and a squash merge
+concatenates every commit body into the single message it puts on `main`. So
+a branch whose commits merely _describe_ the marker produce a merge that GitHub
+reads as "skip all CI", and no workflow runs for that push -- including
+`bump.yml`, which exists only to react to a merge. Nothing inside a workflow
+can catch it, because a skipped push starts no workflow to hold the check.
+
+`bump.yml` writes the marker into its own commit subject on purpose. That is
+the one place it belongs. The repository uses a squash merge, so every other
+commit on `main` inherits every branch commit body; write "the skip-CI marker"
+or break the brackets with a backslash when the subject has to be quoted.
+
+If a merge ever lands and `bump.yml` does not appear in the Actions tab, the
+message is why. Re-run it by hand:
+
+```sh
+gh workflow run bump.yml --ref main
+```
+
 ## Types
 
 | Type       | Use for                                                   |

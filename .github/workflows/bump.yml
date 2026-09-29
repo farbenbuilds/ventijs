@@ -7,6 +7,13 @@ on:
   push:
     branches:
       - main
+  # The escape hatch, and the only one. A squash merge concatenates every commit body into
+  # the message on `main`, so a branch whose commits *mention* the skip marker below produces
+  # a push GitHub reads as "skip all CI" -- and then nothing runs, including this workflow,
+  # which is the one job whose entire purpose is to react to a merge. No step can catch that
+  # from inside, because a skipped push starts no workflow to hold the step. A dispatch
+  # trigger is what makes the failure recoverable without a second machine.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,8 +33,13 @@ jobs:
     # The commit lands with `[skip ci]`, which is what stops the seven workflows whose
     # path filters match `package.json` or `build.zig.zon` from spending a full engine
     # build and a full benchmark on a four-line generated diff. This is the other half of
-    # that arrangement: `[skip ci]` is a marker in a message, and a commit made without it
-    # would re-enter this workflow and bump forever.
+    # that arrangement: the marker is in a message, and a commit made without it would
+    # re-enter this workflow and bump forever.
+    #
+    # `startsWith` rather than a search, because a squash merge puts every commit body into
+    # the message on `main` and a body that merely *describes* the marker reads as a merge
+    # that skipped CI. `git log --grep` then cannot tell the two apart either, which is why
+    # the changelog boundary and this guard share one prefix and never the whole message.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v6
