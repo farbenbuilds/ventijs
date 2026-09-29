@@ -1,0 +1,56 @@
+name: Bump version
+
+# A release is a tag, so the version a release will publish has to exist before the tag
+# does. Merging is not releasing, so the version advances here on every merge to `main` and
+# the tag stays the single act that puts a version on npm.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+# Two merges in quick succession both rewrite `package.json`. Queued rather than
+# cancelled, because a cancelled run that had already pushed would leave the next one
+# bumping a version that was never released.
+concurrency:
+  group: bump-main
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Advance the prerelease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The commit lands with `[skip ci]`, which is what stops the seven workflows whose
+    # path filters match `package.json` or `build.zig.zon` from spending a full engine
+    # build and a full benchmark on a four-line generated diff. This is the other half of
+    # that arrangement: `[skip ci]` is a marker in a message, and a commit made without it
+    # would re-enter this workflow and bump forever.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Advance the counter
+        id: bump
+        run: |
+          node scripts/bump-version.mjs
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Nothing to do when the merge already carried a bump, which is what a re-run of
+          # a superseded push looks like. Failing here would page for a no-op.
+          if git diff --quiet; then
+            echo "already at the bumped version"
+            exit 0
+          fi
+          git add package.json build.zig.zon README.md CHANGELOG.md
+          git commit -m "chore(release): v${{ steps.bump.outputs.version }} [skip ci]"
+          # A merge landing during this job makes the push a non-fast-forward. Rebasing
+          # onto it is a rebase of four lines onto a tree that did not touch them.
+          git pull --rebase origin main
+          git push origin HEAD:main
