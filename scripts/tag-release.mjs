@@ -8,18 +8,25 @@
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/// This repository, from the script's own location rather than the working directory. The
+/// working directory is not an input to "release this project", and a `git` resolved against
+/// it would tag and push whichever repository the shell happened to be in.
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /// git's stdout, for the two questions this asks of it. Empty on failure, which is the
 /// answer for both: a detached HEAD and a missing branch are both "not a branch".
-const ask = (args) => spawnSync("git", args, { encoding: "utf8" }).stdout.trim();
+const ask = (args) => spawnSync("git", ["-C", ROOT, ...args], { encoding: "utf8" }).stdout.trim();
 
 function push(args) {
-  const run = spawnSync("git", args, { stdio: "inherit" });
+  const run = spawnSync("git", ["-C", ROOT, ...args], { stdio: "inherit" });
   if (run.status !== 0) throw new Error(`tag-release: git ${args.join(" ")} failed`);
 }
 
 function main() {
-  const version = JSON.parse(readFileSync("package.json", "utf8")).version;
+  const version = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
   const tag = `v${version}`;
 
   if (ask(["status", "--porcelain"]) !== "")

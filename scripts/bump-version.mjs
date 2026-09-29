@@ -15,14 +15,22 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PACKAGE = "package.json";
 const CHANGELOG = "CHANGELOG.md";
 const MARKER = "chore(release):";
 
-/// The subjects that reach the changelog, and the heading each is listed under. A merge
-/// is titled by its pull request, and a squash merge keeps that title as its subject, so
-/// one commit here is one merged change.
+/// This repository, from the script's own location rather than the working directory.
+///
+/// Resolved against `process.cwd()`, a run from anywhere else edits whatever `package.json`
+/// it finds there: a subdirectory rewrites nothing useful, and a directory with an
+/// unrelated manifest gets a version and a changelog section written into it.
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+/// The subjects that reach the changelog, and the heading each is listed under. A merge is
+/// titled by its pull request, and a squash merge keeps that title as its subject.
 const REACHING = [
   { pattern: /^feat(\(|!)/, heading: "Added" },
   { pattern: /^fix(\(|!)/, heading: "Fixed" },
@@ -31,15 +39,28 @@ const REACHING = [
 ];
 
 /// The version sits between a prefix and a suffix in each source, captured so a rewrite
-/// touches the digits alone. Matched as text because two of the three are not JSON, and
-/// parsing them to reach one field would be a dependency for two lines of reading.
+/// touches the digits alone. Matched as text because two of the three are not JSON.
 const SOURCES = [
   { path: PACKAGE, pattern: /("version":\s*")([^"]+)(")/ },
   { path: "build.zig.zon", pattern: /(\.version\s*=\s*")([^"]+)(")/ },
   { path: "README.md", pattern: /(is at\s*`)([^`]+)(`)/ },
 ];
 
-const read = (path) => readFileSync(path, "utf8");
+const read = (path) => readFileSync(join(ROOT, path), "utf8");
+const write = (path, text) => writeFileSync(join(ROOT, path), text);
+
+/// git's stdout, or `null` when git could not answer.
+///
+/// `null` rather than a throw, because the only question asked of it here is whether a
+/// previous bump commit exists, and "no history" is one of the ways the answer is no. A
+/// checkout with no commits must bump the version rather than report a git failure.
+const git = (args) => {
+  try {
+    return execFileSync("git", ["-C", ROOT, ...args], { encoding: "utf8" });
+  } catch {
+    return null;
+  }
+};
 
 /// What a source states, or null when it states none. Null fails rather than skips: a
 /// renamed key would otherwise leave the file unrewritten and publish the old version.
@@ -68,19 +89,15 @@ function nextPrerelease(version) {
 /// No boundary means no section. The first run on a repository has no marker yet, and
 /// falling back to all of history would file the project's entire commit log under the
 /// next version; a lost marker after a history rewrite would do the same silently. The
-/// version still advances either way, because a missing changelog entry is recoverable and
-/// a fabricated one is not.
+/// version still advances either way, because a missing entry is recoverable and a
+/// fabricated one is not.
 function changelogSection(version) {
-  const since = execFileSync("git", ["log", `--grep=^${MARKER}`, "-1", "--format=%H"], {
-    encoding: "utf8",
-  }).trim();
+  const since = git(["log", `--grep=^${MARKER}`, "-1", "--format=%H"])?.trim() ?? "";
   if (since === "") {
     process.stderr.write(`bump-version: no earlier ${MARKER} commit, so no changelog section\n`);
     return null;
   }
-  const subjects = execFileSync("git", ["log", "--no-merges", "--format=%s", `${since}..HEAD`], {
-    encoding: "utf8",
-  })
+  const subjects = (git(["log", "--no-merges", "--format=%s", `${since}..HEAD`]) ?? "")
     .split("\n")
     .filter((subject) => subject !== "");
 
@@ -115,7 +132,7 @@ function main() {
   if (next === null) throw new Error(`bump-version: ${current} is not a prerelease`);
 
   for (const source of SOURCES)
-    writeFileSync(source.path, read(source.path).replace(source.pattern, `$1${next}$3`));
+    write(source.path, read(source.path).replace(source.pattern, `$1${next}$3`));
 
   // Inserted above the first released heading, so the preamble stays the preamble. A
   // merge that reached no changelog type still gets a version and leaves no section: an
@@ -125,7 +142,7 @@ function main() {
   if (first === -1) throw new Error(`bump-version: ${CHANGELOG} has no released heading`);
   const section = changelogSection(next);
   if (section !== null)
-    writeFileSync(CHANGELOG, changelog.slice(0, first) + section + changelog.slice(first));
+    write(CHANGELOG, changelog.slice(0, first) + section + changelog.slice(first));
 
   console.log(`bump-version: ${current} -> ${next}`);
 }
