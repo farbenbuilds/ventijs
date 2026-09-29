@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
-## [1.0.0-alpha] - unreleased
+## [1.0.0-alpha] - 2026-09-29
 
 The first versioned line. `ws` 8.21.3 and `@types/ws` 8.18.1 are the compatibility
 contract, and `docs/migrating.md` is the short version of where that contract holds and
@@ -116,8 +116,6 @@ module, and ventijs compiles no such module.
   construction.
 - `docs/compliance.md` gains the rule the stream stub exposed: a comparison is evidence
   only if its reference leg can fail.
-
-## [Unreleased]
 
 ## [0.0.0]
 
