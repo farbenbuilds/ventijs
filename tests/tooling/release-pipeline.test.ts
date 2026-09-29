@@ -24,6 +24,18 @@ test("a release page follows a successful publish", () => {
   expect(header).toContain("startsWith(github.ref, 'refs/tags/v')");
 });
 
+test("a dry run writes no release page", () => {
+  // `needs.publish.result` is the *job*, and a dry run skips only the publish *step*, so the
+  // job still reports success. Without its own dry-run guard the page is written for a version
+  // that never reached npm, which is the outcome the comment above it forbids. Asserting the
+  // condition's text was not enough: the previous test passed while this was true.
+  expect(header).toContain("inputs.dry-run");
+  expect(header).toContain("!cancelled()");
+  // Mirrored from the publish step, so the two cannot disagree about what a dry run is.
+  const publish = WORKFLOW.slice(0, WORKFLOW.indexOf("\n  release:"));
+  expect(publish).toContain("inputs.dry-run");
+});
+
 test("the release job accepts a dispatch, because that is how it is started", () => {
   expect(header).toContain("github.event_name == 'workflow_dispatch'");
 });
