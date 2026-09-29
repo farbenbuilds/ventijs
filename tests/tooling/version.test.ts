@@ -17,6 +17,7 @@ const README = read("README.md");
 const CHANGELOG = read("CHANGELOG.md");
 const BUMP_SCRIPT = read("scripts/bump-version.mjs");
 const BUMP_WORKFLOW = read(".github/workflows/bump.yml");
+const PUBLISH_WORKFLOW = read(".github/workflows/publish.yml");
 
 /// The version in a `## [...]` heading, so the changelog can be read as a log rather than
 /// diffed as text.
@@ -69,6 +70,19 @@ test("the loop guard matches the commit the bump makes", () => {
   // differs between them is an infinite bump rather than a visible failure.
   expect(BUMP_WORKFLOW).toContain(`head_commit.message, '${marker}'`);
   expect(BUMP_WORKFLOW).toContain(`git commit -m "${marker} v`);
+});
+
+test("a GitHub Release is created only for a tag that published", () => {
+  // A release page for a version that is not on the registry advertises an install that
+  // fails, so the job needs the publish result rather than merely following it.
+  expect(PUBLISH_WORKFLOW).toContain("needs: [bindings, bindings-musl, publish]");
+  expect(PUBLISH_WORKFLOW).toContain("needs.publish.result == 'success'");
+  expect(PUBLISH_WORKFLOW).toContain("startsWith(github.ref, 'refs/tags/v')");
+  // `contents: write` is the whole set: the job creates a page and must not be able to
+  // publish, so it holds no `id-token`.
+  const job = PUBLISH_WORKFLOW.slice(PUBLISH_WORKFLOW.indexOf("\n  release:"));
+  expect(job).toContain("contents: write");
+  expect(job.slice(0, job.indexOf("steps:"))).not.toContain("id-token");
 });
 
 test("a release tags the version it finds rather than choosing one", () => {
