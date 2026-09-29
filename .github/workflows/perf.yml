@@ -92,8 +92,8 @@ jobs:
       - name: Measure
         # Deliberately runs without `--gate`.
         #
-        # The gate fails when ventijs's median falls more than ten percent behind
-        # `ws` on the same host, and ventijs is not there yet: the first
+        # The gate fails when ventiws's median falls more than ten percent behind
+        # `ws` on the same host, and ventiws is not there yet: the first
         # measurement with a working engine drain came out between 0.51 and 0.65
         # of `ws` across 64 B to 16 KiB payloads. Failing every pull request on
         # that would be reporting the project's honest starting point as a

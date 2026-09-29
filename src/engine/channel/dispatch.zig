@@ -39,5 +39,5 @@ pub fn call_js(
     // exception, and clearing it would hide a real bug. Any other failure goes to stderr.
     var pending: bool = false;
     if (c.napi_is_exception_pending(raw_env, &pending) == .ok and pending) return;
-    std.debug.print("ventijs: dispatch callback failed with napi status {d}\n", .{@intFromEnum(call)});
+    std.debug.print("ventiws: dispatch callback failed with napi status {d}\n", .{@intFromEnum(call)});
 }

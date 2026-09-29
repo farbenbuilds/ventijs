@@ -16,7 +16,7 @@ function messageFrom(socket: WebSocket): Promise<string> {
 }
 
 test(
-  "a ws client's compressed message reaches a ventijs socket",
+  "a ws client's compressed message reaches a ventiws socket",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     // A browser or a `ws` client compressing, this build inflating, the application seeing the original text.
@@ -37,7 +37,7 @@ test(
 );
 
 test(
-  "a ventijs socket's compressed message reaches a ws client",
+  "a ventiws socket's compressed message reaches a ws client",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const harness = await upgradeHarness(deflateServer());
@@ -58,7 +58,7 @@ test(
 );
 
 test(
-  "a ventijs client negotiates against a ws server and compresses",
+  "a ventiws client negotiates against a ws server and compresses",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     // The client route writes the offer and reads the answer, and a `ws` server's answer is a

@@ -14,8 +14,8 @@ const require = createRequire(import.meta.url);
 /// developer working in the tree wants the freshly built artifact rather than a stale copy
 /// `tsdown` copied earlier.
 const candidatePaths = [
-  ["zig-out", "lib", "ventijs.node"],
-  ["dist", "ventijs.node"],
+  ["zig-out", "lib", "ventiws.node"],
+  ["dist", "ventiws.node"],
 ];
 
 function findPackageRoot(start: string): string | undefined {
@@ -40,7 +40,7 @@ function resolveAddonPath(): string {
 
 let addon: VentiAddon | undefined;
 
-/// Lazy on purpose: importing ventijs must not fail for a program that never opens a
+/// Lazy on purpose: importing ventiws must not fail for a program that never opens a
 /// socket, and the load is a filesystem lookup plus a `dlopen`. A caller who imports the
 /// package, gets a `SyntaxError` about a missing binary, and never finds out that the
 /// library works fine is a worse first impression than a load on first use.

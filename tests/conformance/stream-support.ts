@@ -76,9 +76,9 @@ export async function upstreamFixture(options?: DuplexOptions): Promise<StreamFi
   };
 }
 
-/// The same shape over ventijs's own `WebSocketServer`, so the sockets are the facade's and
+/// The same shape over ventiws's own `WebSocketServer`, so the sockets are the facade's and
 /// the frames on them are the codec's rather than a test's.
-export async function ventijsFixture(options?: DuplexOptions): Promise<StreamFixture> {
+export async function ventiwsFixture(options?: DuplexOptions): Promise<StreamFixture> {
   const server = new WebSocketServer({ noServer: true });
   const accepted = nextSocket(server);
   const harness = await serve(server);

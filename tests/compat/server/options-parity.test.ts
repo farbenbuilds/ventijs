@@ -40,7 +40,7 @@ test("clientTracking true adds an empty set in both", () => {
 });
 
 /// `path` is declared by `@types/ws` but `ws`'s runtime never sets it, so
-/// `"path" in server` is false there. ventijs exposes it, which is a superset:
+/// `"path" in server` is false there. ventiws exposes it, which is a superset:
 /// reading it is harmless, but the divergence is recorded so nobody writes a
 /// test that assumes the two agree on its presence.
 test("ws does not expose path at runtime", () => {
@@ -67,7 +67,7 @@ test("perMessageDeflate true is rewritten to an object", () => {
 /// They are observable on `server.options`, so omitting them made a defaulted
 /// record a strict subset of the contract.
 /// `ws` defaults all three and exposes them on `server.options`, while
-/// `@types/ws` declares none of them. ventijs matches the runtime.
+/// `@types/ws` declares none of them. ventiws matches the runtime.
 test.each([
   ["maxBufferedChunks", 262144],
   ["maxFragments", 16384],

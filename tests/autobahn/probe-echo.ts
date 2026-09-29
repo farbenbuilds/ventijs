@@ -34,7 +34,7 @@ type ProbeState = {
 };
 
 const PROBE_TIMEOUT_MS = 2000;
-const TEXT_PAYLOAD = "ventijs-autobahn-probe";
+const TEXT_PAYLOAD = "ventiws-autobahn-probe";
 const BINARY_PAYLOAD = Buffer.from([0x00, 0xff, 0x10, 0x7f, 0x80, 0xfe]);
 /// Whether an over-limit message comes back as a close rather than a silent hang, measured
 /// from outside. Both sizes derive from the compiled cap rather than restating it, so raising

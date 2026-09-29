@@ -6,9 +6,9 @@
     "correctness": "error"
   },
   "rules": {
-    "ventijs/no-emoji": "error",
-    "ventijs/no-enum": "error",
-    "ventijs/no-oop": "error",
+    "ventiws/no-emoji": "error",
+    "ventiws/no-enum": "error",
+    "ventiws/no-oop": "error",
     "eqeqeq": ["error", "always"],
     "import/no-default-export": "error",
     "max-lines": [
@@ -65,6 +65,6 @@
     "zig-out/**",
     "zig-pkg/**",
     ".zig-cache/**",
-    "ventijs.js"
+    "ventiws.js"
   ]
 }

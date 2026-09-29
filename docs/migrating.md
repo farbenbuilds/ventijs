@@ -1,4 +1,4 @@
-# Moving from `ws` to ventijs
+# Moving from `ws` to ventiws
 
 `ws` is the compatibility contract, and this document is the short version of where
 that holds and where it does not. The itemised matrix with a module and an evidence
@@ -11,22 +11,22 @@ The import specifier is the whole migration for most code:
 
 ```diff
 -import { WebSocketServer } from "ws";
-+import { WebSocketServer } from "ventijs";
++import { WebSocketServer } from "ventiws";
 ```
 
-`ws` is CommonJS with `module.exports = WebSocket` and the rest hung off it. ventijs
+`ws` is CommonJS with `module.exports = WebSocket` and the rest hung off it. ventiws
 is a module namespace, so in CommonJS the class is a named export:
 
 ```ts
 // ESM, and TypeScript under any resolution mode
-import { WebSocket, WebSocketServer } from "ventijs";
+import { WebSocket, WebSocketServer } from "ventiws";
 
 // CommonJS
-const { WebSocket, WebSocketServer } = require("ventijs");
+const { WebSocket, WebSocketServer } = require("ventiws");
 ```
 
-`require("ventijs")` also returns the `WebSocket` class itself, with the named exports
-attached, so `const WebSocket = require("ventijs")` works. The TypeScript _type_ for
+`require("ventiws")` also returns the `WebSocket` class itself, with the named exports
+attached, so `const WebSocket = require("ventiws")` works. The TypeScript _type_ for
 that form is the namespace rather than the class, so a TypeScript CommonJS consumer
 wants the named import.
 
@@ -48,7 +48,7 @@ group-1 payload, and a larger frame is refused with 1009. `maxPayload` does not 
 it. It is reported rather than restated, so a caller can read the number:
 
 ```ts
-import { engineLimits } from "ventijs";
+import { engineLimits } from "ventiws";
 
 console.log(engineLimits().messageBytes); // 65536
 ```
@@ -77,7 +77,7 @@ matches `ws`:
 - A `client_max_window_bits` at any legal value is **accepted**. In a client offer it is
   the window the client will compress with, not a limit on this server (RFC 7692 section
   7.1.1.2), and the inflater reads the window out of the stream, so a 10-bit client is
-  fine to serve. `ws` agrees, and ventijs used to refuse it with a bare 400.
+  fine to serve. `ws` agrees, and ventiws used to refuse it with a bare 400.
 
 A message you send in fragments goes out uncompressed, for the same reason: RFC 7692
 needs a sync flush at each fragment boundary. Messages you _receive_ fragmented and
@@ -89,11 +89,11 @@ Each is recorded in [COMPATIBILITY.md](../COMPATIBILITY.md) with the `ws` behavi
 replaces. Most are a refusal to do something unsafe, two are a difference `ws` has
 with its own types, one is a stricter limit, and one is an addition.
 
-- **A `WebSocket` subclass that is not a ventijs socket record** fails with
+- **A `WebSocket` subclass that is not a ventiws socket record** fails with
   `ERR_INVALID_HANDLE` from inside an `upgrade` listener, where `ws` fails with a
-  `TypeError`. Pass `WebSocket` itself, or a record ventijs built.
+  `TypeError`. Pass `WebSocket` itself, or a record ventiws built.
 - **A bad close still closes.** `ws` latches `CLOSING` before it validates, so a
-  refused code or reason leaves the socket closing; ventijs matches that.
+  refused code or reason leaves the socket closing; ventiws matches that.
 - **`reason === null`** is treated as an absent reason. `ws` rejects it with a
   V8-internal `TypeError` from reading `.length` off it.
 - **`closeTimeout` is validated.** A non-number or a negative value is a `RangeError`
@@ -105,12 +105,12 @@ with its own types, one is a stricter limit, and one is an addition.
   `HTTP/1.1 700 undefined`.
 - **Errors carry a stable `code`.** A refused frame reports `ws`'s own `WS_ERR_*`
   code, constructor, and message, so a caller keying on `error.code` reads what it
-  always did. Where `ws` reports nothing, ventijs adds an `ERR_*` code.
+  always did. Where `ws` reports nothing, ventiws adds an `ERR_*` code.
 
 Three more are the ones a caller is most likely to hit, because each changes what a
 `ws` application sends or receives rather than what it is allowed to do:
 
-- **A `wss:` to `ws:` redirect is refused.** ventijs answers
+- **A `wss:` to `ws:` redirect is refused.** ventiws answers
   `Cannot follow a redirect from wss: to ws:` and never contacts the destination.
   `ws` follows the hop, after deleting `authorization`, `cookie` and `auth`. If your
   deployment relies on that hop, it will fail here.
@@ -133,7 +133,7 @@ the peer then refuses, exactly as `ws` does, and a server never masks.
 
 ## Testing against both
 
-The compatibility harness runs the same scenario against `ws` and against ventijs and
+The compatibility harness runs the same scenario against `ws` and against ventiws and
 compares the observable outcome, so a divergence shows up as a test failure rather
 than as a production surprise. `ws` is a devDependency only, so the installed package
 depends on `napi-zig` and the engine alone.

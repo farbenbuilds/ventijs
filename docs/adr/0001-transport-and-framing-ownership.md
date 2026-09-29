@@ -8,17 +8,17 @@
 
 ## Context
 
-ventijs is a drop-in replacement for `ws`. That contract, not a preference, is
+ventiws is a drop-in replacement for `ws`. That contract, not a preference, is
 what fixes the architecture, and it is worth writing down why, because the
 tempting alternative looks better until you check it against `ws`'s surface.
 
 `ws` is built on Node's own networking stack. Its `WebSocketServer` accepts one
 of `port`, `server`, or `noServer`; in the last two the caller owns the
-`http.Server` and ventijs is a passenger on its `upgrade` event. It exposes
+`http.Server` and ventiws is a passenger on its `upgrade` event. It exposes
 `handleUpgrade` and `shouldHandle` as public methods over Node's
 `Duplex`. Its client dials through `http.request` or `https.request`, so it gets
 Node's DNS, Node's TLS trust store, Node's proxy and agent handling, and Node's
-redirect machinery. A consumer can put a `ventijs` server behind an Express app,
+redirect machinery. A consumer can put a `ventiws` server behind an Express app,
 a cluster, a Unix socket, or an `https.Server` with its own certificates, and
 expect `ws` behavior.
 

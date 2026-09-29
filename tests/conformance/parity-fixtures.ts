@@ -63,7 +63,7 @@ export async function wsAccepted(): Promise<Fixture> {
 }
 
 /// Starts a native server, connects a `ws` client, and adopts the accepted
-/// connection into a compat socket, so the same scenario can run on ventijs.
+/// connection into a compat socket, so the same scenario can run on ventiws.
 export async function adopted(): Promise<Fixture> {
   const { server, port } = await startAndWait({ host: "127.0.0.1", port: 0 });
   const client = new WsClient(`ws://127.0.0.1:${port}/`);

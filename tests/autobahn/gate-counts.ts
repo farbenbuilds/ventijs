@@ -69,7 +69,7 @@ export function countViolations(counts: GateCounts, mode: SuiteMode): readonly V
 ///
 /// This replaces an earlier check that demanded the `behaviorClose` split of a
 /// fully conformant implementation, 514 `OK` and 3 `INFORMATIONAL`. Those numbers
-/// come from the `ws` reference report, and holding ventijs to them would assert
+/// come from the `ws` reference report, and holding ventiws to them would assert
 /// that all 389 evaluated cases pass, which is the per-case gate's job and not a
 /// property of the report's shape. A missing or unrecognised value is what
 /// actually indicates a truncated or foreign report, so that is what this checks.

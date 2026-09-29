@@ -50,7 +50,7 @@ function launch(address: TargetAddress, explicit: boolean): TargetChild {
 }
 
 function describeExit(code: number | null, signal: NodeJS.Signals | null, detail: string): string {
-  const reason = `ventijs-target: exited before reporting a port (code=${String(code)} signal=${String(signal)})`;
+  const reason = `ventiws-target: exited before reporting a port (code=${String(code)} signal=${String(signal)})`;
   return detail === "" ? reason : `${reason}: ${detail}`;
 }
 
@@ -75,7 +75,7 @@ export function startTarget(address?: TargetAddress): Promise<TargetProcess> {
       reject(error);
     };
     const timer = setTimeout(() => {
-      fail(new Error(`ventijs-target: no ready record within ${READY_TIMEOUT_MS} ms`));
+      fail(new Error(`ventiws-target: no ready record within ${READY_TIMEOUT_MS} ms`));
     }, READY_TIMEOUT_MS);
     child.once("error", fail);
     child.once("exit", (code, signal) => {
@@ -85,7 +85,7 @@ export function startTarget(address?: TargetAddress): Promise<TargetProcess> {
       if (settled) return;
       const ready = decodeTargetReady(line);
       if (ready === null) {
-        process.stderr.write(`ventijs-target: ${line}\n`);
+        process.stderr.write(`ventiws-target: ${line}\n`);
         return;
       }
       settled = true;

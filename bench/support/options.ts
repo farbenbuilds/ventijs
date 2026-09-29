@@ -1,15 +1,15 @@
 /// The pinned engine compiles `message_capacity` to 32 KiB
 /// (`src/engine/server/options.zig`), so a larger payload cannot be echoed by
-/// ventijs at any speed. `ws` accepts hundreds of MiB, which means a size above
-/// the ceiling is not a slower run, it is a run ventijs cannot finish. The
+/// ventiws at any speed. `ws` accepts hundreds of MiB, which means a size above
+/// the ceiling is not a slower run, it is a run ventiws cannot finish. The
 /// matrix stops at the ceiling so a row can never claim a win it did not earn.
-export const VENTIJS_MAX_MESSAGE_BYTES = 32 * 1024;
+export const VENTIWS_MAX_MESSAGE_BYTES = 32 * 1024;
 
 export const DEFAULT_PAYLOAD_SIZES: readonly number[] = [
   64,
   1024,
   16 * 1024,
-  VENTIJS_MAX_MESSAGE_BYTES,
+  VENTIWS_MAX_MESSAGE_BYTES,
 ];
 
 // `CI_CD_PIPELINE.md` fixes the protocol: repeat three times, discard the
@@ -78,10 +78,10 @@ const readSizes = (
 };
 
 const assertWithinCeiling = (size: number): void => {
-  if (size <= VENTIJS_MAX_MESSAGE_BYTES) return;
+  if (size <= VENTIWS_MAX_MESSAGE_BYTES) return;
   throw new Error(
-    `payload size ${size} exceeds the ventijs engine ceiling of ${VENTIJS_MAX_MESSAGE_BYTES} bytes ` +
-      "(src/engine/server/options.zig); comparing above it would measure a capability ventijs lacks, not a speed",
+    `payload size ${size} exceeds the ventiws engine ceiling of ${VENTIWS_MAX_MESSAGE_BYTES} bytes ` +
+      "(src/engine/server/options.zig); comparing above it would measure a capability ventiws lacks, not a speed",
   );
 };
 

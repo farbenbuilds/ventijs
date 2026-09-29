@@ -14,7 +14,7 @@ test(
   "a server socket with no peer to answer its close is torn down",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
-    // A ventijs server, and a raw client that completes the handshake and then never
+    // A ventiws server, and a raw client that completes the handshake and then never
     // answers a close, which is what a crashed or hung peer looks like on the wire.
     const server = new WebSocketServer({
       noServer: true,

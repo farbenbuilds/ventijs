@@ -6,13 +6,13 @@ import { statusError } from "./payload";
 export function closeFailure(status: EngineStatus): Error {
   switch (status) {
     case "backpressure":
-      return createError("ERR_BACKPRESSURE", "ventijs: the outbound staging ring is full");
+      return createError("ERR_BACKPRESSURE", "ventiws: the outbound staging ring is full");
     case "invalid-handle":
-      return createError("ERR_INVALID_HANDLE", "ventijs: the connection handle is stale");
+      return createError("ERR_INVALID_HANDLE", "ventiws: the connection handle is stale");
     case "ok":
     case "closing":
     case "closed":
-      return createError("ERR_INVALID_STATE", "ventijs: the connection is already closing");
+      return createError("ERR_INVALID_STATE", "ventiws: the connection is already closing");
     case "payload-too-large":
     case "invalid-close-code":
     case "invalid-close-reason":

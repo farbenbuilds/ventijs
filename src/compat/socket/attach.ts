@@ -25,7 +25,7 @@ export function attachNativeSocket(
   if (state === undefined) {
     throw createError(
       "ERR_INVALID_HANDLE",
-      "ventijs: attachNativeSocket requires a ventijs socket record",
+      "ventiws: attachNativeSocket requires a ventiws socket record",
     );
   }
   state.attachment = { server, connection };
@@ -46,7 +46,7 @@ export function attachSocket(
   if (state === undefined) {
     throw createError(
       "ERR_INVALID_HANDLE",
-      "ventijs: attachSocket requires a ventijs socket record",
+      "ventiws: attachSocket requires a ventiws socket record",
     );
   }
   // A stream that cannot be read or written is not a connection, and one reporting `OPEN`
@@ -59,7 +59,7 @@ export function attachSocket(
     // exception instead of a socket failing. `ws` uses ERR_INVALID_STATE for the same fault.
     const gone = createError(
       "ERR_INVALID_STATE",
-      "ventijs: the transport was closed before the connection was established",
+      "ventiws: the transport was closed before the connection was established",
     );
     process.nextTick(() => {
       failConnection(state, gone);
@@ -107,5 +107,5 @@ function openSocket(state: SocketState): void {
 /// The guard stops a non-`Error` thrown by a custom stream reaching `emitEvent` untyped.
 function asCodedError(error: Error): Error {
   if (error instanceof Error) return error;
-  return createError("ERR_PROTOCOL", `ventijs: the transport failed: ${String(error)}`);
+  return createError("ERR_PROTOCOL", `ventiws: the transport failed: ${String(error)}`);
 }

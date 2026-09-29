@@ -1,7 +1,7 @@
 .{
-    .name = .ventijs,
+    .name = .ventiws,
     .version = "1.0.0-alpha",
-    .fingerprint = 0x99aa096525f1e132, // Changing this has security and trust implications.
+    .fingerprint = 0x66c665792a0706f4, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         // farbenbuilds/uWebZockets

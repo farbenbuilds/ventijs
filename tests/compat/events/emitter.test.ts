@@ -86,12 +86,12 @@ test("introspection mirrors EventEmitter", () => {
 test("invokes listeners with the emitter as this", () => {
   const { emitter, self } = target();
   const reads: unknown[] = [];
-  const probe = new Function("value", "globalThis.__ventijsThisProbe.push(this)") as (
+  const probe = new Function("value", "globalThis.__ventiwsThisProbe.push(this)") as (
     value: string,
   ) => void;
-  (globalThis as Record<string, unknown>).__ventijsThisProbe = reads;
+  (globalThis as Record<string, unknown>).__ventiwsThisProbe = reads;
   emitter.on("message", probe);
   emitter.emit("message", "x", 1);
   expect(reads[0]).toBe(self);
-  delete (globalThis as Record<string, unknown>).__ventijsThisProbe;
+  delete (globalThis as Record<string, unknown>).__ventiwsThisProbe;
 });

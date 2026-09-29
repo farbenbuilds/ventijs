@@ -96,7 +96,7 @@ describe("shard spec", () => {
       const spec = shardSpec(shard);
       expect(spec.servers).toHaveLength(1);
       expect(spec.servers[0].url).toBe(`ws://${HOST_GATEWAY}:${shard.port}`);
-      expect(spec.servers[0].agent).toBe("ventijs");
+      expect(spec.servers[0].agent).toBe("ventiws");
     }
   });
 

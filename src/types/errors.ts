@@ -1,4 +1,4 @@
-/// The `ERR_*` half is ventijs's own, for what `ws` reports by throwing a bare `Error` or
+/// The `ERR_*` half is ventiws's own, for what `ws` reports by throwing a bare `Error` or
 /// a `TypeError`. The `WS_ERR_*` half is `ws`'s, for what it reports on the socket's
 /// `error` event after refusing a frame, with `ws`'s own strings so a migrating
 /// application reads the same code it always did.
@@ -16,7 +16,7 @@ export type WsErrorCode =
   | "WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH"
   | "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH";
 
-export type VentijsErrorCode =
+export type VentiwsErrorCode =
   | "ERR_INVALID_OPTION"
   | "ERR_INVALID_CLOSE_CODE"
   | "ERR_INVALID_CLOSE_REASON"
@@ -30,6 +30,6 @@ export type VentijsErrorCode =
   | "ERR_PROTOCOL"
   | "ERR_POLICY_VIOLATION";
 
-export type ErrorCode = WsErrorCode | VentijsErrorCode;
+export type ErrorCode = WsErrorCode | VentiwsErrorCode;
 
 export type CodedError = Error & { readonly code: ErrorCode };

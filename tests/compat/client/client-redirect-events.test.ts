@@ -21,7 +21,7 @@ import { undeclared } from "./undeclared";
 /// before the request is sent is the documented way to change a hop, so the assertion is
 /// that the object in the event is the one Node wrote: only that one can still be
 /// changed.
-const MARKER = "x-ventijs-hop";
+const MARKER = "x-ventiws-hop";
 
 /// A client that follows redirects and tears down promptly, which is what all four cases
 /// need. Named so a case reads as its claim rather than as its configuration.

@@ -50,7 +50,7 @@ export function notOpenError(readyState: number): CodedError {
 }
 
 export function statusError(status: ErrorStatus): CodedError {
-  return createStatusError(status, `ventijs: socket operation failed with status "${status}"`);
+  return createStatusError(status, `ventiws: socket operation failed with status "${status}"`);
 }
 
 /// A transport-owned socket has no staging ring, so it reads the transport's own queue;

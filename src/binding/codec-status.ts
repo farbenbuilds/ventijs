@@ -33,7 +33,7 @@ export type CodecKindName = (typeof CODEC_KINDS)[number];
 
 /// Mirroring `events.zig`'s `Failure`. The ordinals are the ABI, which is why the Zig
 /// side has a test that reads this list's length rather than trusting the two to agree.
-/// Every member is a condition `ws` names in a `WS_ERR_*` code, plus the two ventijs
+/// Every member is a condition `ws` names in a `WS_ERR_*` code, plus the two ventiws
 /// needs: a refusal with no more specific reason, and a payload that is not a DEFLATE
 /// stream.
 export const CODEC_FAILURES = [

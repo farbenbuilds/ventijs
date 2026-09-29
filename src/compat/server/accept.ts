@@ -12,7 +12,7 @@ import { detachHandshakeError } from "./handshake-error";
 import { negotiateExtensions } from "./negotiate";
 import { thresholdOf } from "../extensions/threshold";
 
-const UPGRADED = Symbol("ventijs.upgraded");
+const UPGRADED = Symbol("ventiws.upgraded");
 
 type UpgradedSocket = Duplex & { readonly [UPGRADED]?: true };
 

@@ -1,7 +1,7 @@
 # ws surface compliance map
 
-The upstream `ws` API reference is vendored at [ventijs.md](ventijs.md). This
-directory maps each item in that reference to the ventijs module that implements it
+The upstream `ws` API reference is vendored at [ventiws.md](ventiws.md). This
+directory maps each item in that reference to the ventiws module that implements it
 and to its status.
 
 The pinned contract is `ws` 8.21.3 with `@types/ws` 8.18.1. Both are
@@ -15,7 +15,7 @@ by side. The public type surface is the vendored declaration file
 | [adr/0001-transport-and-framing-ownership.md](adr/0001-transport-and-framing-ownership.md) | Why Node owns the socket and Zig owns the frame codec, and what was rejected  |
 | [docs/compliance-api.md](compliance-api.md)                                                | Which module implements each `ws` API item?                                   |
 | [docs/compliance-error-codes.md](compliance-error-codes.md)                                | Which `WS_ERR_*` codes and environment variables can occur, and which cannot? |
-| [docs/ventijs.md](ventijs.md)                                                              | What does `ws` do? The contract, not a feature list.                          |
+| [docs/ventiws.md](ventiws.md)                                                              | What does `ws` do? The contract, not a feature list.                          |
 
 ## Status vocabulary
 

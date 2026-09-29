@@ -10,7 +10,7 @@ import { TEST_TIMEOUT_MS } from "../../binding/support";
 import { nextSocket, openClient, upgradeHarness, waitFor } from "./codec-upgrade-support";
 
 test(
-  "a message from a real ws client reaches the ventijs socket",
+  "a message from a real ws client reaches the ventiws socket",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const harness = await upgradeHarness();
@@ -41,7 +41,7 @@ test(
 );
 
 test(
-  "a message from the ventijs socket reaches a real ws client",
+  "a message from the ventiws socket reaches a real ws client",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const harness = await upgradeHarness();
@@ -52,11 +52,11 @@ test(
       const received: string[] = [];
       client.on("message", (data) => received.push(data.toString()));
 
-      socket.send("from ventijs");
+      socket.send("from ventiws");
       socket.send(Buffer.from([7, 8, 9]));
 
       await waitFor(() => received.length === 2);
-      expect(received[0]).toBe("from ventijs");
+      expect(received[0]).toBe("from ventiws");
       // The binary frame arrives as a Buffer on the client, which is `ws`'s own
       // `binaryType` default, so this is the same bytes the socket sent.
       await waitFor(() => true);

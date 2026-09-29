@@ -5,7 +5,7 @@ const MAX_WRAPPER_DEPTH = 3;
 
 /// The emitter layer must never treat a wrapper as a user handler: `ws` keeps
 /// `removeListener`/`listeners` disjoint from the `addEventListener` surface.
-export const DOM_WRAPPER = Symbol("ventijs.domWrapper");
+export const DOM_WRAPPER = Symbol("ventiws.domWrapper");
 
 /// A function carrying the original handler on `listener`, which is Node's introspection
 /// contract. DOM wrappers add the `DOM_WRAPPER` brand and an `attribute` flag.

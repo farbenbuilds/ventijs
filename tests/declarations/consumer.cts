@@ -3,7 +3,7 @@
 // with TS1479 and TS1541, before a line of the consumer runs, and nothing in the caller's
 // tsconfig fixes it while the identical file compiles clean against `ws`. Checked with
 // `moduleResolution: node16` and `skipLibCheck: false`. The import is a named one because
-// `ws` is `export =` a class and ventijs is a namespace with the class inside it.
+// `ws` is `export =` a class and ventiws is a namespace with the class inside it.
 
 import type {
   ClientOptions,
@@ -13,7 +13,7 @@ import type {
   WebSocket,
   WebSocketServer,
   createWebSocketStream,
-} from "ventijs";
+} from "ventiws";
 
 type WebSocketConstructor = typeof WebSocket;
 

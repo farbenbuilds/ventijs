@@ -87,7 +87,7 @@ test.each([
 ///
 /// This is the sharpest divergence from `ws` in the send path, and the reason is
 /// what is being reported. `ws` is silent, because a write error reaches the
-/// caller's callback and its socket listener destroys the transport. ventijs has
+/// caller's callback and its socket listener destroys the transport. ventiws has
 /// to emit, because a caller that passed no callback has nothing else, and it must
 /// not close, because the condition is a missing transport rather than a fault of
 /// the connection. Closing here would turn "this build cannot send yet" into "your

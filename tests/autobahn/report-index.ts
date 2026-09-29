@@ -2,7 +2,7 @@
 /// `behaviorClose` reports a real failure. `NON-STRICT` is tolerated because
 /// the suite uses it for "accepted but not ideal" outcomes where the
 /// specification is genuinely ambiguous, and because the reference
-/// implementation ventijs is measured against reports it for 6.4.1 through
+/// implementation ventiws is measured against reports it for 6.4.1 through
 /// 6.4.4. Failing it would fail the baseline the project measures itself
 /// against, so the gate and `CI_CD_PIPELINE.md` both treat it as a pass.
 export const TOLERATED_BEHAVIORS = ["OK", "INFORMATIONAL", "NON-STRICT"] as const;

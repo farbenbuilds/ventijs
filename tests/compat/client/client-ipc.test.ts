@@ -19,7 +19,7 @@ async function ipcServer(): Promise<{
   readonly server: WebSocketServer;
   close(): Promise<void>;
 }> {
-  const socketPath = `/tmp/ventijs-ipc-${process.pid}-${Date.now()}.sock`;
+  const socketPath = `/tmp/ventiws-ipc-${process.pid}-${Date.now()}.sock`;
   const http: Server = createServer();
   const server = new WebSocketServer({ server: http });
   server.on("connection", (socket) => {

@@ -1,12 +1,12 @@
 # Third-Party Notices
 
-ventijs ships a prebuilt native addon. The addon statically links the
+ventiws ships a prebuilt native addon. The addon statically links the
 µWebZockets engine and its vendored dependencies, so their license texts are
 included in each published platform artifact.
 
 ## Runtime components
 
-µWebZockets is the first-party engine created for ventijs by the same author
+µWebZockets is the first-party engine created for ventiws by the same author
 and is pinned in `build.zig.zon`. The remaining runtime component is:
 
 | Component                                              | Version or revision       | License |
@@ -51,15 +51,15 @@ incorporated.
 
 | Component                             | Version or revision | License |
 | ------------------------------------- | ------------------- | ------- |
-| [`ws` API reference](docs/ventijs.md) | `ws` 8.21.3         | MIT     |
+| [`ws` API reference](docs/ventiws.md) | `ws` 8.21.3         | MIT     |
 
-`docs/ventijs.md` is a copy of the upstream `ws` API reference document,
+`docs/ventiws.md` is a copy of the upstream `ws` API reference document,
 `doc/ws.md`, credited to the `ws` authors and the
 [`websockets/ws`](https://github.com/websockets/ws) repository. The credit is at
 the top of the file as well as here. Its body is the upstream document byte for
-byte apart from the title, which is retitled for a ventijs reader. It is vendored
-because it is the compatibility contract: it is what ventijs is compared
-against. It is not ventijs documentation, it is not kept in sync by hand, and it
+byte apart from the title, which is retitled for a ventiws reader. It is vendored
+because it is the compatibility contract: it is what ventiws is compared
+against. It is not ventiws documentation, it is not kept in sync by hand, and it
 is replaced wholesale when the pinned `ws` version changes.
 
 ## Development-only tooling

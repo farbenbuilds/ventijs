@@ -1,4 +1,4 @@
-import { loadVentijsAddon } from "./addon.ts";
+import { loadVentiwsAddon } from "./addon.ts";
 import type { EngineEvent } from "./addon.ts";
 import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
 import { DEFAULT_TARGET_HOST, DEFAULT_TARGET_PORT } from "./paths.ts";
@@ -39,7 +39,7 @@ function announce(boundPort: number): void {
   const ready = {
     host: readHost(),
     port: boundPort,
-    engine: loadVentijsAddon().engineVersion(),
+    engine: loadVentiwsAddon().engineVersion(),
     maxFrameBytes: MESSAGE_CAP,
     maxMessageBytes: MESSAGE_CAP,
     // The engine WebSocket route now has a message callback and the outbound
@@ -57,7 +57,7 @@ function announce(boundPort: number): void {
 function finalize(state: TargetState, remaining: number): void {
   if (state.exited) return;
   try {
-    loadVentijsAddon().finalizeServer(state.handle);
+    loadVentiwsAddon().finalizeServer(state.handle);
   } catch (error) {
     if (remaining > 0) {
       setImmediate(() => {
@@ -82,7 +82,7 @@ function onServerClosed(state: TargetState): void {
 function requestClose(state: TargetState): void {
   if (state.closing) return;
   state.closing = true;
-  loadVentijsAddon().closeServer(state.handle);
+  loadVentiwsAddon().closeServer(state.handle);
 }
 
 function onEngineError(state: TargetState): void {
@@ -103,10 +103,10 @@ function onEvent(state: TargetState, event: EngineEvent): void {
       state.connection = pack(event.index, event.generation);
       return;
     case "connectionMessage":
-      reply(loadVentijsAddon(), state);
+      reply(loadVentiwsAddon(), state);
       return;
     case "connectionClose":
-      purge(loadVentijsAddon(), state, event.index, event.generation);
+      purge(loadVentiwsAddon(), state, event.index, event.generation);
       return;
     case "engineError":
       onEngineError(state);
@@ -119,7 +119,7 @@ function onEvent(state: TargetState, event: EngineEvent): void {
 
 function start(): void {
   const state: TargetState = { ...echoState(), closing: false, exited: false };
-  const addon = loadVentijsAddon();
+  const addon = loadVentiwsAddon();
   state.handle = addon.createServer(
     { host: readHost(), port: readPort(), path: "/", maxMessageBytes: MESSAGE_CAP },
     (event) => {

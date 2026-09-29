@@ -2,7 +2,7 @@
   "outdir": "/reports/servers",
   "servers": [
     {
-      "agent": "ventijs",
+      "agent": "ventiws",
       "url": "ws://host.docker.internal:9001"
     }
   ],

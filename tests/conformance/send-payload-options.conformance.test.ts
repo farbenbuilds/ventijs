@@ -118,7 +118,7 @@ test(
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     // RFC 6455 section 5.1: a client must mask. `ws` honours the option and its own server
-    // answers `WS_ERR_EXPECTED_MASK` and closes, which is what a ventijs server does here too.
+    // answers `WS_ERR_EXPECTED_MASK` and closes, which is what a ventiws server does here too.
     // Before the fix the frame went out masked and neither side could tell the option had been
     // ignored, so a caller who set it had no way to find out.
     const server = new WebSocketServer({ port: 0 });

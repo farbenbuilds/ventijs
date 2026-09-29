@@ -25,7 +25,7 @@ test("pong refuses an oversize payload", { timeout: TEST_TIMEOUT_MS }, async () 
 });
 
 /// The cap is exactly RFC 6455's, not off by one. `ws` accepts 125 bytes and
-/// ventijs must not refuse it either; the two then diverge for a different
+/// ventiws must not refuse it either; the two then diverge for a different
 /// reason, the missing control-frame transport, which this check is not about.
 test("ping accepts a payload of exactly 125 bytes", { timeout: TEST_TIMEOUT_MS }, async () => {
   const result = await parity((socket) => {

@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [Unreleased]
+
+### Changed
+
+- **The package is now `ventiws`.** The name, the repository and issue URLs, the vendored
+  API reference at `docs/ventiws.md`, the `ventiws.node` addon artifact, and the branded
+  strings in the error messages, symbol descriptions and harness identifiers all follow.
+  Nothing was published under the old name, so there is no published version to redirect.
+  `build.zig.zon` takes the fingerprint Zig derives from the new package name, which is
+  what makes the Zig package a different identity from the one it was.
+
 ## [1.0.0-alpha] - 2026-09-29
 
 The first versioned line. `ws` 8.21.3 and `@types/ws` 8.18.1 are the compatibility
@@ -96,7 +107,7 @@ Four, all deliberate, all recorded in `COMPATIBILITY.md` with the measurement be
 
 Two `ws` behaviours are also recorded as unreachable, with the architecture that removes
 them: `WS_NO_BUFFER_UTIL` and `WS_NO_UTF_8_VALIDATE` both guard an optional native npm
-module, and ventijs compiles no such module.
+module, and ventiws compiles no such module.
 
 ### Documentation
 

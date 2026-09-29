@@ -7,7 +7,7 @@
 //! `.byteOffset` on what it believed was an `ArrayBuffer`.
 //!
 //! The peer is a real `ws` client throughout, so the payload bytes are never in
-//! question -- only what ventijs hands to its own listener.
+//! question -- only what ventiws hands to its own listener.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../binding/support";

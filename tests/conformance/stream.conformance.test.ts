@@ -11,7 +11,7 @@ import {
   describeChunk,
   until,
   upstreamFixture,
-  ventijsFixture,
+  ventiwsFixture,
   within,
   type StreamFixture,
   type Transcript,
@@ -24,11 +24,11 @@ type Scenario = (fixture: StreamFixture) => Promise<Transcript>;
 const OVERSIZE = 64 * 1024;
 
 /// One scenario on both legs, asserting they agree, and handing back the transcript so the
-/// caller can pin it. `ws` runs first, as `parity-support.ts` does, so a ventijs failure can
+/// caller can pin it. `ws` runs first, as `parity-support.ts` does, so a ventiws failure can
 /// never be the reason a reference server is left listening.
 async function agree(scenario: Scenario, options?: DuplexOptions): Promise<Transcript> {
   const expected = await run(upstreamFixture, scenario, options);
-  const actual = await run(ventijsFixture, scenario, options);
+  const actual = await run(ventiwsFixture, scenario, options);
   expect(actual).toEqual(expected);
   return actual;
 }

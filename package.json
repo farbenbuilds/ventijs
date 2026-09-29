@@ -1,16 +1,16 @@
 {
-  "name": "ventijs",
+  "name": "ventiws",
   "version": "1.0.0-alpha",
   "description": "A drop-in replacement for ws for Node.js, built on the first-party µWebZockets Zig engine via napi-zig.",
-  "homepage": "https://github.com/farbenbuilds/ventijs#readme",
+  "homepage": "https://github.com/farbenbuilds/ventiws#readme",
   "bugs": {
-    "url": "https://github.com/farbenbuilds/ventijs/issues"
+    "url": "https://github.com/farbenbuilds/ventiws/issues"
   },
   "license": "MIT",
   "author": "Noah Trần (https://github.com/Coder-Blue)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/farbenbuilds/ventijs.git"
+    "url": "git+https://github.com/farbenbuilds/ventiws.git"
   },
   "files": [
     "dist"

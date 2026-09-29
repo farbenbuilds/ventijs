@@ -27,7 +27,7 @@ const REASONS: ReadonlyArray<readonly [string, unknown]> = [
 /// `Float32Array` reports fewer elements than its `byteLength`, which `ws` has refused since
 /// 8.20.1, and `ws` latches `CLOSING` before it validates, so a refused close still closes.
 /// Rows past the cap compare name and message only: Node's `ERR_INVALID_ARG_TYPE` text out of
-/// `Buffer.byteLength` is V8's, not a contract ventijs can pin.
+/// `Buffer.byteLength` is V8's, not a contract ventiws can pin.
 test.each(REASONS)(
   "close reason parity for %s",
   { timeout: TEST_TIMEOUT_MS },

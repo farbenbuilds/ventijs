@@ -2,7 +2,7 @@
 //!
 //! `ws` reports `socket._writableState.length + sender._bufferedBytes`, which is every
 //! byte of the connection that has not reached the kernel yet, framing included.
-//! ventijs reads the transport's own queue (`src/compat/socket/queued.ts`), which is the
+//! ventiws reads the transport's own queue (`src/compat/socket/queued.ts`), which is the
 //! Node stream's `writableLength` and therefore the same queue for the client route.
 //! The absolute figure is not assertable: the kernel takes a run-dependent number of
 //! frames before its send buffer fills, and both libraries see that run. The marginal

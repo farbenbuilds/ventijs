@@ -26,7 +26,7 @@ const ENGINE_STATUS_BY_NATIVE: Readonly<Record<NativeSocketStatus, EngineStatus>
 function assertPayload(data: Uint8Array): void {
   if (!(data instanceof Uint8Array)) {
     throw guardError(
-      "ventijs: socket payload must be a Uint8Array",
+      "ventiws: socket payload must be a Uint8Array",
       "ERR_INVALID_OPTION",
       TypeError,
     );
@@ -38,7 +38,7 @@ function statusFromOrdinal(ordinal: number): EngineStatus {
   const status = NATIVE_SOCKET_STATUSES[ordinal];
   if (status === undefined) {
     throw guardError(
-      `ventijs: unknown native socket status ${ordinal}`,
+      `ventiws: unknown native socket status ${ordinal}`,
       "ERR_PROTOCOL",
       RangeError,
     );
@@ -48,7 +48,7 @@ function statusFromOrdinal(ordinal: number): EngineStatus {
 
 function assertCloseCode(code: number): void {
   if (!Number.isInteger(code) || code < 0 || code > MAX_UINT16) {
-    throw guardError(`ventijs: close code must be a uint16, got ${code}`, "ERR_INVALID_CLOSE_CODE");
+    throw guardError(`ventiws: close code must be a uint16, got ${code}`, "ERR_INVALID_CLOSE_CODE");
   }
 }
 

@@ -1,12 +1,12 @@
 name: Feature Request
-description: Suggest a compatibility surface, API enhancement, or engine capability for ventijs
+description: Suggest a compatibility surface, API enhancement, or engine capability for ventiws
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
       value: |
         ## Feature Request
-        Thank you for contributing to **ventijs**.
+        Thank you for contributing to **ventiws**.
 
         *All features must respect the core constraints: `ws` compatibility, zero object-oriented code, zero runtime dependencies beyond `napi-zig` and `uWebZockets`, and bounded fixed-capacity hot paths.*
   - type: input
