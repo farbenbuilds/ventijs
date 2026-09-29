@@ -83,15 +83,26 @@ there, which is what the release smoke test is scoped to.
 
 ## Publishing
 
-`publish.yml` authenticates with `NPM_TOKEN`, a granular automation token scoped
-to the six packages. It cannot use trusted publishing yet: npm can only
-configure trusted publishing for a package that already exists on npm, and the
-five `@ventiws/binding-*` packages do not, so the first release has to create
-them with a token. The job holds `id-token: write` separately, which signs the
-provenance attestation rather than the publish. Once the binding packages exist,
-`napi-zig npm-init` can replace the token with trusted publishing; it is
-interactive and needs a checkout with a populated `npm/` tree, so it is a
-maintainer step, not a workflow one.
+`publish.yml` holds no npm secret. `id-token: write` is the whole credential:
+npm exchanges the run's OIDC token for a short-lived publish token, and the same
+token signs the provenance attestation. Each of the six packages has a trusted
+publisher on npm naming `publish.yml` and the `npm` environment, so a different
+workflow cannot publish even with a valid OIDC token.
+
+Configuring that is a maintainer step, not a workflow one. npm requires an
+interactive 2FA challenge for it and refuses a bypass-2FA token outright, so it
+cannot run in CI:
+
+```sh
+for p in ventiws @ventiws/binding-linux-x64-gnu @ventiws/binding-linux-arm64-gnu \
+         @ventiws/binding-linux-x64-musl @ventiws/binding-darwin-x64 @ventiws/binding-darwin-arm64; do
+  npm trust github "$p" --file publish.yml --repo farbenbuilds/ventiws --env npm --allow-publish --yes
+done
+```
+
+npm allows one trusted publisher per package, and it can only be attached to a
+package that already exists, which is why the first release necessarily used a
+token.
 
 `publish.yml` publishes the per-platform packages before the main package, so a
 main package is never on the registry pointing at bindings that are not there

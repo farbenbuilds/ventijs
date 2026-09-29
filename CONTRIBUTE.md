@@ -131,37 +131,58 @@ pnpm lockfile.
 
 ## Releasing
 
-1. Bump the version with `pnpm release` and confirm every versioned surface
-   agrees.
-2. Add the dated `CHANGELOG.md` section listing breaking changes and known
-   limitations. A release commit carries no `Unreleased` heading.
-3. Pass lint, format, typecheck, unit, and build on the release commit, then run
-   the `ws` conformance suite and Autobahn and retain the benchmark report.
-4. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
-   artifacts, then tag `v<version>` and push the tag.
+1. Merge the work. `.github/workflows/bump.yml` advances the prerelease counter
+   on every merge to `main`, writing `package.json`, `build.zig.zon`,
+   `README.md`, and the `CHANGELOG.md` section for that merge's commits. A
+   merged change is therefore already versioned; a release is not a second
+   chance to bump.
+2. Pass lint, format, typecheck, unit, and build, then run the `ws` conformance
+   suite and Autobahn and retain the benchmark report.
+3. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
+   artifacts.
+4. Run `pnpm release`, which tags the version the tree already carries and
+   pushes the tag. The tag is the release decision, so this is the step that
+   publishes.
+
+Step 1 is deliberately unconditional: a pre-alpha's number tells a reader
+nothing, so inferring the bump from commit subjects would tie the published
+version to how a change happened to be described. Reaching `1.0.0` is a manual
+edit of the three versioned files followed by a tag, because it claims the
+surface is settled. `pnpm bump` runs the same step by hand, and
+`tests/tooling/version.test.ts` fails if the versioned surfaces disagree.
 
 The tag is what publishes. `.github/workflows/publish.yml` builds the six
 platform packages across five runners, checks the tag against `package.json`,
 assembles `npm/`, and publishes. A run of that workflow by hand defaults to a
-dry run that packs every tarball without publishing and needs no credentials,
-so the matrix can be validated before any secret exists.
+dry run that packs every tarball without publishing, so the matrix can be
+validated without touching the registry.
 
-The publish job authenticates with `NPM_TOKEN`, a granular automation token
-scoped to the six packages. Trusted publishing is not usable yet, and the order
-matters: npm can only configure trusted publishing _for a package that already
-exists_, and the five `@ventiws/binding-*` packages do not. The first release
-therefore has to create them with a token.
-
-Once they exist, trusted publishing can replace the token. It needs a checkout
-with a populated `npm/` tree, because `napi-zig npm-init` reads it to find the
-packages to configure, and it is interactive:
+The publish job holds no npm secret. `id-token: write` is the whole credential,
+because each of the six packages has a trusted publisher on npm naming
+`publish.yml` and the `npm` environment. npm requires an interactive 2FA
+challenge to configure one and refuses a bypass-2FA token, so it is a maintainer
+step:
 
 ```sh
-node scripts/build-bindings.mjs --platform=<one of the five>
-npx napi-zig npm-init --repo farbenbuilds/ventiws --workflow publish.yml
+npm trust github ventiws --file publish.yml --repo farbenbuilds/ventiws --env npm --allow-publish --yes
 ```
+
+npm allows one trusted publisher per package and can only attach it to a package
+that already exists, which is why the first release had to use a token.
 
 A release publishes six packages: `ventiws` plus one per platform. A platform
 that fails to build fails the release rather than shipping a version that cannot
 be installed on it, which is what `pnpm stage:publish` checks for and what makes
 the per-shard upload a gate rather than a convenience.
+
+The same run then creates the GitHub Release, with the changelog sections between
+this tag and the previous one as its notes, marked a prerelease while the version
+carries a prerelease component. It is a separate job that needs the publish
+result: a release page for a version that is not on the registry advertises an
+install that fails, which is worse than no page. A `workflow_dispatch` dry run
+creates no page, because it published nothing.
+
+The registry takes about three minutes to make a newly published version
+readable. Verifying with `npm view` in that window reports the previous version
+and reads as a failed publish, so check with `npm view <pkg> versions
+--prefer-online` and do not treat a 404 on a new version as a failure.
