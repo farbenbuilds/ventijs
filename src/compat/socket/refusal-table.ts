@@ -92,7 +92,7 @@ export const REFUSALS: Record<CodecFailureName, Refusal> = {
     closeCode: 1002,
     code: "ERR_INVALID_OPTION",
     reason: "protocol error",
-    message: "ventijs: generateMask must fill all four bytes of the masking key",
+    message: "ventiws: generateMask must fill all four bytes of the masking key",
     ctor: RangeError,
   },
   protocolError: {

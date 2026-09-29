@@ -14,9 +14,9 @@ const legCell = (value: number | null, render: (input: number) => string): strin
 
 const outcomeOf = (result: ConfigurationResult): string => {
   const ws = result.ws.medianRoundTripsPerSecond;
-  const ventijs = result.ventijs.medianRoundTripsPerSecond;
-  if (ws === null || ventijs === null) return "unverified";
-  return (ventijs / ws).toFixed(3);
+  const ventiws = result.ventiws.medianRoundTripsPerSecond;
+  if (ws === null || ventiws === null) return "unverified";
+  return (ventiws / ws).toFixed(3);
 };
 
 const rowOf = (result: ConfigurationResult): string =>
@@ -25,9 +25,9 @@ const rowOf = (result: ConfigurationResult): string =>
     legCell(result.ws.medianSeconds, (value) => fixed(value, 4)),
     integer(result.ws.medianRoundTripsPerSecond),
     legCell(result.ws.medianWireBytesPerSecond, (value) => `${humanBytes(value)}/s`),
-    legCell(result.ventijs.medianSeconds, (value) => fixed(value, 4)),
-    integer(result.ventijs.medianRoundTripsPerSecond),
-    legCell(result.ventijs.medianWireBytesPerSecond, (value) => `${humanBytes(value)}/s`),
+    legCell(result.ventiws.medianSeconds, (value) => fixed(value, 4)),
+    integer(result.ventiws.medianRoundTripsPerSecond),
+    legCell(result.ventiws.medianWireBytesPerSecond, (value) => `${humanBytes(value)}/s`),
     outcomeOf(result),
   ].join(" | ");
 
@@ -37,21 +37,21 @@ const spreadCell = (leg: Leg): string =>
 const header = (report: BenchmarkReport): readonly string[] => {
   const { provenance: p, parameters: a } = report;
   return [
-    `ventijs echo benchmark (${p.schemaVersion})`,
+    `ventiws echo benchmark (${p.schemaVersion})`,
     `commit    ${p.gitCommit}${p.gitDirty ? " (dirty tree)" : ""}`,
     `toolchain node ${p.nodeVersion}  pnpm ${p.pnpmVersion}  zig ${p.zigVersion}`,
-    `lockfile  ${p.lockfileSha256.slice(0, 16)}  ventijs ${p.ventijsVersion}  ws ${p.wsVersion}`,
+    `lockfile  ${p.lockfileSha256.slice(0, 16)}  ventiws ${p.ventiwsVersion}  ws ${p.wsVersion}`,
     `host      ${p.cpuModel} x${p.cpuCount}  ${p.platform}/${p.arch}  ${humanBytes(p.totalMemoryBytes)} RAM`,
     `workload  ${a.messages} round trips per sample, lock-step echo, perMessageDeflate off`,
     `samples   ${a.repeats} measured repeats per configuration, ${a.warmupRepeatsDiscarded} warm-up repeats discarded`,
-    `ceiling   ventijs is capped at ${humanBytes(a.payloadCeilingBytes)} per message by its pinned engine;`,
+    `ceiling   ventiws is capped at ${humanBytes(a.payloadCeilingBytes)} per message by its pinned engine;`,
     `          ws accepts far more, so a row above the ceiling would compare a missing capability, not a speed.`,
   ];
 };
 
 const table = (results: readonly ConfigurationResult[]): readonly string[] => [
   "",
-  "| payload | ws median s | ws round trips/s | ws wire | ventijs median s | ventijs round trips/s | ventijs wire | ventijs vs ws |",
+  "| payload | ws median s | ws round trips/s | ws wire | ventiws median s | ventiws round trips/s | ventiws wire | ventiws vs ws |",
   "| --- | --- | --- | --- | --- | --- | --- | --- |",
   ...results.map((result) => `| ${rowOf(result)} |`),
 ];
@@ -60,8 +60,8 @@ const notes = (results: readonly ConfigurationResult[]): readonly string[] => {
   const lines: string[] = [];
   for (const result of results) {
     if (result.ws.reason !== null) lines.push(`- ${result.configuration}: ws ${result.ws.reason}`);
-    if (result.ventijs.reason !== null)
-      lines.push(`- ${result.configuration}: ventijs ${result.ventijs.reason}`);
+    if (result.ventiws.reason !== null)
+      lines.push(`- ${result.configuration}: ventiws ${result.ventiws.reason}`);
     if (result.ws.spread !== null && result.ws.spread > 0.1) {
       lines.push(
         `- ${result.configuration}: ws sample spread ${spreadCell(result.ws)} exceeds 10 percent; the host was not quiet`,

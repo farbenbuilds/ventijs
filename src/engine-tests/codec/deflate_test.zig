@@ -69,10 +69,10 @@ test "one connection's compressor and decompressor survive many messages" {
 
     var size: usize = 1;
     while (size <= 1 << 16) : (size *= 2) {
-        const message = try std.testing.allocator.alloc(u8, "ventijs".len * size);
+        const message = try std.testing.allocator.alloc(u8, "ventiws".len * size);
         defer std.testing.allocator.free(message);
         for (0..size) |repeat| {
-            @memcpy(message[repeat * "ventijs".len ..][0.."ventijs".len], "ventijs");
+            @memcpy(message[repeat * "ventiws".len ..][0.."ventiws".len], "ventiws");
         }
         const compressed = try compressor.compress(message, 1 << 20);
         decompressor.clear();

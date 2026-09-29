@@ -1,6 +1,6 @@
 # ws Compatibility Matrix
 
-ventijs targets 1:1 observable behavior and types with `ws` plus `@types/ws`
+ventiws targets 1:1 observable behavior and types with `ws` plus `@types/ws`
 8.18.1, which is the compatibility contract vendored at
 [`src/types/ws.d.ts`](src/types/ws.d.ts); the pinned packages are
 devDependencies so the conformance suite can run both implementations side by
@@ -20,7 +20,7 @@ Status legend:
   that removes it.
 
 uWebSockets.js is design inspiration only. None of its API is a public surface
-of ventijs.
+of ventiws.
 
 ## Type surface and packaging
 
@@ -28,7 +28,7 @@ of ventijs.
 | ---------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
 | Named type exports           | Every `@types/ws` ESM named export, plus `WebSocketEventMap` as a documented superset | `src/types/ws.d.ts`, `src/index.ts`               | done   | `tests/types/consumer.ts`                                              |
 | `Server` type                | `export { type Server }` in upstream's ESM entry                                      | `src/types/ws.d.ts`, `src/index.ts`               | done   | `tests/types/consumer.ts`                                              |
-| Type-only default            | `import type WebSocket from "ventijs"` mirrors `ws`                                   | `src/index.ts`                                    | done   | `tests/types/consumer.ts`                                              |
+| Type-only default            | `import type WebSocket from "ventiws"` mirrors `ws`                                   | `src/index.ts`                                    | done   | `tests/types/consumer.ts`                                              |
 | Qualified names              | `WebSocket.RawData`, `WebSocket.ServerOptions`, ...                                   | `src/types/ws.d.ts`, `src/compat/constructors.ts` | done   | `tests/types/consumer.ts`                                              |
 | Built declaration resolution | Resolves through `exports` as a Node ESM consumer, `skipLibCheck: false`              | `tsconfig.dist-types.json`, `tsdown`              | done   | `tests/declarations/consumer.ts`                                       |
 | Runtime values               | Default and named `WebSocket`, `WebSocketServer`, `createWebSocketStream`             | `src/compat/constructors.ts`, `src/index.ts`      | done   | `tests/compat/socket/socket.test.ts`, `tests/declarations/consumer.ts` |
@@ -95,9 +95,9 @@ which is the one every public surface reaches, enforces a per-connection
 open: a server holding the `ws` default for 128 connections would need 12.5 GiB,
 and a peer that never sends a message must not cost anything.
 
-Measured, a single ventijs server against a single client over a loopback socket:
+Measured, a single ventiws server against a single client over a loopback socket:
 
-| Payload                    | `ws`       | ventijs     |
+| Payload                    | `ws`       | ventiws     |
 | -------------------------- | ---------- | ----------- |
 | 1 MiB text message, echoed | 1048576 B  | 1048576 B   |
 | 100 MiB, the `ws` default  | not tested | 104857600 B |
@@ -127,7 +127,7 @@ against present, and `tests/autobahn/` reports capacity-blocked cases as
 
 ## Shared with the engine
 
-Neither of these is a ventijs gap; both are the pinned `uWebZockets` build's
+Neither of these is a ventiws gap; both are the pinned `uWebZockets` build's
 behaviour, and declining is the answer the RFC allows.
 
 | Behaviour                                                    | Why it is not a gap                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -152,8 +152,8 @@ so in their note:
 
 | Surface                           | Status | What remains                                                                                                                                                      | Where                                                                                       |
 | --------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `wss:` to `ws:` redirect          | done   | ventijs refuses the hop and never contacts the destination; `ws` follows it after stripping the credentials. Named in the divergence list at the end of this file | `src/compat/client/redirect.ts:68`, `tests/compat/client/client-redirect-downgrade.test.ts` |
-| `url` on a server-accepted socket | done   | ventijs reports `""` where `ws` reports `undefined`, and `ws` contradicts its own `@types/ws`, which declares `readonly url: string`                              | `src/compat/socket/state.ts:40`, `tests/compat/socket/server-url.test.ts`                   |
+| `wss:` to `ws:` redirect          | done   | ventiws refuses the hop and never contacts the destination; `ws` follows it after stripping the credentials. Named in the divergence list at the end of this file | `src/compat/client/redirect.ts:68`, `tests/compat/client/client-redirect-downgrade.test.ts` |
+| `url` on a server-accepted socket | done   | ventiws reports `""` where `ws` reports `undefined`, and `ws` contradicts its own `@types/ws`, which declares `readonly url: string`                              | `src/compat/socket/state.ts:40`, `tests/compat/socket/server-url.test.ts`                   |
 | `server_max_window_bits` below 15 | done   | The offer is declined rather than answered; `ws` answers it and then compresses at 15 regardless                                                                  | `src/compat/extensions/offer-window.ts`, `tests/compat/extensions/deflate-window.test.ts`   |
 | `Too many buffered chunks`        | done   | The `maxBufferedChunks` refusal reports the `maxFragments` message, because the refusal table has one entry for the two conditions                                | `src/compat/socket/refusal-table.ts:72`                                                     |
 
@@ -255,7 +255,7 @@ source dies in the first case file on `str` versus `bytes` payload semantics.
 
 ## Error shape policy
 
-ventijs throws `Error` instances that keep the `ws` constructor (`TypeError`,
+ventiws throws `Error` instances that keep the `ws` constructor (`TypeError`,
 `RangeError`, `SyntaxError`) and message text wherever `ws` defines one, and adds
 a stable `code` to every error, from `src/types/errors.ts`. The `WS_ERR_*` half of
 that union is `ws`'s, and a refused frame now carries one: the codec's
@@ -270,7 +270,7 @@ and `tests/compat/server/upgrade-policy.test.ts` assert the `ERR_*` codes,
 
 Both halves of `WS_ERR_TOO_MANY_BUFFERED_PARTS` are reachable. In `ws` the code covers
 two conditions, `maxFragments` and `maxBufferedChunks`, with the same 1008 and the same
-`RangeError` and a different message each; ventijs has one refusal entry for the two, so
+`RangeError` and a different message each; ventiws has one refusal entry for the two, so
 the `maxBufferedChunks` path reports `Too many message fragments` where `ws` reports
 `Too many buffered chunks` (`node_modules/ws/lib/receiver.js:106`). The code, the close
 code, and the constructor are `ws`'s on both paths, and
@@ -280,7 +280,7 @@ code, and the constructor are `ws`'s on both paths, and
 differ and both are deliberate:
 
 - A close `ws` refuses still closes. `ws` latches `CLOSING` before it validates,
-  so a bad code or a bad reason leaves the socket closing. ventijs validated
+  so a bad code or a bad reason leaves the socket closing. ventiws validated
   first, which left it `OPEN` and let a caller retry a close `ws` had already
   accepted as a decision. `tests/compat/socket/close.test.ts` pins the ready
   state on both the throwing and the non-throwing path, because an error-only
@@ -357,12 +357,12 @@ superset rather than a mismatch:
 
 - `ws` types `close` as `(code?: number, reason?: string | Buffer)` and
   `ping`/`pong` payloads are validated against RFC 6455's 125-byte control cap
-  with a thrown `RangeError`, which ventijs now matches. A fractional reserved
+  with a thrown `RangeError`, which ventiws now matches. A fractional reserved
   code such as `1005.5` passes both validators and truncates; `ws` then writes
   1005 to the wire while the engine's own close-code validation refuses 1005 and
   reports `ERR_INVALID_CLOSE_CODE`.
 - `@types/ws` declares `readonly path: string` on the server but `ws`'s runtime
-  never sets it, so `"path" in server` is false there. ventijs exposes it.
+  never sets it, so `"path" in server` is false there. ventiws exposes it.
   `server.clients` is the mirror image and is now absent when
   `clientTracking` is falsy, exactly as `ws` leaves it, rather than present and
   `undefined`.
@@ -413,7 +413,7 @@ The other two are a kept difference, and neither is a gap:
 | `tests/tooling/oxlint-plugin.test.ts`                                                            | Anti-OOP, enum, and emoji lint rules                                                                                                                           | done   |
 | `tests/types/**`                                                                                 | Compile-time public surface, every event-map entry, state records                                                                                              | done   |
 | `tests/declarations/**`                                                                          | Built declarations through the package `exports` map                                                                                                           | done   |
-| `tests/conformance/**`                                                                           | The same scenario run against `ws` and ventijs, comparing observable behavior                                                                                  | done   |
+| `tests/conformance/**`                                                                           | The same scenario run against `ws` and ventiws, comparing observable behavior                                                                                  | done   |
 | `bench/**`                                                                                       | Measured echo throughput against `ws` on the same host, with provenance                                                                                        | done   |
 | `tests/autobahn/**`                                                                              | RFC 6455 conformance through the digest-pinned fuzzing client                                                                                                  | done   |
 | `tests/autobahn/{shard-plan,shard-weights,diff-gate,run-options}.test.ts`                        | The shard partition, the weight table's self-check, the skip decision, and the flag parser                                                                     | done   |

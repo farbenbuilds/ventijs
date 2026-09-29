@@ -1,7 +1,7 @@
 //! The hop limit, measured instead of reasoned about.
 //!
 //! The two implementations put the comparison on opposite sides of the increment: `ws`
-//! increments and then compares (`websocket.js:911`), ventijs compares and only creates a
+//! increments and then compares (`websocket.js:911`), ventiws compares and only creates a
 //! hop afterwards (`redirect.ts:46`). Whether that is a divergence is not decidable by
 //! reading either one, so the fixture is a chain that never ends and the assertion is how
 //! many requests the peer actually received.
@@ -61,7 +61,7 @@ async function chain(make: Make, maxRedirects: number | undefined): Promise<Leg>
 const wsLeg: Make = (url, maxRedirects) =>
   new WsSocket(url, undefined, redirectOptions(maxRedirects)) as unknown as Client;
 
-const ventijsLeg: Make = (url, maxRedirects) =>
+const ventiwsLeg: Make = (url, maxRedirects) =>
   new WebSocket(url, undefined, undeclared(redirectOptions(maxRedirects))) as unknown as Client;
 
 test.each([
@@ -75,7 +75,7 @@ test.each([
   { timeout: TEST_TIMEOUT_MS },
   async ({ maxRedirects, served }) => {
     const reference = await chain(wsLeg, maxRedirects);
-    const ours = await chain(ventijsLeg, maxRedirects);
+    const ours = await chain(ventiwsLeg, maxRedirects);
     // The limit is counted in requests, not in events: the request that earned the refusal
     // was already sent, so `maxRedirects` hops means `maxRedirects + 1` requests.
     expect(reference.served).toBe(served);

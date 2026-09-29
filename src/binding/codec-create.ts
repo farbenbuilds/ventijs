@@ -41,7 +41,7 @@ function assertCeiling(name: string, value: number, ceiling: number): void {
   if (Number.isSafeInteger(value) && value >= 0 && value <= ceiling) return;
   throw createError(
     "ERR_INVALID_OPTION",
-    `ventijs: ${name} must be an integer in [0, ${ceiling}] (received ${String(value)})`,
+    `ventiws: ${name} must be an integer in [0, ${ceiling}] (received ${String(value)})`,
     RangeError,
   );
 }

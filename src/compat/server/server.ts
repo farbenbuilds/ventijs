@@ -12,7 +12,7 @@ import { normalizeServerOptions } from "../options/server";
 import { defaultShouldHandle, handleUpgrade } from "./upgrade";
 import type { UpgradeCallback } from "./accept";
 
-const SERVER_BRAND = Symbol("ventijs.server");
+const SERVER_BRAND = Symbol("ventiws.server");
 
 /// A missing artifact thrown from a Node `upgrade` listener is an uncaught exception
 /// that takes the process down, with a message about `pnpm build:binding` that an

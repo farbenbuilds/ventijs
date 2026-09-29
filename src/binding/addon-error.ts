@@ -7,7 +7,7 @@
 /// diagnosis, which is why it is kept as `cause`.
 export function unloadableAddonMessage(path: string, platform: string, arch: string): string {
   return (
-    `ventijs: the native addon at ${path} was found but could not be loaded, so it was ` +
+    `ventiws: the native addon at ${path} was found but could not be loaded, so it was ` +
     `built for a different ${platform}-${arch} or against a different libc. In a checkout ` +
     'the fix is "pnpm build:binding"; in an install, a package built for this platform. ' +
     "The loader's own error is the cause."
@@ -25,14 +25,14 @@ export function missingAddonMessage(
   const target = `${platform}-${arch}`;
   if (root === undefined) {
     return (
-      "ventijs: the package layout is broken -- there is no package.json above the " +
+      "ventiws: the package layout is broken -- there is no package.json above the " +
       `native addon, so the artifact for ${target} cannot be located. Reinstalling ` +
-      "ventijs should restore it."
+      "ventiws should restore it."
     );
   }
   return (
-    `ventijs: no native addon for ${target} was found under ${root}. An install ships ` +
-    `the addon for one platform, so a ${target} machine needs ventijs built for ${target}, ` +
+    `ventiws: no native addon for ${target} was found under ${root}. An install ships ` +
+    `the addon for one platform, so a ${target} machine needs ventiws built for ${target}, ` +
     "which needs the Zig toolchain (zig 0.16.0). If you are working in a checkout, " +
     'the command is "pnpm build:binding".'
   );

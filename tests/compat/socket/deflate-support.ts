@@ -5,7 +5,7 @@ import { WebSocketServer } from "../../../src/index";
 import type { ServerOptions } from "../../../src/types/ws";
 
 /// Shrinks tenfold and clears the 1024-byte threshold.
-export const COMPRESSIBLE = "ventijs ".repeat(512);
+export const COMPRESSIBLE = "ventiws ".repeat(512);
 
 export const COMPRESSIBLE_LENGTH = COMPRESSIBLE.length;
 

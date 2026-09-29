@@ -37,5 +37,5 @@ export function isWritable(state: SocketState): boolean {
 
 /// A socket that cannot frame at all is a different fault from a transport that went away.
 export function noTransportError(): Error {
-  return createError("ERR_INVALID_STATE", "ventijs: the socket has no transport to write to");
+  return createError("ERR_INVALID_STATE", "ventiws: the socket has no transport to write to");
 }

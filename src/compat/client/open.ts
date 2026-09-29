@@ -56,7 +56,7 @@ export function onUpgrade(
   socket.setTimeout(0);
   const target: WebSocket | null = (state.target as WebSocket | undefined) ?? null;
   if (target === null) {
-    abort(attempt, createError("ERR_INVALID_STATE", "ventijs: the socket record is missing"));
+    abort(attempt, createError("ERR_INVALID_STATE", "ventiws: the socket record is missing"));
     return;
   }
   // `head` is what followed the response head, so a frame sharing the read with the 101

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-ventijs is a pre-alpha Node.js native addon: a drop-in `ws` replacement whose
+ventiws is a pre-alpha Node.js native addon: a drop-in `ws` replacement whose
 protocol engine is µWebZockets, a first-party Zig engine built for this project,
 reached through `napi-zig`. TypeScript owns the public surface and types; Zig
 will own parsing, buffers, and backpressure.
@@ -158,7 +158,7 @@ declarations through the package `exports` map; it needs `tsdown` output.
   `observability-and-instrumentation`, `git-workflow-and-versioning`,
   `ci-cd-and-automation`, `documentation-and-adrs`,
   `deprecation-and-migration`, and `shipping-and-launch`. UI and browser
-  skills are not part of this pack; ventijs is a Node.js package, not a UI
+  skills are not part of this pack; ventiws is a Node.js package, not a UI
   project. `using-agent-skills` and `test-driven-development` carry local edits
   that strip their browser routing; a `skills update` may restore it, so
   re-remove any UI guidance it brings back.

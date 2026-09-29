@@ -22,7 +22,7 @@ export type RedirectPeer = {
   /// indistinguishable here, and "did the second request actually go out, and where" is
   /// what a redirect listener is for.
   readonly paths: string[];
-  /// The `x-ventijs-hop` header of each request, in order, for the same reason: a caller
+  /// The `x-ventiws-hop` header of each request, in order, for the same reason: a caller
   /// that sets a header on a redirected request can only prove it took effect by having
   /// the peer report what arrived.
   readonly markers: Array<string | undefined>;
@@ -62,7 +62,7 @@ export function scriptedPeer(script: PeerScript): Promise<RedirectPeer> {
       // The head stops before the blank line, so the last header has no trailing CRLF
       // and a pattern that requires one would miss exactly the header that is last.
       authorizations.push(/^authorization: (.*)$/im.exec(head)?.[1]?.trim());
-      markers.push(/^x-ventijs-hop: (.*)$/im.exec(head)?.[1]?.trim());
+      markers.push(/^x-ventiws-hop: (.*)$/im.exec(head)?.[1]?.trim());
       paths.push(/^\S+ (\S+) HTTP\/1\.1$/im.exec(head)?.[1] ?? "");
       served += 1;
       const status = served === 1 ? script.first : script.after;

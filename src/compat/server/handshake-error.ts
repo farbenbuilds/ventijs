@@ -6,7 +6,7 @@ import type { Duplex } from "node:stream";
 /// destroys can race the terminal latch and discard the close code. A per-socket closure, so
 /// the reference stored on the socket is the one `removeListener` matches: a shared function
 /// would need `this` to find its socket, which the anti-OOP rule bans.
-const HANDSHAKE_ERROR = Symbol("ventijs.handshakeError");
+const HANDSHAKE_ERROR = Symbol("ventiws.handshakeError");
 
 type HandshakeSocket = Duplex & { [HANDSHAKE_ERROR]?: () => void };
 

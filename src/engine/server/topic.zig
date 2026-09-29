@@ -6,7 +6,7 @@ const uwz = @import("uWebZockets");
 const instance = @import("instance.zig");
 
 /// Topic prefix for one connection's outbound channel; the engine caps a name at 127 bytes.
-pub const TOPIC_PREFIX = "ventijs:conn:";
+pub const TOPIC_PREFIX = "ventiws:conn:";
 pub const topic_capacity = TOPIC_PREFIX.len + 20;
 
 pub fn write_topic(buffer: *[topic_capacity]u8, index: u32, generation: u32) []const u8 {

@@ -37,5 +37,5 @@ export function writeShardSpec(path: string, spec: ShardSpec): void {
 /// A container name, so a run that is cancelled can remove exactly the container
 /// it started rather than searching for one by label.
 export function shardContainerName(id: number): string {
-  return `ventijs-autobahn-${id}`;
+  return `ventiws-autobahn-${id}`;
 }

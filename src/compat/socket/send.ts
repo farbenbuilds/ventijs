@@ -91,7 +91,7 @@ function applySendStatus(
       reportFailure(
         state,
         callback,
-        createError("ERR_BACKPRESSURE", "ventijs: the outbound staging ring is full"),
+        createError("ERR_BACKPRESSURE", "ventiws: the outbound staging ring is full"),
       );
       return;
     case "closing":
@@ -103,7 +103,7 @@ function applySendStatus(
       reportFailure(
         state,
         callback,
-        createError("ERR_INVALID_HANDLE", "ventijs: the connection handle is stale"),
+        createError("ERR_INVALID_HANDLE", "ventiws: the connection handle is stale"),
       );
       return;
     case "payload-too-large":
@@ -122,6 +122,6 @@ function applySendStatus(
 function unhandledStatus(status: never): Error {
   return createError(
     "ERR_INVALID_STATE",
-    `ventijs: the engine reported an unknown socket status "${String(status)}"`,
+    `ventiws: the engine reported an unknown socket status "${String(status)}"`,
   );
 }

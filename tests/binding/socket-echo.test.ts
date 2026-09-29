@@ -14,9 +14,9 @@ test(
     try {
       await opened(client);
       const received = collect(client, 1);
-      client.send("hello ventijs");
+      client.send("hello ventiws");
       const [reply] = await received;
-      expect(reply?.bytes.toString("utf8")).toBe("hello ventijs");
+      expect(reply?.bytes.toString("utf8")).toBe("hello ventiws");
       expect(reply?.isBinary).toBe(false);
       expect(echo.received).toHaveLength(1);
     } finally {

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 /// The contract name in `CI_CD_PIPELINE.md`. A report without it cannot be
 /// compared against a stored baseline, because the column set may have moved.
-export const SCHEMA_VERSION = "ventijs-ws-compare/1";
+export const SCHEMA_VERSION = "ventiws-ws-compare/2";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -20,7 +20,7 @@ export type Provenance = {
   readonly pnpmVersion: string;
   readonly zigVersion: string;
   readonly lockfileSha256: string;
-  readonly ventijsVersion: string;
+  readonly ventiwsVersion: string;
   readonly wsVersion: string;
   readonly platform: string;
   readonly arch: string;
@@ -75,7 +75,7 @@ export const captureProvenance = (): Provenance => {
     pnpmVersion: capture("pnpm", ["--version"]),
     zigVersion: capture("zig", ["version"]),
     lockfileSha256: hashLockfile(),
-    ventijsVersion: readPackageVersion("package.json"),
+    ventiwsVersion: readPackageVersion("package.json"),
     wsVersion: readPackageVersion("node_modules/ws/package.json"),
     platform: process.platform,
     arch: process.arch,

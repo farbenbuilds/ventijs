@@ -2,7 +2,7 @@
 /// record on stdout, tagged with a prefix so unrelated child output can be
 /// forwarded to the runner's log without being mistaken for the handshake.
 
-export const READY_PREFIX = "ventijs-autobahn-target ";
+export const READY_PREFIX = "ventiws-autobahn-target ";
 
 /// The capacity the engine was compiled with. `message_capacity` in
 /// `src/engine/server/options.zig` is a Zig `comptime` constant baked into the

@@ -1,9 +1,9 @@
-// The seam between the harness and an implementation. Both `ws` and ventijs
+// The seam between the harness and an implementation. Both `ws` and ventiws
 // expose ws-shaped servers, but their declarations differ, so every structural
 // difference is normalized here and nowhere else. `bench/echo/echo-run.ts`
 // drives only these shapes, which is what makes the two legs comparable.
 
-export type ImplementationId = "ventijs" | "ws";
+export type ImplementationId = "ventiws" | "ws";
 
 export type EchoServerOptions = {
   readonly port: number;

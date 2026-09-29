@@ -8,8 +8,8 @@ import {
 import { createRegistry } from "../events/registry";
 import { CONNECTING } from "../ready-state";
 
-const SOCKET_BRAND = Symbol("ventijs.socket");
-const SOCKET_STATE = Symbol("ventijs.socket.state");
+const SOCKET_BRAND = Symbol("ventiws.socket");
+const SOCKET_STATE = Symbol("ventiws.socket.state");
 
 type BrandedSocket = {
   [SOCKET_BRAND]?: true;

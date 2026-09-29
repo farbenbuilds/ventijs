@@ -1,13 +1,13 @@
 # ws error codes and environment variables
 
-The vendored reference at [ventijs.md](ventijs.md) documents twelve `WS_ERR_*` codes
-and two environment variables. This file records whether each can occur in ventijs,
+The vendored reference at [ventiws.md](ventiws.md) documents twelve `WS_ERR_*` codes
+and two environment variables. This file records whether each can occur in ventiws,
 and why. The status vocabulary is defined in [compliance.md](compliance.md).
 
 ## Where the codes come from
 
 `ws` emits every `WS_ERR_*` code from its JavaScript frame receiver, the module that
-reads bytes off the socket and decodes frames. ventijs decodes frames in Zig, by the
+reads bytes off the socket and decodes frames. ventiws decodes frames in Zig, by the
 codec in `src/engine/codec/`, and that codec runs on the Node `Duplex` the upgrade
 route adopts (`src/compat/socket/attach.ts` hands the transport to
 `src/compat/socket/codec-inbound.ts`). The classification the parser already made
@@ -41,7 +41,7 @@ The code in the first column is also the `error.code` on the socket's `error` ev
 
 `ws`'s message is `Invalid WebSocket frame: ` plus its own detail for every framing
 fault, and a bare message for the two count limits, `Too many message fragments` and
-`Too many buffered chunks`. ventijs reports the first of those on both paths; see the
+`Too many buffered chunks`. ventiws reports the first of those on both paths; see the
 paragraph on `WS_ERR_TOO_MANY_BUFFERED_PARTS` below.
 
 Three messages are `ws`'s in wording but not in full. `ws` interpolates the offending
@@ -52,7 +52,7 @@ those three read without it. A `WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH` message 
 frame: ` rather than `Invalid WebSocket frame: `, because the length is a number the
 frame could not have meant.
 
-`ERR_INVALID_COMPRESSED_DATA` is a code ventijs adds for a payload that is not a
+`ERR_INVALID_COMPRESSED_DATA` is a code ventiws adds for a payload that is not a
 DEFLATE stream, which `ws` reports as a bare `zlib` error with no code. The close code
 is 1007 either way; the addition is what keeps a broken compressed stream from reading
 as `WS_ERR_INVALID_UTF8`, which a caller would act on by checking text.
@@ -76,13 +76,13 @@ two a message each, `Too many buffered chunks` and `Too many message fragments`
 `RangeError`, and the 1008 are `ws`'s on both paths; a caller keying on the code is
 unaffected and a caller matching on the message is not.
 
-`ERR_PROTOCOL` is the one ventijs keeps for a fault it has no more specific name for:
+`ERR_PROTOCOL` is the one ventiws keeps for a fault it has no more specific name for:
 a non-minimal length field, and anything else the parser cannot attribute. It is a
 1002 and a `RangeError`, and `ws` names none of these.
 
-## Errors ventijs adds
+## Errors ventiws adds
 
-`ws` leaves many thrown errors uncoded. ventijs adds a stable string `code` to every
+`ws` leaves many thrown errors uncoded. ventiws adds a stable string `code` to every
 error it raises, declared in `src/types/errors.ts` and produced by
 `src/compat/errors.ts`. `ERR_INVALID_OPTION`, `ERR_INVALID_STATE`,
 `ERR_INVALID_HANDLE`, `ERR_SOCKET_NOT_OPEN`, `ERR_SOCKET_CLOSED`,
@@ -101,12 +101,12 @@ when a staged control record cannot cross the engine's publish topic, mapped thr
 
 ## Environment variables
 
-| Variable               | Effect in `ws`                                               | ventijs                                         | Status        |
+| Variable               | Effect in `ws`                                               | ventiws                                         | Status        |
 | ---------------------- | ------------------------------------------------------------ | ----------------------------------------------- | ------------- |
 | `WS_NO_BUFFER_UTIL`    | Guards `require("bufferutil")` in `ws/lib/buffer-util.js`    | Masking is `zslay.frame.mask` in the codec      | `unreachable` |
 | `WS_NO_UTF_8_VALIDATE` | Guards `require("utf-8-validate")` in `ws/lib/validation.js` | UTF-8 validation is `src/engine/codec/utf8.zig` | `unreachable` |
 
-Both guard an optional native acceleration module, and ventijs compiles no such
+Both guard an optional native acceleration module, and ventiws compiles no such
 module. A `bufferutil`-shaped escape hatch would be a second, unaccelerated route to
 the same answer, which is the opposite of the design, so both are `unreachable` by
 construction rather than waiting on a prerequisite.

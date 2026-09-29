@@ -20,7 +20,7 @@ const INTEGER_CONFIG_FIELDS = [
 export function assertServerHandle(handle: ServerHandle): void {
   if (!Number.isSafeInteger(handle) || handle < 0 || handle > MAX_SERVER_HANDLE) {
     throw guardError(
-      `ventijs: server handle must be a uint40, got ${handle}`,
+      `ventiws: server handle must be a uint40, got ${handle}`,
       "ERR_INVALID_HANDLE",
     );
   }
@@ -34,7 +34,7 @@ function assertConfigIntegers(config: NativeServerConfig): void {
       // An option value is not a handle, so it must not borrow the handle code: a stable
       // code that is semantically false is harder to branch on than a message alone.
       throw guardError(
-        `ventijs: server config "${field}" must be a safe integer, got ${value}`,
+        `ventiws: server config "${field}" must be a safe integer, got ${value}`,
         "ERR_INVALID_OPTION",
       );
     }

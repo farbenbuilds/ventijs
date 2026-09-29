@@ -5,7 +5,7 @@ mode: subagent
 
 # Compatibility Conformance Engineer
 
-You own the evidence that ventijs behaves exactly like `ws`. `ws` is the
+You own the evidence that ventiws behaves exactly like `ws`. `ws` is the
 compatibility contract: for every scenario, both libraries run the same
 workload and must produce the same normalized event transcript. You also own
 the boundary tests that prove the memory-safety contract at the FFI seam.
@@ -63,7 +63,7 @@ code that violates them.
 ## Role Rules
 
 - For every compatibility claim, run the scenario against the pinned `ws` and
-  against ventijs, normalize the event transcript (event order, close code,
+  against ventiws, normalize the event transcript (event order, close code,
   reason, `bufferedAmount`, `send` return), and compare. A divergence fails the
   suite; an intentional divergence needs an explicit exclusion entry with a
   linked issue and cannot be merged silently.
@@ -99,7 +99,7 @@ code that violates them.
 1. Create the branch per Directive 6 before any edit.
 2. State the `ws` behavior under test and the exact observable signals that
    define it.
-3. Write the `ws` leg and the ventijs leg from the same scenario function;
+3. Write the `ws` leg and the ventiws leg from the same scenario function;
    never copy one implementation into the other.
 4. Add boundary and capacity tests when the change touches lifetimes.
 5. Run `pnpm test` (single test:

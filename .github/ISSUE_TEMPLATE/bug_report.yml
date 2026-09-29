@@ -1,12 +1,12 @@
 name: Bug Report
-description: Report a functional bug, compatibility divergence, or native build failure in ventijs
+description: Report a functional bug, compatibility divergence, or native build failure in ventiws
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
         ## Bug Report
-        Thank you for reporting an issue in **ventijs**.
+        Thank you for reporting an issue in **ventiws**.
         Do not disclose memory-safety defects, parser vulnerabilities, or other security issues publicly. Follow `SECURITY.md` and email the maintainers privately.
   - type: input
     id: bug-description
@@ -22,7 +22,7 @@ body:
       label: Steps to Reproduce
       description: How can we reproduce this? Provide a minimal TypeScript snippet, a raw frame hex dump, or both.
       placeholder: |
-        1. Start a ventijs server...
+        1. Start a ventiws server...
         2. Connect with a 'ws' client...
         3. Send the following frame: `81 85 37 fa 21 3d 7f 9f 4d 51 58`
     validations:
@@ -47,7 +47,7 @@ body:
     id: environment
     attributes:
       label: Environment and Toolchain
-      description: ventijs version or commit, Node.js version, pnpm version, OS, architecture, and how the addon was built or installed.
+      description: ventiws version or commit, Node.js version, pnpm version, OS, architecture, and how the addon was built or installed.
       placeholder: E.g. commit 60b97b5, Node 22.14.0, pnpm 10, NixOS x86_64, addon built with 'pnpm build:binding'.
     validations:
       required: true

@@ -1,6 +1,6 @@
 ## Description
 
-Describe the change and why it belongs in ventijs. Link the issue it closes.
+Describe the change and why it belongs in ventiws. Link the issue it closes.
 
 ## Type of Change
 

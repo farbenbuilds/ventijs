@@ -17,8 +17,8 @@ import { initialState, onEngineEvent } from "./native-state.ts";
 /// is erased before execution. The addon is resolved the way
 /// `src/binding/load.ts` resolves it, with the same candidate order.
 const CANDIDATE_PATHS = [
-  ["zig-out", "lib", "ventijs.node"],
-  ["dist", "ventijs.node"],
+  ["zig-out", "lib", "ventiws.node"],
+  ["dist", "ventiws.node"],
 ] as const;
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -38,7 +38,7 @@ function loadAddon(): VentiAddon {
     }
   }
   throw new Error(
-    `ventijs: native addon not found under ${PACKAGE_ROOT}; run "pnpm build:binding" first`,
+    `ventiws: native addon not found under ${PACKAGE_ROOT}; run "pnpm build:binding" first`,
   );
 }
 

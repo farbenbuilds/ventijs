@@ -77,7 +77,7 @@ export function writePong(state: SocketState, payload: Buffer): void {
 
 /// An absent `code` writes the *empty* close payload, which is what a peer reads as "no
 /// status". Substituting 1000 claimed a shutdown the caller never stated and made 1005
-/// unobservable from a ventijs peer.
+/// unobservable from a ventiws peer.
 export function writeCloseFrame(
   state: SocketState,
   code: number | undefined,
@@ -124,7 +124,7 @@ export function frameError(status: FailureStatus): Error {
   if (status === "closed" || status === "closing") return noTransportError();
   // The same code the engine's own backpressure uses, so handling one handles the other.
   if (status === "backpressure") {
-    return createError("ERR_BACKPRESSURE", "ventijs: the codec's event queue is full");
+    return createError("ERR_BACKPRESSURE", "ventiws: the codec's event queue is full");
   }
   return statusError(status);
 }

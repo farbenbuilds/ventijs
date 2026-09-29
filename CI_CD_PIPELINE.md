@@ -1,4 +1,4 @@
-# ventijs CI/CD Pipeline
+# ventiws CI/CD Pipeline
 
 Seven workflows gate the repository. A passing pipeline is evidence for the
 configurations it exercised; it is not proof that no memory or security defect
@@ -66,7 +66,7 @@ typecheck:dist` to check the built declarations through the `exports` map, then
 There is no workflow for this. The suite is `tests/conformance/`, it runs as
 part of `zig-test.yml`'s whole-suite pass, and `pnpm test:compat` runs it alone.
 Each scenario executes twice, once against the pinned `ws` 8.21.3 devDependency
-and once against ventijs, and the two normalized event transcripts are compared.
+and once against ventiws, and the two normalized event transcripts are compared.
 It covers server construction options and defaults, the upgrade path with
 accepted and rejected handshakes, text, binary, and fragmented messages
 including empty payloads, `ping`/`pong` and the automatic reply, close codes and
@@ -125,7 +125,7 @@ the native engine through one shared echo path and writes a JSON report with
 provenance and the raw samples behind every median. The report is uploaded on
 every run, including failures.
 
-It deliberately does not pass `--gate`. The gate fails when ventijs's median falls
+It deliberately does not pass `--gate`. The gate fails when ventiws's median falls
 more than ten percent behind `ws` on the same host, and the engine is not at
 parity, so a blocking threshold would report the project's starting point as a
 regression against itself. The switch is the `--gate` flag on its `Measure` step,

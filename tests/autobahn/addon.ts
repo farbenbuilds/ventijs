@@ -10,8 +10,8 @@ import { PACKAGE_ROOT } from "./paths.ts";
 /// `src/binding/load.ts` loads it, with the same candidate order, so the target
 /// and the unit tests exercise the same artifact.
 const CANDIDATE_PATHS = [
-  ["zig-out", "lib", "ventijs.node"],
-  ["dist", "ventijs.node"],
+  ["zig-out", "lib", "ventiws.node"],
+  ["dist", "ventiws.node"],
 ] as const;
 
 const require = createRequire(import.meta.url);
@@ -22,13 +22,13 @@ function resolveAddonPath(): string {
     if (existsSync(candidate)) return candidate;
   }
   throw new Error(
-    `ventijs: native addon not found under ${PACKAGE_ROOT}; run "pnpm build:binding" first`,
+    `ventiws: native addon not found under ${PACKAGE_ROOT}; run "pnpm build:binding" first`,
   );
 }
 
 let addon: VentiAddon | undefined;
 
-export function loadVentijsAddon(): VentiAddon {
+export function loadVentiwsAddon(): VentiAddon {
   addon ??= require(resolveAddonPath()) as VentiAddon;
   return addon;
 }

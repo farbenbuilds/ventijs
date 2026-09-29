@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { EchoSample } from "../echo/echo-types.ts";
 import type { BenchOptions } from "./options.ts";
-import { SAMPLE_TIMEOUT_MS, VENTIJS_MAX_MESSAGE_BYTES } from "./options.ts";
+import { SAMPLE_TIMEOUT_MS, VENTIWS_MAX_MESSAGE_BYTES } from "./options.ts";
 import type { ConfigurationResult, GateVerdict } from "./plan.ts";
 import { evaluateGate, summarize } from "./plan.ts";
 import type { Provenance } from "./provenance.ts";
@@ -17,7 +17,7 @@ export type ReportParameters = {
   readonly timeoutMs: number;
 };
 
-/// The `ventijs-ws-compare` artifact. Raw seconds stay in the report next to
+/// The `ventiws-ws-compare` artifact. Raw seconds stay in the report next to
 /// every median so a reader can recompute the summary instead of trusting it.
 export type BenchmarkReport = {
   readonly provenance: Provenance;
@@ -36,7 +36,7 @@ export const buildReport = (
     provenance,
     parameters: {
       payloadSizes: options.payloadSizes,
-      payloadCeilingBytes: VENTIJS_MAX_MESSAGE_BYTES,
+      payloadCeilingBytes: VENTIWS_MAX_MESSAGE_BYTES,
       messages: options.messages,
       repeats: options.repeats,
       warmupRepeatsDiscarded: options.warmups,

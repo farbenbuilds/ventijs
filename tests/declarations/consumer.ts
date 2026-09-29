@@ -1,10 +1,10 @@
-import type WebSocketDefault from "ventijs";
+import type WebSocketDefault from "ventiws";
 import WebSocketValueDefault, {
   WebSocket as WebSocketValue,
   WebSocketServer as WebSocketServerValue,
   createWebSocketStream as createStream,
   engineLimits as readEngineLimits,
-} from "ventijs";
+} from "ventiws";
 import type {
   AddressInfo,
   ClientOptions,
@@ -22,7 +22,7 @@ import type {
   WebSocket,
   WebSocketServer,
   createWebSocketStream,
-} from "ventijs";
+} from "ventiws";
 
 export type DefaultSocket = WebSocketDefault;
 export type DefaultServer = Server;

@@ -105,6 +105,6 @@ function booleanOr(value: unknown, fallback: boolean): boolean {
 function unhandledFrameStatus(status: never): Error {
   return createError(
     "ERR_INVALID_STATE",
-    `ventijs: the codec reported an unknown frame status "${String(status)}"`,
+    `ventiws: the codec reported an unknown frame status "${String(status)}"`,
   );
 }

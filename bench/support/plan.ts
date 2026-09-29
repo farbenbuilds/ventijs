@@ -27,7 +27,7 @@ export type ConfigurationResult = {
   readonly payloadBytes: number;
   readonly messages: number;
   readonly ws: Leg;
-  readonly ventijs: Leg;
+  readonly ventiws: Leg;
 };
 
 export type GateVerdict = {
@@ -40,7 +40,7 @@ type Shape = {
   readonly payloadBytes: number;
 };
 
-export const IMPLEMENTATIONS: readonly ImplementationId[] = ["ws", "ventijs"];
+export const IMPLEMENTATIONS: readonly ImplementationId[] = ["ws", "ventiws"];
 
 const emptyLeg = (reason: string): Leg => ({
   samples: [],
@@ -114,7 +114,7 @@ export const summarize = (
       payloadBytes,
       messages: options.messages,
       ws: legOf(shape, "ws", gathered),
-      ventijs: legOf(shape, "ventijs", gathered),
+      ventiws: legOf(shape, "ventiws", gathered),
     };
   });
 
@@ -122,10 +122,10 @@ const evaluate = (result: ConfigurationResult): string => {
   if (result.ws.medianRoundTripsPerSecond === null) {
     return `unverified  ${result.configuration}: no ws baseline (${result.ws.reason})`;
   }
-  if (result.ventijs.medianRoundTripsPerSecond === null) {
-    return `unverified  ${result.configuration}: no ventijs number (${result.ventijs.reason})`;
+  if (result.ventiws.medianRoundTripsPerSecond === null) {
+    return `unverified  ${result.configuration}: no ventiws number (${result.ventiws.reason})`;
   }
-  const ratio = result.ventijs.medianRoundTripsPerSecond / result.ws.medianRoundTripsPerSecond;
+  const ratio = result.ventiws.medianRoundTripsPerSecond / result.ws.medianRoundTripsPerSecond;
   if (ratio >= GATE_MIN_RATIO) {
     return `pass        ${result.configuration}: ${ratio.toFixed(3)} of ws`;
   }

@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="misc/ventijs_banner.png" alt="ventijs banner" />
+  <img src="misc/ventiws_banner.png" alt="ventiws banner" />
 </p>
 
-# ventijs
+# ventiws
 
 A WebSocket implementation for Node.js with the API of
 [`ws`](https://github.com/websockets/ws), delivered as a native addon whose framing
 engine is written in Zig. It targets `ws` 8.21.3 and reproduces that release's
-observable behaviour rather than its source. ventijs is not affiliated with the
+observable behaviour rather than its source. ventiws is not affiliated with the
 `ws` project and vendors none of its code; the upstream API reference is vendored
 as the pinned contract, credited in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**ventijs is at `1.0.0-alpha`.** Nothing is published to npm yet, so an
+**ventiws is at `1.0.0-alpha`.** Nothing is published to npm yet, so an
 install builds the addon for one platform, and the surface may change between
 alpha releases. What "alpha" means here is bounded: the `ws` compatibility
 contract is tracked row by row in
-[COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventijs knowingly
+[COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventiws knowingly
 differs from `ws` are listed in [CHANGELOG.md](CHANGELOG.md) under "Known
 divergences from `ws`".
 
@@ -25,8 +25,8 @@ divergences from `ws`".
 Working in the tree:
 
 ```sh
-git clone git@github.com:farbenbuilds/ventijs.git
-cd ventijs
+git clone git@github.com:farbenbuilds/ventiws.git
+cd ventiws
 nix develop
 pnpm install
 pnpm build
@@ -35,7 +35,7 @@ pnpm build
 Published usage, once a release lands:
 
 ```sh
-pnpm add ventijs
+pnpm add ventiws
 ```
 
 `nix develop` pins Node.js, pnpm, and Zig 0.16.0. The first `pnpm build` compiles
@@ -45,7 +45,7 @@ builds are incremental.
 ## Usage
 
 ```ts
-import { WebSocket, WebSocketServer } from "ventijs";
+import { WebSocket, WebSocketServer } from "ventiws";
 
 const server = new WebSocketServer({ port: 8080 });
 

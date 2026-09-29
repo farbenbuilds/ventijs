@@ -4,7 +4,7 @@ import { WebSocket, WebSocketServer } from "../../../src/index";
 import { rawUpgrade, request, serve, UPGRADE_HEADERS } from "./upgrade-support";
 
 /// `ws` calls `this.shouldHandle(request)`, so reassigning the method on the
-/// server record changes the routing decision. ventijs consulted a predicate it
+/// server record changes the routing decision. ventiws consulted a predicate it
 /// held instead, which made the documented override a no-op that still looked
 /// correct when invoked directly.
 test("shouldHandle can be replaced on the server record", () => {
@@ -39,7 +39,7 @@ test("a replaced shouldHandle changes the routing decision", async () => {
 });
 
 /// `ws` assigns the negotiated subprotocol before it emits `open`, so anything
-/// already observing the socket at that point sees the selection. ventijs adopted
+/// already observing the socket at that point sees the selection. ventiws adopted
 /// the stream first, which is what sets `OPEN` and emits `open`, and published the
 /// protocol afterwards.
 ///

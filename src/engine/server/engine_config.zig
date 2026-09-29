@@ -4,7 +4,7 @@ const uwz = @import("uWebZockets");
 const options = @import("options.zig");
 
 /// The engine carves the HTTP/2 session and radix router regions unconditionally, and its
-/// defaults fill about 82 percent of the startup slab with a transport ventijs never negotiates,
+/// defaults fill about 82 percent of the startup slab with a transport ventiws never negotiates,
 /// so narrowing saves about 31 MB per instance at 128 connections.
 const h2_header_block_size: usize = 1024;
 const h2_response_header_size: usize = 1024;

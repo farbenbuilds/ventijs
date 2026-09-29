@@ -14,6 +14,16 @@ where it does not.
 Nothing is published to npm yet: the package ships one platform's compiled addon, so a
 `pnpm install` builds it. See the README.
 
+### Changed
+
+- **The package is `ventiws`.** The name, the repository and issue URLs, the vendored
+  API reference at `docs/ventiws.md`, the `ventiws.node` addon artifact, and the branded
+  strings in the error messages, symbol descriptions and harness identifiers all carry
+  the new name. The line was never published under the old one, so there is no published
+  version to redirect and no consumer to deprecate. `build.zig.zon` takes the fingerprint
+  Zig derives from the new package name, which is what makes the Zig package a different
+  identity from the one it was.
+
 ### Fixed
 
 The seven entries below were all reported by a tracker row marked `done` while the
@@ -96,7 +106,7 @@ Four, all deliberate, all recorded in `COMPATIBILITY.md` with the measurement be
 
 Two `ws` behaviours are also recorded as unreachable, with the architecture that removes
 them: `WS_NO_BUFFER_UTIL` and `WS_NO_UTF_8_VALIDATE` both guard an optional native npm
-module, and ventijs compiles no such module.
+module, and ventiws compiles no such module.
 
 ### Documentation
 

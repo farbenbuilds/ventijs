@@ -1,30 +1,30 @@
 <!--
-Provenance metadata, added by ventijs. The credit below is the same record in a
+Provenance metadata, added by ventiws. The credit below is the same record in a
 form a reader actually sees.
 
 Source: the `ws` project API reference (upstream `doc/ws.md`), copyright Einar
 Otto Stangvik, Arnout Kazemier, and contributors, MIT-licensed. Vendored as the
 compatibility contract for `ws` 8.21.3 and `@types/ws` 8.18.1, the versions
-ventijs targets. Recording: THIRD_PARTY_NOTICES.md.
+ventiws targets. Recording: THIRD_PARTY_NOTICES.md.
 
-Two local edits exist: the title, retitled from `ws` to `ventijs` because this is
-the document a ventijs reader opens, and the credit below. Everything after them
+Two local edits exist: the title, retitled from `ws` to `ventiws` because this is
+the document a ventiws reader opens, and the credit below. Everything after them
 is the upstream file byte for byte, and is not maintained by hand. The file is
 replaced wholesale when the pinned `ws` version changes, so no local edit to the
-body survives that replacement. ventijs is not affiliated with the `ws` project.
+body survives that replacement. ventiws is not affiliated with the `ws` project.
 -->
 
-# ventijs
+# ventiws
 
-> **This is the `ws` API reference. It is not a ventijs feature list.**
+> **This is the `ws` API reference. It is not a ventiws feature list.**
 >
 > Everything below is vendored from the [`ws`][ws-md] project's `doc/ws.md`: the
 > API reference for `ws` 8.21.3, copyright Einar Otto Stangvik, Arnout
 > Kazemier, and contributors, MIT-licensed. It records what `ws` does, so that
-> ventijs has one authority to hold itself against, and it says nothing about
-> what ventijs implements.
+> ventiws has one authority to hold itself against, and it says nothing about
+> what ventiws implements.
 >
-> For what ventijs implements, and how far it has got, read
+> For what ventiws implements, and how far it has got, read
 > [COMPATIBILITY.md](../COMPATIBILITY.md) and [compliance.md](compliance.md),
 > which map every item below to a module and a verdict.
 >

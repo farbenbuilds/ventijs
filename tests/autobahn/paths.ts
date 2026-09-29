@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /// The `agent` key the fuzzing client writes into `index.json`; it must match the config, which nests the report under it.
-export const AGENT = "ventijs";
+export const AGENT = "ventiws";
 
 /// The client URL is static JSON, so the port is a known value rather than the ephemeral one the target reports.
 export const DEFAULT_TARGET_PORT = 9001;

@@ -4,13 +4,13 @@ import { defer } from "./payload";
 import { reportWithoutClosing } from "./lifecycle";
 
 const NOT_ATTACHED =
-  "ventijs: the socket has no native transport attached; engine socket adoption is not implemented yet";
+  "ventiws: the socket has no native transport attached; engine socket adoption is not implemented yet";
 
 export function notAttachedError(): Error {
   return createError("ERR_INVALID_STATE", NOT_ATTACHED);
 }
 
-/// `ws` splits this three ways and only two are reachable from a public ventijs socket:
+/// `ws` splits this three ways and only two are reachable from a public ventiws socket:
 /// `CONNECTING` throws out of `send`, and not-`OPEN` goes to `sendAfterClose`, which accounts
 /// the bytes and tells the callback with no `error`, no close, and no `readyState` change.
 

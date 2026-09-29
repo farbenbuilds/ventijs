@@ -15,8 +15,8 @@ measurements, never from intuition.
 
 - `src/*.zig` data structures: connection slabs, parser scratch, outbound
   ring, high-water accounting. You own layout, not protocol semantics.
-- `bench/**` (to be created) and the versioned `ventijs-ws-compare` contract:
-  start a `ws` echo server and the ventijs equivalent, run one bounded client
+- `bench/**` (to be created) and the versioned `ventiws-ws-compare` contract:
+  start a `ws` echo server and the ventiws equivalent, run one bounded client
   workload (fixed connections, message size, duration, pinned tool), repeat
   three times, discard the warm-up, compare medians.
 - `CI_CD_PIPELINE.md` benchmark section: the regression gate fails below 90
@@ -84,7 +84,7 @@ code that violates them.
   lengths, no pointer arithmetic without a bound, no `unreachable` without a
   written invariant.
 - Benchmark claims require: same runner and quiet host, identical workload
-  against `ws` and ventijs, three repeats minus warm-up, medians, and
+  against `ws` and ventiws, three repeats minus warm-up, medians, and
   provenance (runner, Node.js, pnpm, Zig, lockfile). Estimates are labeled as
   estimates and never cited as measurements.
 - Performance assertions live in `bench/`, never in the unit suite.

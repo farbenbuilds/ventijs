@@ -34,7 +34,7 @@ function measure(scenario: (socket: Closable) => void): (socket: Closable) => Ou
 /// while every test in both tables still passed.
 ///
 /// Neither fixture is shared, because a socket that has been closed cannot be
-/// reused. `ws` runs first so a ventijs failure can never leave its server
+/// reused. `ws` runs first so a ventiws failure can never leave its server
 /// listening, and the reference is the oracle: an equal outcome returns it, and a
 /// divergence is the assertion that fails.
 export async function parity(scenario: (socket: Closable) => void): Promise<Outcome> {

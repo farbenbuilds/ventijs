@@ -40,7 +40,7 @@ pub const Channel = struct {
     /// context is the ring, not the channel: dispatch only needs the ring and
     /// the channel may be freed by the handler the dispatch invokes.
     pub fn open(channel: *Channel, env: napi.Env, dispatch_fn: napi.Callback) !void {
-        const name = try env.createString("ventijs.server");
+        const name = try env.createString("ventiws.server");
         var out: c.napi_threadsafe_function = undefined;
         const status = c.napi_create_threadsafe_function(
             env.handle,

@@ -1,4 +1,4 @@
-# Contributing to ventijs
+# Contributing to ventiws
 
 Focused changes that preserve `ws`-compatible behavior, end-to-end type safety,
 bounded memory use, and the anti-OOP architecture in
@@ -9,8 +9,8 @@ compatibility layer, or the engine; report a defect per [SECURITY.md](SECURITY.m
 ## Development environment
 
 ```sh
-git clone git@github.com:farbenbuilds/ventijs.git
-cd ventijs
+git clone git@github.com:farbenbuilds/ventiws.git
+cd ventiws
 nix develop
 pnpm install
 ```

@@ -1,4 +1,4 @@
-# ventijs Coding Conventions
+# ventiws Coding Conventions
 
 These conventions bind both languages in this repository. They adapt the spirit
 of the Linux kernel coding style to strict TypeScript and Zig 0.16.0, and they
@@ -143,8 +143,8 @@ receiver-style functions that silently mutate captured state.
   enforces this; the build fails otherwise.
 - **Exports:** named exports only. No default exports. Exceptions: `src/index.ts`
   mirrors `ws` with a default export that carries both the runtime value and the
-  instance type, so `import WebSocket from "ventijs"` and
-  `import type WebSocket from "ventijs"` stay drop-in; `tsdown.config.ts` and
+  instance type, so `import WebSocket from "ventiws"` and
+  `import type WebSocket from "ventiws"` stay drop-in; `tsdown.config.ts` and
   `scripts/oxlint-plugin.mjs` are tooling entry points, exempted by the oxlint
   overrides.
 - **Types over interfaces** unless declaration merging is required.

@@ -10,7 +10,7 @@ import { fixture, TEST_TIMEOUT_MS } from "./support";
 const WORKER_SOURCE = `
 const { parentPort } = require("node:worker_threads");
 const path = require("node:path");
-const addon = require(path.join(process.cwd(), "zig-out/lib/ventijs.node"));
+const addon = require(path.join(process.cwd(), "zig-out/lib/ventiws.node"));
 const handle = addon.createServer({ host: "127.0.0.1", port: 0 }, () => {});
 addon.listenServer(handle);
 parentPort.postMessage(handle);

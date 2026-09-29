@@ -29,13 +29,13 @@ offered.
 | Any published release                  | None; the version is `0.0.0` and no tag exists |
 | Anything older than the current `main` | No                                             |
 
-ventijs is pre-alpha, so a fix lands on `main` and is not backported. A consumer
+ventiws is pre-alpha, so a fix lands on `main` and is not backported. A consumer
 who pins a commit has to apply the patch themselves, and gets no coverage on a
 platform CI does not build, which today means everything but Linux.
 
 ## Threat model
 
-The application embedding ventijs is trusted; network peers are not. The
+The application embedding ventiws is trusted; network peers are not. The
 attacker-controlled surface is the same as a raw WebSocket server: the HTTP
 upgrade request including its headers, extensions, and path; every frame
 including fragmentation, control frames, masking keys, and claimed payload
@@ -92,7 +92,7 @@ provides.
 ## Verification
 
 [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md) lists every workflow and what each gates
-on, on `ubuntu-24.04` only. The conformance suite compares `ws` and ventijs on
+on, on `ubuntu-24.04` only. The conformance suite compares `ws` and ventiws on
 the same scenarios. The Autobahn harness is a CI job (`autobahn.yml`), gated
 against the committed known-failure baseline, and a case above the engine's
 compiled message capacity is reported as `skipped-capacity` rather than as a

@@ -1,9 +1,9 @@
 ---
-name: ventijs
-description: Work on ventijs, a pre-alpha TypeScript and Zig Node.js native addon that replaces the ws server API using the µWebZockets engine through napi-zig. Use for binding functions, the ws compatibility surface, Zig engine modules, tests, benchmarks, docs, and CI in this repository.
+name: ventiws
+description: Work on ventiws, a pre-alpha TypeScript and Zig Node.js native addon that replaces the ws server API using the µWebZockets engine through napi-zig. Use for binding functions, the ws compatibility surface, Zig engine modules, tests, benchmarks, docs, and CI in this repository.
 ---
 
-# ventijs Skill Map
+# ventiws Skill Map
 
 This file is the map from work in this repository to the installed skill pack.
 It carries nothing else: [AGENTS.md](AGENTS.md) holds the current branch state
@@ -82,5 +82,5 @@ output: never commit it or edit it by hand.
 Read `ws` before changing the surface. `ws` 8.21.3 and `@types/ws` 8.18.1 are
 pinned devDependencies, the declarations are vendored at
 `src/types/ws.d.ts`, and the upstream API reference is vendored at
-[docs/ventijs.md](docs/ventijs.md). Where `ws` is ambiguous, write the decision
+[docs/ventiws.md](docs/ventiws.md). Where `ws` is ambiguous, write the decision
 into the pull request; a silent divergence is a defect.

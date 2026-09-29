@@ -1,4 +1,4 @@
-//! The client suite's shared pieces: a `ws` server, a ventijs client, and a wait.
+//! The client suite's shared pieces: a `ws` server, a ventiws client, and a wait.
 //!
 //! Its own module because the two client suites need the same harness and the
 //! harness has one job that is easy to get wrong: every listener a test needs has to
@@ -56,7 +56,7 @@ export async function wsServer(
   };
 }
 
-/// A ventijs client, resolved once it is open, with `setup` run before the wait.
+/// A ventiws client, resolved once it is open, with `setup` run before the wait.
 ///
 /// `setup` is part of construction rather than something a test does next, because a
 /// `ws` peer that sends on connection frames its message before this client's `open`

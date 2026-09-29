@@ -15,6 +15,6 @@
     "build.zig.zon.json",
     "build.zig.zon.nix",
     "build.zig.zon.txt",
-    "ventijs.js"
+    "ventiws.js"
   ]
 }

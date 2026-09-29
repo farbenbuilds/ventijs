@@ -3,7 +3,7 @@
 //! Measured, not assumed: `ws` follows it. The condition at `websocket.js:846` is one arm
 //! of a credential rule, `!isSameHost || (_originalSecure && !isSecure)`, whose second arm
 //! only deletes `authorization`, `cookie` and `auth` (`websocket.js:851-856`) before
-//! `initAsClient` dials the new hop. ventijs refuses the hop outright (`redirect.ts:66`).
+//! `initAsClient` dials the new hop. ventiws refuses the hop outright (`redirect.ts:66`).
 //!
 //! The refusal is the safer of the two and it stays, but it is a divergence and a caller
 //! migrating has to be able to see it, so both legs run here and the expectation is
@@ -42,7 +42,7 @@ const wsLeg: Make = (url) =>
     ca: certificates().ca,
   }) as unknown as Client;
 
-const ventijsLeg: Make = (url) =>
+const ventiwsLeg: Make = (url) =>
   new WebSocket(
     url,
     undefined,
@@ -69,11 +69,11 @@ async function hop(make: Make): Promise<Hop> {
 }
 
 test(
-  "ws follows a wss: to ws: redirect and ventijs refuses it",
+  "ws follows a wss: to ws: redirect and ventiws refuses it",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const reference = await hop(wsLeg);
-    const ours = await hop(ventijsLeg);
+    const ours = await hop(ventiwsLeg);
 
     // `ws`: the downgrade is followed. The hop is announced, the new URL is the plaintext
     // one, and the destination really was dialled.
@@ -83,7 +83,7 @@ test(
     expect(reference.url).toMatch(/^ws:\/\//);
     expect(reference.requests).toBe(1);
 
-    // ventijs: refused before a hop exists, so there is no `redirect` to announce and the
+    // ventiws: refused before a hop exists, so there is no `redirect` to announce and the
     // destination was never dialled. The socket keeps the URL it was given.
     expect(ours.outcome).toBe("Cannot follow a redirect from wss: to ws:");
     expect(ours.hops).toEqual([]);

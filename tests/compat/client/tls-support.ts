@@ -27,7 +27,7 @@ let cached: Certificates | null = null;
 /// the client resolves.
 export function certificates(): Certificates {
   if (cached !== null) return cached;
-  const dir = mkdtempSync(join(tmpdir(), "ventijs-tls-"));
+  const dir = mkdtempSync(join(tmpdir(), "ventiws-tls-"));
   const key = join(dir, "key.pem");
   const cert = join(dir, "cert.pem");
   execFileSync("openssl", [

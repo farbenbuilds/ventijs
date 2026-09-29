@@ -34,7 +34,7 @@ export function forwardStderr(child: TargetChild): readonly string[] {
   child.stderr.on("data", (chunk: string) => {
     buffer = consume(buffer, chunk, (line) => {
       lines.push(line);
-      process.stderr.write(`ventijs-target: ${line}\n`);
+      process.stderr.write(`ventiws-target: ${line}\n`);
     });
   });
   return lines;

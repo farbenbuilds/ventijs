@@ -1,8 +1,8 @@
-//! The upgrade-route harness: a ventijs server behind a real HTTP upgrade, plus the
+//! The upgrade-route harness: a ventiws server behind a real HTTP upgrade, plus the
 //! peer a test drives it with.
 //!
 //! Its own module because both suites need it and it is the part that decides whether
-//! a test means anything: the `WebSocketServer` here is ventijs's own, so the sockets
+//! a test means anything: the `WebSocketServer` here is ventiws's own, so the sockets
 //! are the facade's and the frames on them are the codec's.
 
 import type { AddressInfo } from "node:net";

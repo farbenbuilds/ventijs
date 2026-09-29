@@ -1,4 +1,4 @@
-//! `createWebSocketStream` on ventijs's own server: the two `ws` behaviours a caller can
+//! `createWebSocketStream` on ventiws's own server: the two `ws` behaviours a caller can
 //! only see on a live connection, pinned to the values `ws` produces.
 
 import { expect, test } from "vitest";

@@ -27,7 +27,7 @@ export default defineConfig({
   exports: true,
   format: ["esm", "cjs"],
   platform: "node",
-  copy: ["zig-out/lib/ventijs.node"],
+  copy: ["zig-out/lib/ventiws.node"],
   /// `ws` is `module.exports = WebSocket` with the rest hung off it, so
   /// `const WebSocket = require("ws")` gives the class. A bundler's CJS output is a
   /// namespace object instead, which makes that line a silent `undefined` rather than

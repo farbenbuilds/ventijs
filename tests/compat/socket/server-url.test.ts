@@ -3,7 +3,7 @@
 //! `ws` assigns `_url` in one place, `initAsClient` (`websocket.js:719`), so a socket a
 //! server accepted never gets one and the getter returns `undefined`
 //! (`websocket.js:190`) — while `@types/ws` declares `readonly url: string`, so the
-//! reference runtime and its own types disagree. ventijs's state record starts `url` at
+//! reference runtime and its own types disagree. ventiws's state record starts `url` at
 //! `""` (`src/compat/socket/state.ts:40`).
 //!
 //! Recorded rather than fixed. The honest type is `string | undefined`, and that means
@@ -46,7 +46,7 @@ async function reported(make: () => Leg): Promise<{ url: string; present: boolea
 }
 
 test(
-  "a server socket reports undefined in ws and an empty string in ventijs",
+  "a server socket reports undefined in ws and an empty string in ventiws",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const reference = await reported(() => [

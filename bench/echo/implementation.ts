@@ -51,11 +51,11 @@ const wsServer = (server: WsServer): EchoServer => ({
   },
 });
 
-const ventijsImplementation = (): EchoImplementation => ({
-  id: "ventijs",
-  label: "ventijs (native engine, ws client)",
+const ventiwsImplementation = (): EchoImplementation => ({
+  id: "ventiws",
+  label: "ventiws (native engine, ws client)",
   createServer: (options: EchoServerOptions): EchoServer => nativeEchoServer(options),
-  // ventijs client construction throws ERR_INVALID_STATE, so the ws client
+  // ventiws client construction throws ERR_INVALID_STATE, so the ws client
   // drives both legs. Holding the client fixed leaves the server as the only
   // variable between the two rows of the report.
   connect: (url: string): EchoClient => wsClient(new WsSocket(url, { perMessageDeflate: false })),
@@ -87,6 +87,6 @@ const wsImplementation = (): EchoImplementation => ({
 });
 
 export const resolveImplementation = (id: ImplementationId): EchoImplementation => {
-  if (id === "ventijs") return ventijsImplementation();
+  if (id === "ventiws") return ventiwsImplementation();
   return wsImplementation();
 };
