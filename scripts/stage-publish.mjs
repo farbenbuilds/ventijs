@@ -20,6 +20,7 @@ import { join } from "node:path";
 
 const ADDON = "ventiws";
 const SCOPE_DIR = "@ventiws";
+const BINDING_PREFIX = "binding-";
 const STAGE = join("npm", ADDON);
 
 /// Repository-only fields. A published manifest carries no build script, no dev
@@ -42,15 +43,23 @@ function writeJson(path, value) {
 
 function bindingTargets(scaffold) {
   return Object.keys(scaffold.optionalDependencies ?? {})
-    .filter((name) => name.startsWith(`${SCOPE_DIR}/binding-`))
-    .map((name) => name.slice(`${SCOPE_DIR}/binding-`.length))
+    .filter((name) => name.startsWith(`${SCOPE_DIR}/${BINDING_PREFIX}`))
+    .map((name) => name.slice(`${SCOPE_DIR}/${BINDING_PREFIX}`.length))
     .sort();
 }
 
+/// Both sides of the comparison are targets, not directory names. The manifest names a
+/// package `@ventiws/binding-darwin-arm64` and the toolchain lays it down as a
+/// `binding-darwin-arm64` directory, so comparing one spelling against the other never
+/// matches and a complete release reports every platform as missing. A directory that
+/// does not carry the prefix is left whole, so it surfaces as undeclared rather than
+/// silently matching a target it was never built for.
 function builtTargets() {
   const scope = join(STAGE, SCOPE_DIR);
   if (!existsSync(scope)) return [];
-  return readdirSync(scope).sort();
+  return readdirSync(scope)
+    .map((name) => (name.startsWith(BINDING_PREFIX) ? name.slice(BINDING_PREFIX.length) : name))
+    .sort();
 }
 
 /// The gate: every platform the build graph declares has a compiled addon here. A shard
@@ -62,12 +71,12 @@ function verifyCompleteness(declared, built) {
   if (missing.length === 0 && extra.length === 0) return;
   for (const target of missing) {
     process.stderr.write(
-      `stage-publish: ${SCOPE_DIR}/binding-${target} is declared but not built\n`,
+      `stage-publish: ${SCOPE_DIR}/${BINDING_PREFIX}${target} is declared but not built\n`,
     );
   }
   for (const target of extra) {
     process.stderr.write(
-      `stage-publish: ${SCOPE_DIR}/binding-${target} is built but not declared\n`,
+      `stage-publish: ${SCOPE_DIR}/${BINDING_PREFIX}${target} is built but not declared\n`,
     );
   }
   throw new Error(
@@ -77,9 +86,11 @@ function verifyCompleteness(declared, built) {
 
 function verifyAddons(targets) {
   for (const target of targets) {
-    const addon = join(STAGE, SCOPE_DIR, `binding-${target}`, `${ADDON}.node`);
+    const addon = join(STAGE, SCOPE_DIR, `${BINDING_PREFIX}${target}`, `${ADDON}.node`);
     if (!existsSync(addon))
-      throw new Error(`stage-publish: ${SCOPE_DIR}/binding-${target} has no ${ADDON}.node`);
+      throw new Error(
+        `stage-publish: ${SCOPE_DIR}/${BINDING_PREFIX}${target} has no ${ADDON}.node`,
+      );
   }
 }
 
@@ -104,17 +115,18 @@ function main() {
   for (const file of SCAFFOLDED) rmSync(join(STAGE, file), { force: true });
 
   const optional = {};
-  for (const target of declared) optional[`${SCOPE_DIR}/binding-${target}`] = repo.version;
+  for (const target of declared) optional[`${SCOPE_DIR}/${BINDING_PREFIX}${target}`] = repo.version;
   const manifest = { ...repo };
   for (const key of REPO_ONLY) delete manifest[key];
   writeJson(scaffoldPath, { ...manifest, optionalDependencies: optional });
 
   for (const target of declared) {
-    const path = join(STAGE, SCOPE_DIR, `binding-${target}`, "package.json");
+    const path = join(STAGE, SCOPE_DIR, `${BINDING_PREFIX}${target}`, "package.json");
     writeJson(path, { ...readJson(path), version: repo.version });
   }
   console.log(`stage-publish: ventiws@${repo.version} with ${declared.length} platform packages`);
-  for (const target of declared) console.log(`stage-publish:   ${SCOPE_DIR}/binding-${target}`);
+  for (const target of declared)
+    console.log(`stage-publish:   ${SCOPE_DIR}/${BINDING_PREFIX}${target}`);
 }
 
 main();
