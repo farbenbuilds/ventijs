@@ -29,6 +29,18 @@ function main() {
   if (ask(["rev-parse", "--verify", "--quiet", `refs/tags/${tag}`]) !== "")
     throw new Error(`tag-release: ${tag} already exists`);
 
+  // `bump.yml` pushes the version to `main` after a merge, so a clone that has not pulled
+  // carries the previous one, and tagging that publishes nothing new. The branch push would
+  // then be rejected as a non-fast-forward, reporting a missing `git pull` as a git
+  // plumbing failure.
+  spawnSync("git", ["fetch", "--quiet", "origin", branch], { stdio: "ignore" });
+  const local = ask(["rev-parse", "HEAD"]);
+  const remote = ask(["rev-parse", `origin/${branch}`]);
+  if (local !== "" && remote !== "" && local !== remote)
+    throw new Error(
+      `tag-release: ${branch} differs from origin/${branch}; run \`git pull --ff-only\` first`,
+    );
+
   push(["tag", tag]);
   try {
     // The branch goes with the tag because a bump commit is usually still local-only, and
