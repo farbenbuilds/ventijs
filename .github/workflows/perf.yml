@@ -14,12 +14,15 @@ on:
     # because it pins the engine and its vendored dependencies.
     paths:
       - "**.zig"
-      - "build.zig.zon"
       - "bench/**"
-      - "package.json"
       - "pnpm-lock.yaml"
       - "tsconfig.json"
       - ".github/workflows/perf.yml"
+    # No `build.zig.zon` and no `package.json`, unlike the `pull_request` filter below. A
+    # version bump rewrites the version in both, and a version string cannot change echo
+    # throughput, so spending a full benchmark on `bump.yml`'s commit measures nothing. A
+    # dependency or engine change still reaches this through a pull request, which keeps the
+    # broader filter.
   pull_request:
     branches:
       - main

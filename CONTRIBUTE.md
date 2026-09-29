@@ -48,7 +48,7 @@ plus `pnpm install`.
 | `pnpm finalize:exports` | node     | Add the `types` conditions `tsdown` leaves out of `exports`   |
 | `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
 | `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
-| `pnpm release`          | bumpp    | Bump the version across the versioned surfaces                |
+| `pnpm release`          | node     | Tag the version the tree carries, to recover a failed run     |
 | `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
 
 `tsdown` rewrites the `exports` map on every build, so the `types` conditions
@@ -131,25 +131,32 @@ pnpm lockfile.
 
 ## Releasing
 
-1. Merge the work. `.github/workflows/bump.yml` advances the prerelease counter
-   on every merge to `main`, writing `package.json`, `build.zig.zon`,
-   `README.md`, and the `CHANGELOG.md` section for that merge's commits. A
-   merged change is therefore already versioned; a release is not a second
-   chance to bump.
+1. Merge the work. That is the whole procedure.
 2. Pass lint, format, typecheck, unit, and build, then run the `ws` conformance
    suite and Autobahn and retain the benchmark report.
 3. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
    artifacts.
-4. Run `pnpm release`, which tags the version the tree already carries and
-   pushes the tag. The tag is the release decision, so this is the step that
-   publishes.
 
-Step 1 is deliberately unconditional: a pre-alpha's number tells a reader
+`.github/workflows/bump.yml` does the rest on the merge: it advances the
+prerelease counter, writing `package.json`, `build.zig.zon`, `README.md`, and
+the `CHANGELOG.md` section for that merge's commits; commits that; and tags it.
+The tag is what `publish.yml` waits for, so it builds the six platform packages
+across five runners, checks the tag against `package.json`, assembles `npm/`,
+publishes, and writes the GitHub Release. No machine has to authenticate to npm
+or push a tag, which is what lets the Linux workstation stay a development
+machine.
+
+The counter is deliberately unconditional: a pre-alpha's number tells a reader
 nothing, so inferring the bump from commit subjects would tie the published
 version to how a change happened to be described. Reaching `1.0.0` is a manual
-edit of the three versioned files followed by a tag, because it claims the
-surface is settled. `pnpm bump` runs the same step by hand, and
+edit of the three versioned files, because it claims the surface is settled.
+`pnpm bump` runs the version step by hand and `pnpm release` tags by hand, both
+for recovering a run that failed partway;
 `tests/tooling/version.test.ts` fails if the versioned surfaces disagree.
+
+Because a merge is a release, several merges are several releases. Batch them
+by disabling the workflow, or hold the merges, if one release per merge is too
+often.
 
 The tag is what publishes. `.github/workflows/publish.yml` builds the six
 platform packages across five runners, checks the tag against `package.json`,

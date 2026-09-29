@@ -1,48 +1,44 @@
-name: Bump version
+name: Bump and release
 
-# A release is a tag, so the version a release will publish has to exist before the tag
-# does. Merging is not releasing, so the version advances here on every merge to `main` and
-# the tag stays the single act that puts a version on npm.
+# A merge to `main` is a release. The version advances, the tag is created, and the tag is
+# what `publish.yml` listens for, so nothing here needs a machine that can authenticate to
+# npm or push a tag by hand.
 on:
   push:
     branches:
       - main
-  # The escape hatch, and the only one. A squash merge concatenates every commit body into
-  # the message on `main`, so a branch whose commits *mention* the skip marker below produces
-  # a push GitHub reads as "skip all CI" -- and then nothing runs, including this workflow,
-  # which is the one job whose entire purpose is to react to a merge. No step can catch that
-  # from inside, because a skipped push starts no workflow to hold the step. A dispatch
-  # trigger is what makes the failure recoverable without a second machine.
+  # The escape hatch. A run that failed after the version commit and before the tag leaves
+  # `main` bumped but untagged, and this is how that is finished without waiting for the
+  # next merge. It is idempotent: both steps below no-op when there is nothing to do.
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# Two merges in quick succession both rewrite `package.json`. Queued rather than
-# cancelled, because a cancelled run that had already pushed would leave the next one
-# bumping a version that was never released.
+# Two merges in quick succession both rewrite `package.json`, and the second would tag a
+# version the first never tagged. Queued rather than cancelled, because a cancelled run
+# that had already pushed would leave the next one to bump a version that was never
+# released -- and a tag is what publishes, so that is a version on npm nobody chose.
 concurrency:
   group: bump-main
   cancel-in-progress: false
 
 jobs:
-  bump:
-    name: Advance the prerelease
+  release:
+    name: Bump, tag, publish
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    # The commit lands with `[skip ci]`, which is what stops the seven workflows whose
-    # path filters match `package.json` or `build.zig.zon` from spending a full engine
-    # build and a full benchmark on a four-line generated diff. This is the other half of
-    # that arrangement: the marker is in a message, and a commit made without it would
-    # re-enter this workflow and bump forever.
-    #
-    # `startsWith` rather than a search, because a squash merge puts every commit body into
-    # the message on `main` and a body that merely *describes* the marker reads as a merge
-    # that skipped CI. `git log --grep` then cannot tell the two apart either, which is why
-    # the changelog boundary and this guard share one prefix and never the whole message.
+    timeout-minutes: 10
+    # The commit this job makes lands on `main` and starts this workflow again. The marker
+    # in its subject is the loop guard, and `startsWith` rather than a search because a
+    # squash merge puts every commit body into the message on `main`, where a body that
+    # merely *describes* the prefix would read as a release.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The tag step has to know whether this version was already tagged, and a shallow
+          # clone has no tags to compare against.
+          fetch-depth: 0
 
       - name: Advance the counter
         id: bump
@@ -50,19 +46,38 @@ jobs:
           node scripts/bump-version.mjs
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push
+      - name: Commit the version
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Nothing to do when the merge already carried a bump, which is what a re-run of
-          # a superseded push looks like. Failing here would page for a no-op.
+          # A re-run after a superseded push finds the version already advanced. Failing
+          # here would page for a no-op, and the tag step below still has work to do.
           if git diff --quiet; then
-            echo "already at the bumped version"
+            echo "version already advanced"
             exit 0
           fi
+          # No CI skip marker here, deliberately. This commit is what the tag points at, and
+          # GitHub reads a marker anywhere in a tagged commit's message -- so a tagged bump
+          # carrying one would skip `publish.yml` and publish nothing, silently. Saving a few
+          # minutes of runner time is not worth a release that does not happen.
           git add package.json build.zig.zon README.md CHANGELOG.md
-          git commit -m "chore(release): v${{ steps.bump.outputs.version }} [skip ci]"
-          # A merge landing during this job makes the push a non-fast-forward. Rebasing
-          # onto it is a rebase of four lines onto a tree that did not touch them.
+          git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
+          # A merge landing during this job makes the push a non-fast-forward. Rebasing onto
+          # it is a rebase of four lines onto a tree that did not touch them.
           git pull --rebase origin main
           git push origin HEAD:main
+
+      - name: Tag the version
+        env:
+          TAG: v${{ steps.bump.outputs.version }}
+        run: |
+          # Idempotent, so a re-run finishes a run that failed between the two steps rather
+          # than refusing on a tag it is looking at. `check-release-tag` still refuses a tag
+          # that disagrees with the manifest it is cut from.
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists"
+            exit 0
+          fi
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "tagged $TAG, which is what publish.yml waits for"

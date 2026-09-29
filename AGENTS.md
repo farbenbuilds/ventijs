@@ -86,8 +86,8 @@ inside `nix develop` (Node 24, pnpm 12, Zig 0.16.0, zls).
 | Typecheck                     | `pnpm typecheck`                                                                   |
 | Zig unit tests                | `zig build test` (runs `src/engine-tests/`)                                        |
 | Zig formatting                | `zig fmt --check --exclude zig-pkg src build.zig`                                  |
-| Advance the prerelease        | `pnpm bump`                                                                        |
-| Tag the current version       | `pnpm release`                                                                     |
+| Advance the prerelease        | `pnpm bump` (CI does this on merge)                                                |
+| Tag the current version       | `pnpm release` (CI does this on merge)                                             |
 
 The first `pnpm build:binding` compiles BoringSSL, lsquic, libdeflate, and
 zlib from pinned package dependencies into `.zig-cache/` (roughly a gigabyte);
@@ -199,7 +199,10 @@ declarations through the package `exports` map; it needs `tsdown` output.
   that is native for it and publishes six packages. It holds no npm secret:
   `id-token: write` is the whole credential, because every package's trusted
   publisher on npm is configured against this workflow's filename and the `npm`
-  environment. `.github/workflows/bump.yml` advances the prerelease counter on
-  every merge to `main`, so `pnpm release` only tags the version the tree
-  already carries; `tests/tooling/version.test.ts` holds the three version
-  sources, the changelog's shape, and the bump loop guard together.
+  environment. A merge to `main` is a release: `.github/workflows/bump.yml`
+  advances the prerelease counter, commits it, and tags it, and the tag is what
+  `publish.yml` waits for, so no machine authenticates to npm or pushes a tag.
+  That commit carries no CI skip marker, because the tag points at it and GitHub
+  reads a marker anywhere in a tagged commit's message.
+  `tests/tooling/version.test.ts` holds the three version sources, the
+  changelog's shape, the bump loop guard, and that marker rule together.
