@@ -171,6 +171,15 @@ jobs:
           cache: true
           install: false
 
+      - name: Install the publish client
+        # pnpm 11+ strips the bundled npm from the Node runtime, so the npm on PATH is the
+        # runner image's npm 10, which predates trusted publishing entirely; `napi-zig
+        # publish` shells out to that client. Install the one the registry exchanges.
+        run: |
+          pnpm add -g npm@^12
+          echo "node $(node --version)"
+          echo "npm  $(npm --version) at $(which npm)"
+
       - name: Download every platform package
         uses: actions/download-artifact@v4
         with:
