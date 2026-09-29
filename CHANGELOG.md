@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-alpha.3] - 2026-09-29
+
+### Fixed
+
+- fix(ci): dispatch the publish run, since a GITHUB_TOKEN push starts none
+
 ## [1.0.0-alpha.1] - 2026-09-29
 
 The first release with per-platform addons. `1.0.0-alpha` shipped a tarball with
