@@ -46,6 +46,8 @@ plus `pnpm install`.
 | `pnpm format`           | oxfmt    | Format TypeScript, JSON, and Markdown                         |
 | `pnpm format:check`     | oxfmt    | Verify formatting without writing                             |
 | `pnpm finalize:exports` | node     | Add the `types` conditions `tsdown` leaves out of `exports`   |
+| `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
+| `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
 | `pnpm release`          | bumpp    | Bump the version across the versioned surfaces                |
 | `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
 
@@ -136,5 +138,26 @@ pnpm lockfile.
 3. Pass lint, format, typecheck, unit, and build on the release commit, then run
    the `ws` conformance suite and Autobahn and retain the benchmark report.
 4. Verify [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) against the shipped
-   artifacts, then tag `v<version>`, publish with provenance, and inspect the
-   tarball before announcing.
+   artifacts, then tag `v<version>` and push the tag.
+
+The tag is what publishes. `.github/workflows/publish.yml` builds the six
+platform packages across four runners, checks the tag against `package.json`,
+assembles `npm/`, and publishes under npm trusted publishing, which needs no
+token in the repository. A run of that workflow by hand defaults to a dry run
+that packs every tarball without publishing.
+
+Each package has to be configured for trusted publishing once, by a maintainer
+with npm 2FA enabled and npm 11.16 or newer:
+
+```sh
+npx napi-zig npm-init --repo farbenbuilds/ventiws --workflow publish.yml
+```
+
+That is the step with no dry run. It publishes a first version of any package
+that does not exist yet and points the rest of them at the workflow, so run it
+before the first release rather than during one.
+
+A release publishes six packages: `ventiws` plus one per platform. A platform
+that fails to build fails the release rather than shipping a version that
+cannot be installed on it, which is what `pnpm stage:publish` checks for and
+what makes the per-shard upload a gate rather than a convenience.

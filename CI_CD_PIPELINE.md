@@ -1,8 +1,8 @@
 # ventiws CI/CD Pipeline
 
-Seven workflows gate the repository. A passing pipeline is evidence for the
-configurations it exercised; it is not proof that no memory or security defect
-remains.
+Eight workflows gate the repository. Seven gate a change; the eighth publishes a
+release. A passing pipeline is evidence for the configurations it exercised; it
+is not proof that no memory or security defect remains.
 
 ## Job matrix
 
@@ -15,17 +15,85 @@ remains.
 | `zig-test.yml` | Zig unit tests, Binding lifecycle tests    | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite |
 | `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                       |
 | `perf.yml`     | Echo throughput against `ws`               | push and pull request on a Zig, manifest, or `bench/` path, manual                   | the benchmark report, uploaded as an artifact              |
+| `publish.yml`  | Platform build matrix, publish to npm      | a `v*` tag, manual                                                                   | every platform builds and its addon loads and echoes       |
 
-Every runner is `ubuntu-24.04`. Node is `node@24` and pnpm `12.4.2` through
-`pnpm/setup@v2`, Zig is `0.16.0` through `mlugg/setup-zig@v2`, and
-`nix-lint.yml` installs neither. The pnpm store is cached; the jobs that build
-the addon cache `.zig-cache` and `zig-pkg` under a key hashing `build.zig`,
-`build.zig.zon`, and `src/builds/**`, so a change to any of those is a cold
-build.
+Every gating workflow runs on `ubuntu-24.04`. Node is `node@24` and pnpm
+`12.4.2` through `pnpm/setup@v2`, Zig is `0.16.0` through
+`mlugg/setup-zig@v2`, and `nix-lint.yml` installs neither. The pnpm store is
+cached; the jobs that build the addon cache `.zig-cache` and `zig-pkg` under a key
+hashing `build.zig`, `build.zig.zon`, and `src/builds/**`, so a change to any of
+those is a cold build.
 
-No workflow builds a second platform, and none publishes. There is no native
-matrix job and no release workflow, so a macOS, Windows, or musl artifact has
-never been built or run by CI. A passing run is a statement about Linux only.
+The seven gating workflows are Linux-only. `publish.yml` is the exception, and
+it is the only job that builds a second platform: it exists to produce artifacts
+rather than to gate a change, so its matrix is the published set.
+
+## Release and native matrix
+
+`publish.yml` runs on a `v*` tag and on demand. It is the only workflow that
+builds anything but Linux, and the reason is that a published addon has to exist
+for every platform the package claims to support.
+
+| Job             | Runner             | Platform built                                        |
+| --------------- | ------------------ | ----------------------------------------------------- |
+| `bindings`      | `ubuntu-24.04`     | `linux-x64-gnu`                                       |
+| `bindings`      | `ubuntu-24.04-arm` | `linux-arm64-gnu`                                     |
+| `bindings`      | `macos-15-intel`   | `darwin-x64`                                          |
+| `bindings`      | `macos-15`         | `darwin-arm64`                                        |
+| `bindings-musl` | `node:24-alpine`   | `linux-x64-musl`                                      |
+| `publish`       | `ubuntu-24.04`     | the bundle, the staged manifests, and the npm publish |
+
+One runner per platform, each native for the platform it builds. That is a
+constraint rather than a preference. Zig's distribution carries no Apple SDK, so
+a `darwin` target built anywhere else fails at link; and the engine builds its
+vendored BoringSSL, lsquic, libdeflate, and zlib for the host target, which the
+release path then links into a cross-compiled addon. A cross build therefore
+carries an x64 glibc BoringSSL inside an arm64 or Alpine binary: it links, it
+loads, and it misbehaves later, which is the one failure a green pipeline cannot
+catch. `-Dnpm-platform` narrows the graph to the one target the runner owns.
+
+`ubuntu-24.04-arm` is free on a public repository and hard-fails the workflow on
+a private one, so going private silently loses a published platform.
+`node:24-alpine` is a musl host that already carries a Node the JavaScript
+actions can run, which a bare `alpine` image does not.
+
+There is no `win32-x64` row. `napi_zig` 0.2.8 asks for `x86_64-windows-none`, an
+ABI-less target with no `ws2_32` to link, so no Windows addon can be built on any
+runner. It returns either with an in-repo compile step that asks for
+`x86_64-windows-gnu` or with a fixed upstream release, and
+`src/builds/platforms.zig` is where the reason is recorded.
+
+Each shard runs `tests/binding/addon.test.ts` and `tests/binding/codec` against
+the addon it just built, so no platform is published on the evidence that it
+compiled. That loads the artifact, reads its compiled capacities, and round-trips
+frames through the native codec. It deliberately does not open a loopback
+connection: a release gate that also depends on the runner's network
+configuration would block a release for a reason that has nothing to do with the
+artifact, and the socket suites already run in `zig-test.yml`.
+
+`publish.yml` does not gate a pull request. A pull request that changes the
+engine, the addon ABI, or the loader can be merged and still ship a broken
+release, because nothing in the gating matrix runs a second platform.
+
+It also cannot publish a Windows package, for the same reason it has no `win32-x64`
+row. That is a packaging gap on top of a runtime one: the vendored `xev` event
+loop fails `accept` and `read` with `error.Unexpected` on Windows, so the engine
+binds and then cannot serve. Everything that does not open a socket passes
+there, which is what the release smoke test is scoped to.
+
+## Publishing
+
+`publish.yml` publishes with npm trusted publishing: the job holds
+`id-token: write`, npm exchanges the workflow's OIDC token for a short-lived
+publish token, and there is no `NPM_TOKEN` secret in the repository. Each
+package is configured once, by a maintainer, with
+`napi-zig npm-init --repo farbenbuilds/ventiws --workflow publish.yml`.
+
+`publish.yml` publishes the per-platform packages before the main package, so a
+main package is never on the registry pointing at bindings that are not there
+yet. It checks the tag against `package.json` first, so a tag pushed by hand
+cannot publish a version nobody released, and it defaults `workflow_dispatch` to
+a dry run that packs every tarball and uploads them without publishing.
 
 ## Lint and type gates
 
@@ -141,15 +209,16 @@ so a change to any of those with no usable prefix restore compiles BoringSSL,
 lsquic, libdeflate, and zlib from source, which is minutes on its own. Against a
 warm cache the build is seconds.
 
-| Job            | Most expensive step                          |
-| -------------- | -------------------------------------------- |
-| `ts-lint.yml`  | `pnpm typecheck`, two full `tsc` programs    |
-| `ts-test.yml`  | the addon build, on a cold Zig cache         |
-| `zig-test.yml` | the addon build, on a cold Zig cache         |
-| `autobahn.yml` | the addon build; the suite itself is seconds |
-| `perf.yml`     | `pnpm build`, addon plus bundle plus dts     |
-| `zig-lint.yml` | `zig fmt --check` over `src`                 |
-| `nix-lint.yml` | the Nix install, once per runner             |
+| Job            | Most expensive step                                     |
+| -------------- | ------------------------------------------------------- |
+| `ts-lint.yml`  | `pnpm typecheck`, two full `tsc` programs               |
+| `ts-test.yml`  | the addon build, on a cold Zig cache                    |
+| `zig-test.yml` | the addon build, on a cold Zig cache                    |
+| `autobahn.yml` | the addon build; the suite itself is seconds            |
+| `perf.yml`     | `pnpm build`, addon plus bundle plus dts                |
+| `zig-lint.yml` | `zig fmt --check` over `src`                            |
+| `nix-lint.yml` | the Nix install, once per runner                        |
+| `publish.yml`  | the cross-compiles, one per target, on a cold Zig cache |
 
 `autobahn.yml` sets `timeout-minutes: 60` on the suite job and `5` on the gate
 for the cold path, not the warm one; `perf.yml` sets `45`. The rest use the
@@ -157,15 +226,16 @@ default and finish in a couple of minutes.
 
 ## Running a gate locally
 
-| Workflow       | Local equivalent                                                      |
-| -------------- | --------------------------------------------------------------------- |
-| `ts-lint.yml`  | `pnpm lint && pnpm format:check && pnpm typecheck`                    |
-| `zig-lint.yml` | `zig fmt --check --exclude zig-pkg src build.zig`                     |
-| `nix-lint.yml` | `nix fmt -- --check $(git ls-files '*.nix' \| grep -v '\.zon\.nix$')` |
-| `ts-test.yml`  | `pnpm exec vitest run tests/protocol tests/compat/options`            |
-| `zig-test.yml` | `zig build test` and `pnpm test`                                      |
-| `autobahn.yml` | `pnpm test:autobahn`, or `-- --full`; needs Docker                    |
-| `perf.yml`     | `pnpm bench`, or `pnpm bench -- --gate` for the verdict               |
+| Workflow       | Local equivalent                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ts-lint.yml`  | `pnpm lint && pnpm format:check && pnpm typecheck`                                                                                                           |
+| `zig-lint.yml` | `zig fmt --check --exclude zig-pkg src build.zig`                                                                                                            |
+| `nix-lint.yml` | `nix fmt -- --check $(git ls-files '*.nix' \| grep -v '\.zon\.nix$')`                                                                                        |
+| `ts-test.yml`  | `pnpm exec vitest run tests/protocol tests/compat/options`                                                                                                   |
+| `zig-test.yml` | `zig build test` and `pnpm test`                                                                                                                             |
+| `autobahn.yml` | `pnpm test:autobahn`, or `-- --full`; needs Docker                                                                                                           |
+| `perf.yml`     | `pnpm bench`, or `pnpm bench -- --gate` for the verdict                                                                                                      |
+| `publish.yml`  | `pnpm run build:bindings -- --platform=<one of the five>`, then `pnpm exec vitest run --no-file-parallelism tests/binding/addon.test.ts tests/binding/codec` |
 
 `pnpm lint` already runs `scripts/check-conventions.mjs`, so a full-tree
 `pnpm exec lefthook run pre-commit --all-files` adds what `pnpm lint` does not:
@@ -175,7 +245,19 @@ tree.
 
 ## What a run does not cover
 
-- Platforms other than `ubuntu-24.04`, including musl, macOS, and Windows.
+- Any gating workflow on a platform other than `ubuntu-24.04`.
+  `publish.yml` builds and smoke-tests a second platform, but only on its own
+  schedule: a pull request is gated on Linux alone.
+- WebSocket traffic on Windows, and therefore sixteen suite files there. The vendored
+  `xev` event loop completes `accept` and `read` with `error.Unexpected` on Windows, so
+  the engine binds and then resets the peer. This is true of `main` as well, so a Windows
+  checkout cannot run `pnpm test` green; `zig build test` and the suites that do not open
+  a socket do pass there.
+- `linux-arm64-musl`, `linux-arm-gnu`, `linux-arm-musl`, `freebsd-x64`,
+  `android-arm64`, and every Windows triple. A published ventiws ships five
+  platform packages and the loader names those five, so a host outside them
+  installs cleanly and is told what exists rather than reaching a missing file.
+  Windows is a deliberate gap, not an oversight: see the release matrix above.
 - Any `ws` conformance scenario that the vendored `ws` 8.21.3 devDependency
   cannot itself satisfy; the two implementations are compared, so a `ws` defect
   is a shared blind spot.
