@@ -25,6 +25,7 @@ export function controlFrame(
     payload = undefined;
   } else if (typeof mask === "function") {
     failure = mask;
+    mask = undefined;
   }
   if (typeof payload === "number") payload = String(payload);
   if (state.readyState !== OPEN) {
@@ -39,7 +40,9 @@ export function controlFrame(
       RangeError,
     );
   }
-  const status = writeFrame(state, kind, bytes);
+  // `ping(data, mask, cb)`, as in `ws`: a client that asks for an unmasked control frame gets
+  // one. A server still refuses, which `codec-outbound.ts` owns.
+  const status = writeFrame(state, kind, bytes, true, false, mask !== false);
   if (status === "ok") {
     defer(failure);
     return;

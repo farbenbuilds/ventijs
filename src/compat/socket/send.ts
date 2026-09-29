@@ -7,6 +7,7 @@ import { sendFramed } from "./codec-send";
 import { reportWithoutClosing } from "./lifecycle";
 import { notAttachedError, reportFailure } from "./send-failure";
 import { defer, notOpenError, statusError, toPayload } from "./payload";
+import { afterPendingSend, isBlob, sendBlob } from "./send-blob";
 
 export function sendData(
   state: SocketState,
@@ -15,8 +16,26 @@ export function sendData(
   callback: unknown,
 ): void {
   if (state.readyState === CONNECTING) throw notOpenError(CONNECTING);
-  const payload = toPayload(data);
+  afterPendingSend(state, () => framePayload(state, data, options, callback));
+}
+
+/// Frames and stages one message. Exported, and not reached through `sendData` by the blob
+/// path: `sendData` queues behind the very read that is asking it to run, so a blob would
+/// wait on itself for ever. See `send-blob.ts`.
+export function framePayload(
+  state: SocketState,
+  data: unknown,
+  options: unknown,
+  callback: unknown,
+): void {
   const failure = resolveCallback(options, callback);
+  // A blob is read before it is framed, so it leaves through its own path; the callback is
+  // the only report, which is what `ws` does with one too.
+  if (isBlob(data)) {
+    sendBlob(state, data, options, failure);
+    return;
+  }
+  const payload = toPayload(data);
   if (state.readyState !== OPEN) {
     // `sendAfterClose`: the bytes are accounted and the callback is told, nothing
     // else. Routing this through `reportFailure` would close a merely mid-close socket.

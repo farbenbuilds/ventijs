@@ -108,3 +108,30 @@ test(
     }
   },
 );
+
+test.each([
+  ["serverMaxWindowBits: 15", { serverMaxWindowBits: 15 }],
+  ["clientMaxWindowBits: 12", { clientMaxWindowBits: 12 }],
+])(
+  "a ws client asking for %s connects and its messages arrive",
+  { timeout: TEST_TIMEOUT_MS },
+  async (_name, perMessageDeflate) => {
+    // Both of these are valid `@types/ws` options, and both used to be answered with a
+    // bare 400: the refusal was unconditional on any `server_max_window_bits`, and any
+    // `client_max_window_bits` below 15 was read as a limit on this server rather than as
+    // the window the client said it would use. 15 is the maximum legal value and the one
+    // this build emits, so refusing it refused a connection `ws` accepts.
+    const harness = await upgradeHarness(deflateServer());
+    const accepted = nextSocket(harness.server);
+    const client = await openClient(harness.url, { perMessageDeflate });
+    try {
+      const socket = await accepted;
+      const message = messageFrom(socket);
+      client.send(COMPRESSIBLE);
+      expect(await message).toBe(COMPRESSIBLE);
+    } finally {
+      client.close();
+      await harness.close();
+    }
+  },
+);

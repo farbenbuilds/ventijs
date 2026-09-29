@@ -110,7 +110,7 @@ pub fn framed(
     fin: bool,
     payload: []const u8,
 ) Framed {
-    const encoded = peer.tx.encode(kind, fin, payload, false, &.{});
+    const encoded = peer.tx.encode(kind, fin, payload, false, &.{}, true);
     return .{ .result = encoded, .bytes = peer.tx.bytes(), .masked = peer.tx.last_was_masked() };
 }
 

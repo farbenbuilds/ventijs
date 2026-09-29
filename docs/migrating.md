@@ -61,16 +61,23 @@ staging rings all scale with it.
 
 Compression works on both routes, negotiated with `ws`'s own rules, over the pinned
 engine's libdeflate. Two things differ, and both are about the compressor being
-one-shot rather than a streaming zlib:
+one-shot rather than a streaming zlib; the third point below used to differ and now
+matches `ws`:
 
 - Both directions always answer `server_no_context_takeover; client_no_context_takeover`.
   Carrying a deflate window between messages needs a streaming compressor. Declining is
   always legal and costs compression ratio, not correctness, and it means a message
   never depends on the one before it.
-- A `*_max_window_bits` below 15 is **declined during negotiation**, which for a client
-  means the handshake is refused. `ws` accepts one because its zlib can produce it;
-  accepting it here would mean compressing with a different window than the one agreed,
-  and the peer's inflater would reject the stream mid-message.
+- A `server_max_window_bits` below 15 is **declined during negotiation**, which for a
+  client means the handshake is refused. This is the only difference from `ws` left in the
+  module: `ws` accepts one, answers it, and then compresses at 15 regardless, so its
+  header claims a window the stream does not use. Declining is the honest reading, and
+  answering it would mean compressing with a different window than the one agreed, which
+  the peer's inflater would reject mid-message.
+- A `client_max_window_bits` at any legal value is **accepted**. In a client offer it is
+  the window the client will compress with, not a limit on this server (RFC 7692 section
+  7.1.1.2), and the inflater reads the window out of the stream, so a 10-bit client is
+  fine to serve. `ws` agrees, and ventijs used to refuse it with a bare 400.
 
 A message you send in fragments goes out uncompressed, for the same reason: RFC 7692
 needs a sync flush at each fragment boundary. Messages you _receive_ fragmented and
@@ -79,8 +86,8 @@ compressed are read correctly, so interoperability is unaffected in both directi
 ## What is deliberately different
 
 Each is recorded in [COMPATIBILITY.md](../COMPATIBILITY.md) with the `ws` behaviour it
-replaces. Most are a refusal to do something unsafe; two are stricter limits and one
-is an addition.
+replaces. Most are a refusal to do something unsafe, two are a difference `ws` has
+with its own types, one is a stricter limit, and one is an addition.
 
 - **A `WebSocket` subclass that is not a ventijs socket record** fails with
   `ERR_INVALID_HANDLE` from inside an `upgrade` listener, where `ws` fails with a
@@ -96,14 +103,33 @@ is an addition.
   `verifyClient` headers and status codes are dropped; a rejection status outside
   400-599 is clamped to 500, where `ws` writes the literal string
   `HTTP/1.1 700 undefined`.
-- **`maxBufferedChunks` is not enforced.** It is echoed on `server.options` at the
-  `ws` default so `Object.keys(server.options)` matches, but the codec holds at most
-  one read's un-decoded tail, which is already far below the 262144 `ws` bounds.
-  Lowering it changes nothing; `maxFragments` and `maxPayload` are the limits that
-  do something.
 - **Errors carry a stable `code`.** A refused frame reports `ws`'s own `WS_ERR_*`
   code, constructor, and message, so a caller keying on `error.code` reads what it
   always did. Where `ws` reports nothing, ventijs adds an `ERR_*` code.
+
+Three more are the ones a caller is most likely to hit, because each changes what a
+`ws` application sends or receives rather than what it is allowed to do:
+
+- **A `wss:` to `ws:` redirect is refused.** ventijs answers
+  `Cannot follow a redirect from wss: to ws:` and never contacts the destination.
+  `ws` follows the hop, after deleting `authorization`, `cookie` and `auth`. If your
+  deployment relies on that hop, it will fail here.
+- **`url` on a socket a server accepted is `""`,** where `ws` gives `undefined`.
+  `"url" in socket` is `true` on both, so only the value tells the two apart, and
+  `@types/ws` declares `readonly url: string` anyway, so `ws` disagrees with its own
+  types here. `url` is the URL as parsed on a client.
+- **`Too many buffered chunks` is reported as `Too many message fragments`.** The
+  `error.code` is `WS_ERR_TOO_MANY_BUFFERED_PARTS` and the close code is 1008 on both,
+  as in `ws`; only the message differs, and only when the `maxBufferedChunks` bound is
+  the one reached. A caller keying on `error.code` is unaffected; a caller matching on
+  the message is not.
+
+Two behaviours that used to differ now match `ws` exactly, so they are no longer on the
+list, but they are worth knowing about because they change the bytes on the wire: the
+library's upgrade headers go over the caller's, a caller's `Authorization` wins over URL
+credentials, `origin: ''` sends no `Origin` header, and `handshakeTimeout: 0` means no
+deadline. `send(data, { mask: false })` puts an unmasked frame on a client's wire, which
+the peer then refuses, exactly as `ws` does, and a server never masks.
 
 ## Testing against both
 

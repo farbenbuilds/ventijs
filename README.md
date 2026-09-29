@@ -12,8 +12,13 @@ observable behaviour rather than its source. ventijs is not affiliated with the
 as the pinned contract, credited in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**ventijs is pre-alpha.** Nothing is published, so an install builds the addon
-for one platform, and the surface may change without a major version bump.
+**ventijs is at `1.0.0-alpha`.** Nothing is published to npm yet, so an
+install builds the addon for one platform, and the surface may change between
+alpha releases. What "alpha" means here is bounded: the `ws` compatibility
+contract is tracked row by row in
+[COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventijs knowingly
+differs from `ws` are listed in [CHANGELOG.md](CHANGELOG.md) under "Known
+divergences from `ws`".
 
 ## Install
 

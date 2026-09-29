@@ -20,16 +20,32 @@ export function driveInbound(state: SocketState, transport: Duplex, pending?: Bu
   });
 }
 
-/// Feeds one read and delivers what it decoded. A full queue stops the decoder rather than
-/// overwriting a queued payload, and the tail is re-fed once drained: pausing the transport
-/// here would deadlock a peer that only sends in response.
+/// Feeds one read and delivers what it decoded. A full event store stops the decoder rather
+/// than overwriting a queued payload, and the tail is re-fed once drained: pausing the
+/// transport here would deadlock a peer that only sends in response.
 export function ingest(state: SocketState, chunk: Buffer): void {
   const handle = codecOf(state);
   if (handle === null) return;
-  if (state.pendingInput !== null) {
-    // A deferred delivery holds earlier bytes, so this chunk would decode out of order.
+  // A deferred delivery holds earlier bytes, so this read would decode out of order. `ws`
+  // queues it too; dropping it is how a peer outrunning the application loses messages.
+  if (state.pendingInput.length > 0) {
+    enqueue(state, chunk);
     return;
   }
+  consume(state, handle, chunk);
+}
+
+/// `ws` refuses at the same bound with the same code from `Receiver.prototype._write`: an
+/// unbounded queue behind a wedged parse is the exhaustion this option exists to prevent.
+function enqueue(state: SocketState, chunk: Buffer): void {
+  if (state.maxBufferedChunks > 0 && state.pendingInput.length >= state.maxBufferedChunks) {
+    refuseByCodec(state, "tooManyBufferedParts");
+  } else {
+    state.pendingInput.push(chunk);
+  }
+}
+
+function consume(state: SocketState, handle: bigint, chunk: Buffer): void {
   let rest = chunk;
   while (rest.length > 0) {
     const outcome = feedCodec(handle, rest);
@@ -56,7 +72,7 @@ export function ingest(state: SocketState, chunk: Buffer): void {
     if (outcome.kind === "consumed") return;
     // The store was full and `deliver` has emptied it, unless the delivery paused.
     if (isDeliveryPaused(state)) {
-      state.pendingInput = rest;
+      enqueue(state, rest);
       return;
     }
   }
@@ -90,11 +106,26 @@ function guardedResume(state: SocketState): void {
   }
 }
 
-/// What a deferred delivery resumes with. The pause is a *parse* pause, as in `ws`, so
-/// the tail needs a home the resume can find: `state.pendingInput`, at most one read.
+/// What a deferred delivery resumes with. The pause is a *parse* pause, as in `ws`, so the
+/// queued reads need a home the resume can find: `state.pendingInput`, oldest first. The
+/// loop rather than one read, because a drain can defer again part-way through the queue.
 function resume(state: SocketState): void {
-  drainReleased(state);
-  const pending = state.pendingInput;
-  state.pendingInput = null;
-  if (pending !== null && pending.length > 0) ingest(state, pending);
+  drainReleased(state, () => {
+    guardedResume(state);
+  });
+  const queued = state.pendingInput;
+  const handle = codecOf(state);
+  // Cleared before the next read is fed, so a chunk arriving from that read's own delivery
+  // is consumed in order rather than queued behind the tail it is draining.
+  state.pendingInput = [];
+  if (handle === null) return;
+  for (const [index, chunk] of queued.entries()) {
+    if (codecOf(state) === null) return;
+    consume(state, handle, chunk);
+    if (!isDeliveryPaused(state)) continue;
+    // `consume` queued its own read's unread tail, so the reads behind go after that tail:
+    // this order is what keeps the bytes in the order the peer sent them.
+    state.pendingInput = state.pendingInput.concat(queued.slice(index + 1));
+    return;
+  }
 }

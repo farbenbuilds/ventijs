@@ -7,6 +7,9 @@ export const DEFAULT_MAX_PAYLOAD = 100 * 1024 * 1024;
 /// absent from `@types/ws`, so it is read rather than declared.
 export const DEFAULT_MAX_FRAGMENTS = 16 * 1024;
 export const DEFAULT_MAX_REDIRECTS = 10;
+/// `ws` defaults this to 256 KiB in both constructors and coerces it with `| 0`, so it is
+/// read rather than declared. It bounds reads queued behind a paused parse; see `codec-inbound.ts`.
+export const DEFAULT_MAX_BUFFERED_CHUNKS = 256 * 1024;
 
 /// How long a close handshake may stay unfinished before the socket is torn down. `ws`
 /// bounds this at 30 seconds, and the bound is what makes a close a decision: a peer that

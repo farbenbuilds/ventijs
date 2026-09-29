@@ -8,7 +8,7 @@ import type { WebSocket } from "./ws";
 
 export type BinaryType = "nodebuffer" | "arraybuffer" | "fragments";
 
-/// `BinaryType` widened by `"blob"`, which `ws` accepts at runtime but the vendored types omit.
+/// `BinaryType` widened by `"blob"`, which `ws` takes at runtime and `@types/ws` omits.
 export type BinaryTypeValue = BinaryType | "blob";
 
 export type SocketEventMap = {
@@ -19,9 +19,9 @@ export type SocketEventMap = {
   ping: [data: Buffer];
   pong: [data: Buffer];
   upgrade: [request: IncomingMessage];
-  /// The request is the only way to change a header on a hop that has not gone out yet.
+  /// The only way to change a header on a hop that has not gone out yet.
   redirect: [url: string, request: ClientRequest];
-  /// How a 401's `www-authenticate` is reached: a listener that returns without reading the response.
+  /// How a 401's `www-authenticate` is read, by a listener that returns without reading it.
   "unexpected-response": [request: ClientRequest, response: IncomingMessage];
 };
 
@@ -46,33 +46,37 @@ export type SocketState = EmitterState<SocketEventMap> & {
   fragmentsOpen: boolean;
   errorEmitted: boolean;
   attachment: SocketAttachment | null;
-  /// Retained so `terminate()` can destroy it and the close event can latch; null for native attachments.
+  /// So `terminate()` can destroy it and `close` can latch; null for a native one.
   transport: Duplex | null;
-  /// Null outside a codec's lifetime, and for native attachments, which the engine frames itself.
+  /// Null outside a codec's lifetime, and for a native attachment, which frames itself.
   codec: bigint | null;
   closeTimer: ReturnType<typeof setTimeout> | null;
-  /// On the socket because a server socket has no server to read them from.
+  /// On the socket, which has no server to read it from.
   closeTimeout: number;
-  /// `ws`'s `allowSynchronousEvents`, the same choice and the same default of true.
+  /// `ws`'s `allowSynchronousEvents`, same choice and same default.
   allowSynchronousEvents: boolean;
   deliveryPaused: boolean;
-  /// A *parse* pause, as in `ws`: the unheard message's frames stay unread, one read's worth.
-  pendingInput: Buffer | null;
+  /// A *parse* pause, as in `ws`: unheard frames stay unread, queued rather than dropped.
+  pendingInput: Buffer[];
   /// `skipUTF8Validation` inverted, latched at creation: a codec is one connection.
   validateUtf8: boolean;
-  /// Carried rather than read back because a socket outlives its codec.
+  /// Carried, not read back: a socket outlives its codec.
   maxPayload: number;
   maxFragments: number;
-  /// With `http.request` there is no socket until the 101, so `close()` on a `CONNECTING` client cancels it.
+  /// `close()` on a `CONNECTING` client cancels the request; there is no socket until the 101.
   cancelHandshake: (() => void) | null;
-  /// Whether this connection negotiated RFC 7692 `permessage-deflate`, the only thing that may set RSV1.
+  /// A blob read in flight, which stops a later `send` from overtaking it.
+  pendingSend: Promise<void> | null;
+  /// The read count `ws` bounds `pendingInput` at. Zero is no limit.
+  maxBufferedChunks: number;
+  /// Whether RFC 7692 was negotiated; only it may set RSV1.
   compressible: boolean;
-  /// `ws` defaults the threshold to 1024 and spells "no threshold" as 0, so this does.
+  /// `ws` defaults it to 1024 and spells "no threshold" as 0.
   threshold: number;
   autoPong: boolean;
-  /// `ws`'s `generateMask`; client-side only, because a server never masks.
+  /// `ws`'s `generateMask`, client-side only: a server never masks. `maskScratch` is its key
+  /// buffer, so the per-frame call allocates nothing.
   generateMask: ((mask: Buffer) => void) | null;
-  /// Held here so the client's per-frame send allocates nothing.
   maskScratch: Buffer;
 };
 

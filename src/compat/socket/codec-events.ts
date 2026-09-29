@@ -26,11 +26,12 @@ export function deliver(state: SocketState, resume: () => void): void {
   drain(state, false, resume);
 }
 
-/// Delivers the event a pause was waiting for, then goes back to the policy. The policy is
-/// not re-applied to that event: it has had its decision, so re-applying defers it for
-/// ever. One event per tick is what `ws` delivers.
-export function drainReleased(state: SocketState): void {
-  drain(state, true, () => undefined);
+/// Delivers the event a pause was waiting for, then goes back to the policy. The policy is not
+/// re-applied to that event: it has had its decision, so re-applying defers it for ever. One
+/// event per tick is what `ws` delivers. `resume` is the caller's own drain rather than a
+/// no-op, because the pause taken by the *next* event is what must come back for the queue.
+export function drainReleased(state: SocketState, resume: () => void): void {
+  drain(state, true, resume);
 }
 
 function drain(state: SocketState, released: boolean, resume: () => void): void {
@@ -40,19 +41,18 @@ function drain(state: SocketState, released: boolean, resume: () => void): void 
   let honoured = released;
   while (pendingCodecEvents(handle) > 0 && selectCodecEvent(handle)) {
     const event = selectedCodecEvent(handle);
-    // `allowSynchronousEvents: false` moves the application's turn to observe a message
-    // to a later tick, and stops the drain so the frames behind it are not read until the
-    // application has heard about this one. The automatic pong is not deferred with it:
-    // RFC 6455 section 5.5.2 gives that a deadline and the option does not. Decided
-    // *before* the event is taken, because taking retires the slot and deferring after
-    // would discard the very message the pause is waiting for.
+    // `allowSynchronousEvents: false` moves the application's turn to observe a message to a
+    // later tick, and stops the drain so the frames behind it are not read until then. The
+    // automatic pong is not deferred with it: RFC 6455 section 5.5.2 gives that a deadline
+    // and the option does not. Decided *before* the event is taken, because taking retires
+    // the slot and deferring after would discard the message the pause is waiting for.
     if (!honoured && state.allowSynchronousEvents === false && isDeferrable(event)) {
       pauseUntilNextTick(state, resume);
       return;
     }
     honoured = false;
-    // Read inside the select/take window: the only one where the reassembly buffer is
-    // still this message, so fragments are readable here or not at all.
+    // Read inside the select/take window: the only one where the reassembly buffer is still
+    // this message, so fragments are readable here or not at all.
     const ends = codecFragmentEnds(handle);
     takeCodecEvent(handle);
     if (event === null) continue;

@@ -1,6 +1,11 @@
 /// The only option rules that reach into the build, where the rest of the normalizer is arithmetic.
 
-import { DEFAULT_MAX_FRAGMENTS, DEFAULT_MAX_PAYLOAD, invalidOption } from "./shared";
+import {
+  DEFAULT_MAX_BUFFERED_CHUNKS,
+  DEFAULT_MAX_FRAGMENTS,
+  DEFAULT_MAX_PAYLOAD,
+  invalidOption,
+} from "./shared";
 
 /// The `maxPayload` a codec will enforce. It must be an integer within the ceiling, because that
 /// number is now the *actual* limit; `ws` coerces both, which is the harder failure to diagnose.
@@ -17,6 +22,22 @@ export function maxPayloadOf(source: unknown, ceiling: () => number): number {
 /// Same shape and the same zero-means-no-limit rule as `maxPayloadOf`; `ws` guards it with `_maxFragments > 0`.
 export function maxFragmentsOf(source: unknown, ceiling: () => number): number {
   return boundedOption("maxFragments", source, DEFAULT_MAX_FRAGMENTS, ceiling);
+}
+
+/// The same zero-means-no-limit rule, with no compiled ceiling: this bounds a count of
+/// retained reads rather than a buffer, and `ws` guards it with `_maxBufferedChunks > 0`
+/// too. An out-of-range value is refused rather than coerced, because a coerced negative
+/// becomes a limit nothing can exceed and a silently dead queue is the harder failure.
+export function maxBufferedChunksOf(source: unknown): number {
+  const raw = (source as { readonly [key: string]: unknown }).maxBufferedChunks;
+  if (raw === undefined) return DEFAULT_MAX_BUFFERED_CHUNKS;
+  if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 0) {
+    invalidOption(
+      `The maxBufferedChunks option must be an integer in [0, ${Number.MAX_SAFE_INTEGER}] (received ${String(raw)})`,
+      RangeError,
+    );
+  }
+  return raw;
 }
 
 function boundedOption(

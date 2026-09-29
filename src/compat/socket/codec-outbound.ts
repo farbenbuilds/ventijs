@@ -23,10 +23,13 @@ function ordinalOf(kind: CodecKindName): number {
 }
 
 /// The caller's own masking key, or empty for the engine to draw one. Reused rather than
-/// allocated per frame, because `generateMask` runs before every masked frame. A server
-/// never masks, so `isServer` answers before the callback is asked, as in `ws`.
-function maskFor(state: SocketState): Uint8Array {
-  if (state.isServer || state.generateMask === null) return NO_MASK;
+/// allocated per frame, because `generateMask` runs before every masked frame.
+///
+/// A server never masks, so `isServer` answers before the callback is asked, as in `ws`; that
+/// refusal is deliberate and documented. Honouring `mask: false` on a client is not, because a
+/// caller who asked for an unmasked frame was given a masked one and nothing said so.
+function maskFor(state: SocketState, mask: boolean): Uint8Array {
+  if (state.isServer || !mask || state.generateMask === null) return NO_MASK;
   state.generateMask(state.maskScratch);
   return state.maskScratch;
 }
@@ -46,11 +49,20 @@ export function writeFrame(
   payload: Buffer,
   fin = true,
   compress = false,
+  mask = true,
 ): FrameStatus {
   const handle = state.codec;
   if (handle === null) return "closed";
   if (!isWritable(state)) return state.transport?.writableEnded === true ? "closed" : "closing";
-  const length = encodeCodecFrame(handle, ordinalOf(kind), fin, payload, compress, maskFor(state));
+  const length = encodeCodecFrame(
+    handle,
+    ordinalOf(kind),
+    fin,
+    payload,
+    compress,
+    mask,
+    maskFor(state, mask),
+  );
   if (length < 0) return encodeFailure(-length);
   const framed = codecOutbound(handle);
   if (state.transport === null) return "closed";

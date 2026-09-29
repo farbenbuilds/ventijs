@@ -55,8 +55,9 @@ pub fn transmit() type {
         /// complete data message: RSV1 marks the *first* frame of a message, and a per-frame
         /// deflate stream with no context between frames is not something a receiver can
         /// concatenate. `mask` is `ws`'s `generateMask`: the caller's own four bytes, or empty
-        /// to draw one from the operating system. A server never masks either way.
-        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8) outbound.Encoded {
+        /// to draw one from the operating system. A server never masks either way, and
+        /// `mask_frame` is a client opting out through `send`'s `mask` option.
+        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8, mask_frame: bool) outbound.Encoded {
             const opcode = header.wire_opcode(kind) orelse return .{ .failed = .invalid_opcode };
             if (payload.len > self.max_message_bytes) return .{ .failed = .unsupported_message_length };
             const control = opcode.is_control();
@@ -72,7 +73,7 @@ pub fn transmit() type {
             const wire = deflate.wire(&self.compress, payload, self.max_message_bytes, control, fin, compress) catch
                 return .{ .failed = .unsupported_message_length };
 
-            const masked = self.role == .client;
+            const masked = self.role == .client and mask_frame;
             const base: zslay.types.FrameHeader = .{
                 .fin = fin,
                 .rsv1 = false,

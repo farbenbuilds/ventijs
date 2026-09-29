@@ -16,8 +16,8 @@ export type SocketPayload = {
 /// which throws the same `TypeError` upstream.
 export type BufferLikeSource = ArrayLike<number>;
 
-/// Normalizes the `ws` payload surface. Blob payloads stay unsupported until the engine
-/// owns blobs; `Buffer.from` rejects them with the same `TypeError` as upstream.
+/// Normalizes the `ws` payload surface, minus the blob, which `send.ts` routes to
+/// `send-blob.ts` before this is reached: a blob has to be read before it can be framed.
 export function toPayload(data: unknown): SocketPayload {
   if (typeof data === "number") return { bytes: Buffer.from(String(data), "utf8"), binary: false };
   if (typeof data === "string") {

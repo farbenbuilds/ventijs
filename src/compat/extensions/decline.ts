@@ -1,27 +1,24 @@
-/// Whether an offer is one this server cannot answer: a predicate over two values, which
-/// has to be readable without scrolling past three other functions.
+/// Whether an offer is one this server cannot answer. The window rules are `ws`'s at
+/// `permessage-deflate.js:160-172`, with the compressor's own limit in `window.ts`.
 
 import type { NormalizedPerMessageDeflate } from "../../types/options";
-import { WINDOW_BITS, type Normalized } from "./params";
+import type { Normalized } from "./params";
+import { serverWindowUsable } from "./offer-window";
 
-/// Whether a server cannot accept an offer it would otherwise take.
 export function declines(options: NormalizedPerMessageDeflate, offer: Normalized): boolean {
   if (options.serverNoContextTakeover === false && offer.server_no_context_takeover) return true;
-  if (offer.server_max_window_bits !== undefined) return true;
-  if (
-    typeof offer.client_max_window_bits === "number" &&
-    offer.client_max_window_bits < WINDOW_BITS
-  ) {
+  if (offer.server_max_window_bits !== undefined && !serverWindowUsable(options, offer)) {
     return true;
   }
-  // A client that named no window will not accept a server that names one, and `ws`
-  // refuses to answer one that did. The valueless form is the opposite: a client asking
-  // to be given one, which is why only `undefined` is tested here.
-  if (
-    typeof options.clientMaxWindowBits === "number" &&
-    offer.client_max_window_bits === undefined
-  ) {
-    return true;
+  // A valueless `client_max_window_bits` is the client saying "choose", and `false` is this
+  // server declining to, so the offer is refused rather than answered.
+  if (offer.client_max_window_bits === true && options.clientMaxWindowBits === false) return true;
+  // RFC 7692 section 7.1.2.1 requires a value in a server response, so a client that named no
+  // window cannot be answered with one, and this server cannot give more than it asked for.
+  if (typeof options.clientMaxWindowBits === "number") {
+    if (offer.client_max_window_bits === undefined) return true;
+    const asked = offer.client_max_window_bits;
+    if (typeof asked === "number" && options.clientMaxWindowBits > asked) return true;
   }
   return false;
 }

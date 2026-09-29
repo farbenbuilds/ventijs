@@ -84,6 +84,7 @@ export function completeUpgrade(
     // because a codec's limits are fixed at creation.
     acceptedState.maxPayload = state.normalizedOptions.maxPayload;
     acceptedState.maxFragments = state.normalizedOptions.maxFragments;
+    acceptedState.maxBufferedChunks = state.normalizedOptions.maxBufferedChunks;
     // The negotiation reaches the codec, not just the header: RSV1 means nothing without
     // it, so a codec built for an uncompressed connection refuses a compressed frame
     // with 1002.

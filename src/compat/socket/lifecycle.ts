@@ -8,8 +8,15 @@ import { closeCodeOf } from "./close-code";
 import { toCloseReason } from "./close-reason";
 import { armCloseTimeout, closeFramed } from "./codec-close";
 import { closeFailure } from "./close-failure";
+import { socketStateOf } from "./state";
 
 const EMPTY = Buffer.alloc(0);
+
+/// Whether the close frame is on the wire: the point `ws` settles `_final` at, which
+/// `Sender.close` reaches by ending its socket with the frame and the codec does not.
+export function closeFrameWritten(socket: object): boolean {
+  return socketStateOf(socket)?.closeFrameSent === true;
+}
 
 export function finishConnection(state: SocketState, code: number, reason: Buffer): void {
   if (state.readyState === CLOSED) return;

@@ -1,7 +1,7 @@
 {
   "name": "ventijs",
-  "version": "0.0.0",
-  "description": "A drop-in replacement for ws for Node.js, built on the first-party µWebZockets Zig engine via napi-zig. Pre-alpha.",
+  "version": "1.0.0-alpha",
+  "description": "A drop-in replacement for ws for Node.js, built on the first-party µWebZockets Zig engine via napi-zig.",
   "homepage": "https://github.com/farbenbuilds/ventijs#readme",
   "bugs": {
     "url": "https://github.com/farbenbuilds/ventijs/issues"

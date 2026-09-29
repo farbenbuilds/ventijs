@@ -68,7 +68,7 @@ test "a caller's own mask is the key that goes on the wire" {
     // unmasks into the wrong plaintext.
     var peer = support.client();
     const wanted = [4]u8{ 0xde, 0xad, 0xbe, 0xef };
-    const length = peer.tx.encode(.text, true, "hello", false, &wanted).ok;
+    const length = peer.tx.encode(.text, true, "hello", false, &wanted, true).ok;
     const frame = peer.tx.bytes();
     // Two header bytes, then the key, then the masked payload.
     try testing.expectEqualSlices(u8, &wanted, frame[2..6]);
@@ -85,7 +85,7 @@ test "a mask that is not four bytes is refused before anything is framed" {
     var peer = support.client();
     try testing.expectEqual(
         codec.Failure.invalid_mask,
-        peer.tx.encode(.text, true, "hello", false, "abc").failed,
+        peer.tx.encode(.text, true, "hello", false, "abc", true).failed,
     );
 }
 
@@ -93,8 +93,8 @@ test "the encoder refuses a payload over the cap" {
     const Small = codec.codec(2);
     var peer = Small.init(.server, trusted(8, 8)) catch unreachable;
     defer peer.deinit();
-    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.tx.encode(.text, true, "123456789", false, &.{}).failed);
-    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false, &.{}).ok);
+    try testing.expectEqual(codec.Failure.unsupported_message_length, peer.tx.encode(.text, true, "123456789", false, &.{}, true).failed);
+    try testing.expectEqual(@as(usize, 10), peer.tx.encode(.text, true, "12345678", false, &.{}, true).ok);
 }
 
 test "a round trip through the encoder and the decoder preserves the message" {
