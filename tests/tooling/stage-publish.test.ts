@@ -15,8 +15,17 @@ import { expect, test } from "vitest";
 
 const SCRIPT = fileURLToPath(new URL("../../scripts/stage-publish.mjs", import.meta.url));
 const SCOPE = "@ventiws";
-const TARGETS = ["linux-x64-gnu", "darwin-arm64"];
 const VERSION = "9.9.9";
+const BINDING = "binding-";
+
+/// The real published set, read rather than restated: the script resolves it relative to
+/// its own URL and so always reads the repository's manifest, which means a test that
+/// invents its own list would be asserting against a gate that was told to fail.
+const TARGETS = (
+  JSON.parse(readFileSync(new URL("../../src/builds/platforms.json", import.meta.url), "utf8")) as {
+    platforms: string[];
+  }
+).platforms;
 
 /// A tree shaped like the publish job assembles it: the scaffolded manifest, one
 /// directory per platform, and the bundle `tsdown` produced. `built` overrides which
@@ -33,11 +42,12 @@ function scaffold(built: readonly string[] = TARGETS): string {
 
   const stage = join(root, "npm", "ventiws");
   mkdirSync(join(stage, SCOPE), { recursive: true });
-  const optional: Record<string, string> = {};
-  for (const target of TARGETS) optional[`${SCOPE}/binding-${target}`] = "0.0.0";
-  writeFileSync(join(stage, "package.json"), JSON.stringify({ optionalDependencies: optional }));
+  // A shard's scaffolded manifest declares only the platform that shard built, which is
+  // what the toolchain generates from a narrowed `.npm.platforms`; the gate must not
+  // learn the release's platform set from it.
+  writeFileSync(join(stage, "package.json"), JSON.stringify({ name: "ventiws" }));
   for (const target of built) {
-    const dir = join(stage, SCOPE, `binding-${target}`);
+    const dir = join(stage, SCOPE, `${BINDING}${target}`);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "package.json"), "{}");
     writeFileSync(join(dir, "ventiws.node"), "not a real addon");
@@ -74,14 +84,14 @@ test("a complete tree stages, and every platform reaches the manifest", () => {
   // Pinned to the release rather than the scaffold's `0.0.0`, or npm resolves nothing.
   expect(manifest.version).toBe(VERSION);
   const optional = manifest.optionalDependencies as Record<string, string>;
-  expect(optional[`${SCOPE}/binding-darwin-arm64`]).toBe(VERSION);
+  expect(optional[`${SCOPE}/binding-${TARGETS[0]}`]).toBe(VERSION);
   expect(Object.keys(optional)).toHaveLength(TARGETS.length);
 });
 
 test("a failed shard stops the release and names the platform", () => {
-  const result = run(scaffold(["linux-x64-gnu"]));
+  const result = run(scaffold(TARGETS.slice(0, -1)));
   expect(result.code).not.toBe(0);
-  expect(result.out).toContain("binding-darwin-arm64");
+  expect(result.out).toContain(`binding-${TARGETS.at(-1)}`);
   expect(result.out).toContain("declared but not built");
 });
 
@@ -95,7 +105,7 @@ test("a directory whose compile produced no addon is refused", () => {
   // A scaffolded directory is not evidence that anything was built for it, so the
   // completeness check has to look at the artifact and not only the name.
   const root = scaffold();
-  rmSync(join(root, "npm", "ventiws", SCOPE, "binding-darwin-arm64", "ventiws.node"));
+  rmSync(join(root, "npm", "ventiws", SCOPE, `${BINDING}${TARGETS[0]}`, "ventiws.node"));
   const result = run(root);
   expect(result.code).not.toBe(0);
   expect(result.out).toContain("ventiws.node");
