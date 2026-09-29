@@ -324,12 +324,14 @@ jobs:
     # renders it grey with a reason, where a skipped step inside a green job would be
     # indistinguishable from having made a release.
     #
-    # `workflow_dispatch` as well as `push`, because `bump.yml` starts this workflow by
-    # dispatching it at the tag: a push made with `GITHUB_TOKEN` creates no run, so the tag
-    # never reaches the `push` trigger. The tag ref is the real gate -- a dispatch at a
-    # branch has no version to describe, and a dry run's publish job is skipped rather than
-    # successful.
-    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
+    # `needs.publish.result` cannot be the whole gate: a dry run *skips the publish step*, so
+    # the publish job still reports success and the page would be written for a version that
+    # never reached npm. The dry-run exclusion is therefore mirrored from the publish step
+    # below, which is what makes the two agree.
+    #
+    # `workflow_dispatch` is accepted as well as `push`, because `bump.yml` starts this
+    # workflow by dispatching it at the tag: a push made with `GITHUB_TOKEN` creates no run.
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !(github.event_name == 'workflow_dispatch' && inputs.dry-run) && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
     steps:
       - uses: actions/checkout@v6
         with:
