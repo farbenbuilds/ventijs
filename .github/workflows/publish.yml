@@ -234,8 +234,11 @@ jobs:
       - name: Assemble the packages
         run: pnpm run stage:publish
 
-      - name: Pack without publishing
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true' }}
+      - name: Pack the tarballs
+        # Both paths, because `napi-zig publish` packs its own and then deletes each
+        # tarball, so a real run leaves nothing to upload. Packing here also means the
+        # dry run and the real run assemble byte-identical archives, and the artifact is
+        # what a failed publish is inspected with.
         run: |
           mkdir -p pnpm-pack
           for dir in npm/ventiws npm/ventiws/@ventiws/*; do
@@ -249,10 +252,51 @@ jobs:
         # package is never on the registry pointing at bindings that are not there yet.
         run: pnpm exec napi-zig publish
 
-      - name: Upload the published tarballs
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.dry-run == 'true' }}
+      - name: Upload the packed tarballs
+        # `always()` because a failed publish is exactly when someone wants to see what
+        # was about to go out.
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: npm-tarballs
           path: pnpm-pack
           if-no-files-found: warn
+
+  release:
+    name: GitHub Release
+    # After the publish, not instead of it: a release page for a version that is not on the
+    # registry advertises an install that fails, which is worse than no page.
+    needs: [bindings, bindings-musl, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # `contents: write` creates the release and pushes its tag. No npm scope: this job
+    # cannot publish, and trusted publishing is bound to this workflow's publish job
+    # anyway.
+    permissions:
+      contents: write
+    # A dry run has published nothing, so there is no version to describe. Skipping the job
+    # renders it grey with a reason, where a skipped step inside a green job would be
+    # indistinguishable from having made a release.
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.publish.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The notes are the changelog sections between this tag and the one before it, and
+          # `git describe --tags HEAD^` needs the earlier tag to be present locally.
+          fetch-depth: 0
+
+      - name: Write the release notes
+        run: node scripts/release-notes.mjs release-notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # A prerelease is marked as one, so the release list does not present an alpha as
+          # the newest stable thing. The tag is the version: the publish job already refused
+          # a tag that disagrees with the manifest, so this cannot describe a version that
+          # was never published.
+          flags=(--title "$TAG" --notes-file release-notes.md --verify-tag)
+          if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "${flags[@]}"
