@@ -5,7 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
-## [Unreleased]
+## [1.0.0-alpha.1] - 2026-09-29
+
+The first release with per-platform addons. `1.0.0-alpha` shipped a tarball with
+a single platform's compiled addon baked in, so it installed only where that
+platform's binary happened to fit; this one ships the addon as a package npm
+selects per host, and the release itself is a tag rather than a manual publish.
 
 ### Added
 
