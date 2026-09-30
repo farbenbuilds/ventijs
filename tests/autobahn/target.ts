@@ -120,12 +120,17 @@ function onEvent(state: TargetState, event: EngineEvent): void {
 function start(): void {
   const state: TargetState = { ...echoState(), closing: false, exited: false };
   const addon = loadVentiwsAddon();
-  state.handle = addon.createServer(
-    { host: readHost(), port: readPort(), path: "/", maxMessageBytes: MESSAGE_CAP },
-    (event) => {
-      onEvent(state, event);
-    },
-  );
+  const config = {
+    host: readHost(),
+    port: readPort(),
+    path: "/",
+    maxMessageBytes: MESSAGE_CAP,
+    // The suite's deflate groups drive RFC 7692, which the engine compresses only when negotiated.
+    permessageDeflate: true,
+  };
+  state.handle = addon.createServer(config, (event) => {
+    onEvent(state, event);
+  });
   addon.listenServer(state.handle);
   process.on("SIGTERM", () => {
     requestClose(state);

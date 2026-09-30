@@ -172,24 +172,20 @@ jobs:
         # builds the addon once.
         #
         # The suite is most of the job and its cost is a near-constant per case
-        # inside the Python client rather than anything on the Node or Zig side,
-        # so the two selections cost about the same. A matrix of four *jobs* would
-        # cut wall clock the same way but pay the addon build four times, so it is
-        # sharded in-process instead.
+        # inside the Python client rather than anything on the Node or Zig side.
+        # A matrix of four *jobs* would cut wall clock the same way but pay the
+        # addon build four times, so it is sharded in-process instead.
         #
         # The per-case `duration` the report carries stays raw in summary.json,
         # so the next run can re-derive the shard weights from a measurement
         # rather than from a derivation.
         env:
           AUTOBAHN_SHARDS: "4"
-        # The scheduled and manual runs are the authoritative 517-case selection
-        # and the weekly refresh of the report, so they pass `--full`. A pull
-        # request runs the framing selection, which omits the two per-message
-        # deflate groups; they are 216 of 517 cases and every one reports
-        # UNIMPLEMENTED because deflate is never negotiated.
-        run: >-
-          node tests/autobahn/run.ts
-          ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--full' || '' }}
+        # Every run is the full 517-case selection. The target negotiates
+        # permessage-deflate, so the two deflate groups are measured rather than
+        # reported UNIMPLEMENTED, and the scheduled and manual runs remain the
+        # weekly refresh of the report.
+        run: node tests/autobahn/run.ts --full
 
       - name: Record the tested commit
         if: success()
