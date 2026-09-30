@@ -1,9 +1,9 @@
-import { loadVentiwsAddon } from "./addon.ts";
-import type { EngineEvent } from "./addon.ts";
+import { loadVentiwsAddon } from "./target-runtime.ts";
+import type { EngineEvent } from "./target-runtime.ts";
 import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
 import { DEFAULT_TARGET_HOST, DEFAULT_TARGET_PORT } from "./paths.ts";
-import { echoState, pack, purge, reply, type EchoState } from "./target-echo.ts";
-import { encodeTargetReady } from "./target-record.ts";
+import { echoState, pack, purge, reply, type EchoState } from "./target-runtime.ts";
+import { encodeTargetReady } from "./target-runtime.ts";
 
 /// `message_capacity` and `frame_capacity` from `src/engine/server/capacities.zig`,
 /// read out of the compiled addon. The target asks the engine for exactly the cap

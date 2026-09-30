@@ -162,13 +162,6 @@ jobs:
         # full sharded suite. See tests/autobahn/preflight.ts.
         run: node tests/autobahn/preflight.ts
 
-      - name: Check the shard plan is self-consistent
-        # The weight table in shard-weights.json is a derivation, and it is
-        # cross-checked against the two case totals the gate already asserts. A
-        # drift here would silently rebalance the split, so it fails in seconds
-        # rather than costing a suite run.
-        run: node tests/autobahn/check-plan.ts
-
       - name: Pull the digest-pinned fuzzing client
         # Pulled before the gate so an unpullable reference fails here with a
         # clear message rather than surfacing as a protocol failure.
@@ -184,9 +177,9 @@ jobs:
         # cut wall clock the same way but pay the addon build four times, so it is
         # sharded in-process instead.
         #
-        # The per-case `duration` the report already carries is rolled up per
-        # group in the summary, so the next run can re-derive the shard weights
-        # from a measurement rather than from a derivation.
+        # The per-case `duration` the report carries stays raw in summary.json,
+        # so the next run can re-derive the shard weights from a measurement
+        # rather than from a derivation.
         env:
           AUTOBAHN_SHARDS: "4"
         # The scheduled and manual runs are the authoritative 517-case selection

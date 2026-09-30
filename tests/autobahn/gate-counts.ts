@@ -1,6 +1,6 @@
 import { CLOSURE_BEHAVIORS, INBOUND_LIMIT_BYTES } from "./expected-cases.ts";
-import { MODE_COUNTS } from "./suite-mode.ts";
-import type { SuiteMode } from "./suite-mode.ts";
+import { MODE_COUNTS } from "./expected-cases.ts";
+import type { SuiteMode } from "./expected-cases.ts";
 import type { CaseReport } from "./report-index.ts";
 import type { GateCounts, Violation } from "./gate.ts";
 

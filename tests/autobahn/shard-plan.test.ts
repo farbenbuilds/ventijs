@@ -6,9 +6,9 @@ import {
   planShards,
   resolveShardCount,
 } from "../autobahn/shard-plan.ts";
-import { shardContainerName, shardSpec } from "../autobahn/shard-spec.ts";
-import { MODE_COUNTS } from "../autobahn/suite-mode.ts";
-import { HOST_GATEWAY } from "../autobahn/docker-args.ts";
+import { shardContainerName, shardSpec } from "../autobahn/shard-plan.ts";
+import { MODE_COUNTS } from "../autobahn/expected-cases.ts";
+import { HOST_GATEWAY } from "../autobahn/docker.ts";
 
 function selected(plan: ReturnType<typeof planShards>): readonly string[] {
   return plan.flatMap((shard) => [...shard.groups]).sort();

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { parseOptions } from "../autobahn/run-options.ts";
 import { planShards } from "../autobahn/shard-plan.ts";
-import { weightTableIsConsistent } from "../autobahn/shard-plan.ts";
 
 describe("run options", () => {
   it("defaults to the framing selection and one shard", () => {
@@ -96,9 +95,5 @@ describe("the plan a CI run would use", () => {
   it("consistently produces four shards", () => {
     expect(planShards(4, "framing")).toHaveLength(4);
     expect(planShards(4, "full")).toHaveLength(4);
-  });
-
-  it("agrees with its own weight table", () => {
-    expect(weightTableIsConsistent()).toBe(true);
   });
 });

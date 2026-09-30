@@ -1,6 +1,15 @@
-/// The Autobahn report contract: how many cases the pinned suite produces for groups 1-7 and
-/// 9-13, and which of them the pinned engine build cannot reach because of its message capacity.
+/// The pinned suite contract: case totals, the closure vocabulary, the cases a
+/// selection covers, and which cases the compiled cap blocks.
 ///
+/// The blocked set is pinned per case rather than derived from per-case payload
+/// sizes. The derivation re-priced itself when `INBOUND_LIMIT_BYTES` moved, but it
+/// needed a size table per group to answer the same question, and the answer only
+/// moves when the cap moves, which re-records the baseline anyway.
+
+import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
+
+export { INBOUND_LIMIT_BYTES };
+
 export const CLOSURE_BEHAVIORS: ReadonlySet<string> = new Set([
   "OK",
   "INFORMATIONAL",
@@ -12,34 +21,85 @@ export const CLOSURE_BEHAVIORS: ReadonlySet<string> = new Set([
   "INCOMPLETE",
   "DECODE ERROR",
 ]);
-/// The reference split, for the run summary only.
-export const REFERENCE_CLOSURE_OK_CASES = 514;
-export const REFERENCE_CLOSURE_INFORMATIONAL_CASES = 3;
 
-// The capacity model and the suite's size facts, re-exported so the harness has one import for
-// the contract. `INBOUND_LIMIT_BYTES` is the one number read out of the built addon rather than
-// written down: a restated copy is how the engine's cap and this arithmetic drift apart, and the
-// cap was raised from 32 KiB to 64 KiB once already with every literal still asserting 32 KiB.
-export { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
-export { TOTAL_CASES } from "./case-sizes.ts";
-export {
-  CAPACITY_CASES,
-  CAPACITY_RULES,
-  COMPRESSION_CAPACITY_CASES,
-  EVALUATED_CASES,
-  SCALAR_CAPACITY_CASES,
-  capacityRuleFor,
-  exceedsInboundLimit,
-  isCompressionCase,
-  payloadOf,
-  type CapacityRule,
-} from "./capacity-model.ts";
-export {
-  COMPRESSION_CASES,
-  COMPRESSION_GROUPS,
-  COMPRESSION_OVER_LIMIT_ROWS,
-  COMPRESSION_SIZES,
-  COMPRESSION_SIZE_ROWS,
-  DEFLATE_PARAMETER_SETS_GROUP_12,
-  DEFLATE_PARAMETER_SETS_GROUP_13,
-} from "./case-sizes.ts";
+/// How much of the suite a run selects, and the counts the gate holds it to.
+export type SuiteMode = "framing" | "full";
+
+export type ModeCounts = {
+  readonly mode: SuiteMode;
+  readonly total: number;
+  readonly capacity: number;
+  readonly evaluated: number;
+  /// Baseline groups this mode selects, for the drift check.
+  readonly groups: readonly string[];
+};
+
+/// 517 total; the two per-message-deflate groups are 216 of them.
+export const TOTAL_CASES = 517;
+export const COMPRESSION_CASES = 216;
+
+/// The predicate below is pinned at the compiled cap. A build whose cap moved must
+/// move the blocked sub-ids with it, so it fails here instead of silently
+/// reclassifying cases the suite can now reach.
+if (INBOUND_LIMIT_BYTES !== 65_536) {
+  throw new Error(
+    `autobahn: INBOUND_LIMIT_BYTES is ${INBOUND_LIMIT_BYTES}, but the capacity predicate in ` +
+      "expected-cases.ts is pinned at 65536; update it and re-record the baseline together",
+  );
+}
+
+/// Group 9 walks DATALEN per case and 7.1.6 is one 256 KiB payload; 10.1.1 is one
+/// 64 KiB payload, exactly at the cap, so it is evaluated rather than blocked.
+const BLOCKED_7_1_6 = ["7.1.6", "7.1.6.1"];
+const NINE_SUB_IDS: Readonly<Record<string, readonly number[]>> = {
+  "1": [4, 5, 6],
+  "2": [4, 5, 6],
+  "3": [2, 3, 4, 5, 6, 7, 8, 9],
+  "4": [2, 3, 4, 5, 6, 7, 8, 9],
+  "5": [2, 3, 4, 5, 6],
+  "6": [2, 3, 4, 5, 6],
+};
+
+/// The deflate MSG_SIZES rows above the cap, shared by all twelve parameter sets.
+const COMPRESSION_OVER_LIMIT_ROWS = [10, 15, 16, 17, 18] as const;
+
+export function exceedsInboundLimit(caseId: string): boolean {
+  if (BLOCKED_7_1_6.includes(caseId)) return true;
+  const parts = caseId.split(".");
+  if (parts[0] === "9" && parts.length >= 3) {
+    const sub = Number(parts.slice(2).join("."));
+    return Number.isInteger(sub) && (NINE_SUB_IDS[parts[1]] ?? []).includes(sub);
+  }
+  if (parts.length === 3 && (parts[0] === "12" || parts[0] === "13")) {
+    return (COMPRESSION_OVER_LIMIT_ROWS as readonly number[]).includes(Number(parts[2]));
+  }
+  return false;
+}
+
+/// Counted per case: 7.1.6 plus the listed group-9 sub-ids.
+export const SCALAR_CAPACITY_CASES =
+  1 + Object.values(NINE_SUB_IDS).reduce((total, subIds) => total + subIds.length, 0);
+/// Five group-12 and seven group-13 parameter sets, each with five over-limit rows.
+export const COMPRESSION_CAPACITY_CASES = 12 * COMPRESSION_OVER_LIMIT_ROWS.length;
+export const CAPACITY_CASES = SCALAR_CAPACITY_CASES + COMPRESSION_CAPACITY_CASES;
+export const EVALUATED_CASES = TOTAL_CASES - CAPACITY_CASES;
+
+const FRAMING_TOTAL = TOTAL_CASES - COMPRESSION_CASES;
+const FRAMING_CAPACITY = SCALAR_CAPACITY_CASES;
+
+export const MODE_COUNTS: Readonly<Record<SuiteMode, ModeCounts>> = {
+  framing: {
+    mode: "framing",
+    total: FRAMING_TOTAL,
+    capacity: FRAMING_CAPACITY,
+    evaluated: FRAMING_TOTAL - FRAMING_CAPACITY,
+    groups: ["1", "2", "3", "4", "5", "6", "7", "9", "10", "11"],
+  },
+  full: {
+    mode: "full",
+    total: TOTAL_CASES,
+    capacity: CAPACITY_CASES,
+    evaluated: EVALUATED_CASES,
+    groups: ["1", "2", "3", "4", "5", "6", "7", "9", "10", "11", "12", "13"],
+  },
+};

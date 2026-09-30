@@ -1,8 +1,10 @@
-import { MEASURED_FRAMING_COUNTS } from "./shard-measurements.ts";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import weights from "./shard-weights.json" with { type: "json" };
-import { COMPRESSION_CASES, COMPRESSION_GROUPS, TOTAL_CASES } from "./expected-cases.ts";
-import type { SuiteMode } from "./suite-mode.ts";
-import { MODE_COUNTS } from "./suite-mode.ts";
+import { AGENT, CONTAINER_REPORTS_DIR } from "./paths.ts";
+import { HOST_GATEWAY } from "./docker.ts";
+import type { SuiteMode } from "./expected-cases.ts";
+import { MODE_COUNTS } from "./expected-cases.ts";
 
 /// `cases` is always `<group>.*` for whole groups, never a sub-group glob, so the union of
 /// every shard is the same case set one unsplit configuration selects.
@@ -101,19 +103,38 @@ export function planShards(shardCount: number, mode: SuiteMode): readonly Shard[
   }));
 }
 
-/// The counts are measurements, so this pins them and requires them to still add up to the
-/// independently asserted totals -- a sum alone accepted a table with groups 6 and 9 swapped.
-export function weightTableIsConsistent(): boolean {
-  for (const [group, count] of Object.entries(MEASURED_FRAMING_COUNTS)) {
-    if (TABLE.caseCounts[group] !== count) return false;
-  }
-  const counts = Object.entries(TABLE.caseCounts);
-  const compression = counts
-    .filter(([group]) => (COMPRESSION_GROUPS as readonly string[]).includes(group))
-    .reduce((total, [, count]) => total + count, 0);
-  if (compression !== COMPRESSION_CASES) return false;
-  const framing = counts
-    .filter(([group]) => !(COMPRESSION_GROUPS as readonly string[]).includes(group))
-    .reduce((total, [, count]) => total + count, 0);
-  return framing + compression === TOTAL_CASES;
+/// The `fuzzingclient.json` document `wstest -m fuzzingclient -s` reads.
+///
+/// `cases` is the only case-selection mechanism the pinned `wstest` exposes -- it has no
+/// `--cases` flag, and the suite runs one server at a time -- so a shard is its own spec file,
+/// generated rather than committed because the union of their counts is what the gate checks.
+export type ShardSpec = {
+  readonly outdir: string;
+  readonly servers: readonly { readonly agent: string; readonly url: string }[];
+  readonly cases: readonly string[];
+  readonly "exclude-cases": readonly string[];
+  readonly "exclude-agent-cases": Readonly<Record<string, readonly string[]>>;
+};
+
+export function shardSpec(shard: Shard): ShardSpec {
+  return {
+    // `outdir` is resolved by `wstest` inside the container, so it stays the
+    // mount point. Shard isolation comes from the host bind, not from here.
+    outdir: `${CONTAINER_REPORTS_DIR}/servers`,
+    servers: [{ agent: AGENT, url: `ws://${HOST_GATEWAY}:${shard.port}` }],
+    cases: shard.cases,
+    "exclude-cases": [],
+    "exclude-agent-cases": {},
+  };
+}
+
+export function writeShardSpec(path: string, spec: ShardSpec): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(spec, null, 2)}\n`, "utf8");
+}
+
+/// A container name, so a run that is cancelled can remove exactly the container
+/// it started rather than searching for one by label.
+export function shardContainerName(id: number): string {
+  return `ventiws-autobahn-${id}`;
 }

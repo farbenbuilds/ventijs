@@ -1,7 +1,7 @@
-import { baselineDrift } from "./baseline-drift.ts";
+import { baselineDrift } from "./baseline.ts";
 import { KNOWN_FAILURES } from "./baseline.ts";
-import { MODE_COUNTS } from "./suite-mode.ts";
-import type { SuiteMode } from "./suite-mode.ts";
+import { MODE_COUNTS } from "./expected-cases.ts";
+import type { SuiteMode } from "./expected-cases.ts";
 import { closeBehaviorViolations, countOutcomes, countViolations } from "./gate-counts.ts";
 import type { CaseReport } from "./report-index.ts";
 import { isTolerated } from "./report-index.ts";

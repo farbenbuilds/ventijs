@@ -1,5 +1,5 @@
 import { DEFAULT_SHARD_COUNT, resolveShardCount } from "./shard-plan.ts";
-import type { SuiteMode } from "./suite-mode.ts";
+import type { SuiteMode } from "./expected-cases.ts";
 
 /// How much of the suite a run selects, how it is split, and whether a
 /// target that cannot echo is still measured.
