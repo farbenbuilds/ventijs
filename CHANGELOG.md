@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-alpha.13] - 2026-09-30
+
+### Added
+
+- feat(ci): release directives for prerelease trains and base bumps (#57)
+
 ## [1.0.0-alpha.12] - 2026-09-30
 
 ### Fixed
