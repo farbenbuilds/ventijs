@@ -86,7 +86,7 @@ inside `nix develop` (Node 24, pnpm 12, Zig 0.16.0, zls).
 | Typecheck                     | `pnpm typecheck`                                                                   |
 | Zig unit tests                | `zig build test` (runs `src/engine-tests/`)                                        |
 | Zig formatting                | `zig fmt --check --exclude zig-pkg src build.zig`                                  |
-| Advance the prerelease        | `pnpm bump` (CI does this on merge)                                                |
+| Advance the version           | `pnpm bump --release <kind>` (CI does this on merge)                               |
 | Tag the current version       | `pnpm release` (hand-pushed tag, for recovery)                                     |
 
 The first `pnpm build:binding` compiles BoringSSL, lsquic, libdeflate, and
@@ -200,10 +200,12 @@ declarations through the package `exports` map; it needs `tsdown` output.
   tag. It holds no npm secret: `id-token: write` is the whole credential, because
   every package's trusted publisher on npm is configured against this workflow's
   filename and the `npm` environment. `.github/workflows/bump.yml` advances the
-  prerelease counter on a merge, commits it, and pushes the tag with the release
-  app's installation token (`RELEASE_APP_CLIENT_ID` and
-  `RELEASE_APP_PRIVATE_KEY`), because a tag pushed with `GITHUB_TOKEN` starts no
-  workflow run. That commit carries no CI skip marker, because a release tag
-  points at it and GitHub reads a marker anywhere in a tagged commit's message.
+  version on a merge by the `release:<kind>` labels it carries (default: the next
+  prerelease counter, or the next patch's train after a stable version), commits
+  it, and pushes the tag with the release app's installation token
+  (`RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`), because a tag pushed
+  with `GITHUB_TOKEN` starts no workflow run. That commit carries no CI skip
+  marker, because a release tag points at it and GitHub reads a marker anywhere
+  in a tagged commit's message.
   `tests/tooling/version.test.ts` holds the three version sources, the
   changelog's shape, the bump loop guard, and that marker rule together.
