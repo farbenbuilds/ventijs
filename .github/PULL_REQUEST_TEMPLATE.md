@@ -12,6 +12,14 @@ Describe the change and why it belongs in ventiws. Link the issue it closes.
 - [ ] Documentation update
 - [ ] Build or CI change
 
+## Release
+
+Every merge releases. Label this pull request `release:stable`,
+`release:minor`, `release:major`, `release:beta`, `release:rc`, or
+`release:patch` to direct the version step; an unlabeled merge advances the
+current train, or starts the next patch's train after a stable version. See
+[CONTRIBUTE.md](../CONTRIBUTE.md#releasing).
+
 ## Compatibility
 
 - [ ] This change preserves `ws` behavior for the affected surface.

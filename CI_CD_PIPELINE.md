@@ -16,7 +16,7 @@ it is not proof that no memory or security defect remains.
 | `zig-test.yml` | Zig unit tests, Binding lifecycle tests    | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite |
 | `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                       |
 | `perf.yml`     | Echo throughput against `ws`               | push and pull request on a Zig, manifest, or `bench/` path, manual                   | the benchmark report, uploaded as an artifact              |
-| `bump.yml`     | Advance the prerelease, push the tag       | push to `main`, manual                                                               | nothing: it commits the version and starts the publish     |
+| `bump.yml`     | Advance the version, push the tag          | push to `main`, manual                                                               | nothing: it commits the version and starts the publish     |
 | `publish.yml`  | Platform build matrix, publish to npm      | a `v*` tag pushed by a maintainer                                                    | every platform builds and its addon loads and echoes       |
 
 Every gating workflow runs on `ubuntu-24.04`. Node is `node@24` and pnpm
@@ -119,6 +119,13 @@ cannot publish a version nobody released. The tag is the only way to start it:
 `bump.yml` pushes it with the release app's installation token
 (`RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`), because a tag pushed
 with `GITHUB_TOKEN` starts no run.
+
+Which version a merge advances follows its `release:<kind>` labels, or the
+dispatch's `base` and `preid` inputs: by default a prerelease advances its
+counter, or a stable version starts the next patch's train; `release:stable`
+promotes the train, and `release:major|minor|patch` bump the base.
+`scripts/next-version.mjs` is the table and `tests/tooling/version.test.ts`
+holds it.
 
 The publish is not transactional: a failure part way leaves the earlier packages
 on the registry. `napi-zig publish` treats an already-published version as a

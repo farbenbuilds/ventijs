@@ -7,13 +7,35 @@ on:
   push:
     branches:
       - main
-  # The escape hatch. A run that failed before its commit leaves `main` unbumped, and this
-  # advances the version without waiting for the next merge. A re-run after the commit but
-  # before the tag finds its own commit at HEAD and only pushes the tag.
+  # The manual lever. With no inputs it finishes a run that failed before its commit; the
+  # inputs apply the same directive a pull request label would, so a stable release can be
+  # cut from `main` as it stands. A dispatch always advances.
   workflow_dispatch:
+    inputs:
+      base:
+        description: Base version bump
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+        default: auto
+      preid:
+        description: Prerelease train
+        type: choice
+        options:
+          - auto
+          - alpha
+          - beta
+          - rc
+          - stable
+        default: auto
 
 permissions:
   contents: write
+  # To read the merged pull request's `release:*` labels.
+  pull-requests: read
 
 # Two merges in quick succession both rewrite `package.json`, and the second would advance
 # a version the first never recorded. Queued rather than cancelled, because a cancelled run
@@ -51,14 +73,39 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           permission-contents: write
 
-      - name: Advance the counter
+      # A push run reads the directive from the merged pull request's labels; a dispatch run
+      # reads it from its inputs. Both paths end at one kinds string for the bump.
+      - name: Read the release directive
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ inputs.base }}
+          PREID: ${{ inputs.preid }}
+        run: |
+          kinds=""
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ -n "${BASE}" ] && [ "${BASE}" != "auto" ]; then kinds="${BASE}"; fi
+            if [ -n "${PREID}" ] && [ "${PREID}" != "auto" ]; then kinds="${kinds:+${kinds},}${PREID}"; fi
+          fi
+          if [ -z "${kinds}" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            labels=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].labels[].name' 2>/dev/null || true)
+            kinds=$(printf '%s\n' "${labels}" | sed -n 's/^release:\(major\|minor\|patch\|alpha\|beta\|rc\|stable\)$/\1/p' | paste -sd, -)
+          fi
+          echo "kinds=${kinds}" >> "$GITHUB_OUTPUT"
+          echo "release directive: ${kinds:-default}"
+
+      - name: Advance the version
         id: bump
+        env:
+          KINDS: ${{ steps.release.outputs.kinds }}
         run: |
           version=$(node -p "require('./package.json').version")
           # A re-run after a run that pushed the bump commit but lost the tag push finds its
           # own commit at HEAD; bumping again would skip a version.
           if [ "$(git log -1 --format=%s)" = "chore(release): v$version" ]; then
             echo "version $version is already committed"
+          elif [ -n "${KINDS}" ]; then
+            node scripts/bump-version.mjs --release "${KINDS}"
           else
             node scripts/bump-version.mjs
           fi

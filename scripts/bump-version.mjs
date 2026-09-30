@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-// Advances the prerelease counter in the three files that state the version.
+// Advances the version in the three files that state it, by a release directive.
 //
-// A release is a tag, so the version has to be settled before the tag exists. Merging is
-// not releasing, so this runs on every merge to `main` and the tag stays the release
-// decision. The counter is unconditional: a pre-alpha's number tells a reader nothing, so
-// inferring it from commit subjects would tie the published version to how a change
-// happened to be described.
+// The directive is `release:<kind>` labels on the merge's pull request, or the `bump.yml`
+// dispatch inputs; with none, a prerelease advances its counter and a stable version starts
+// the next patch's train on `alpha.0`. `scripts/next-version.mjs` owns the transition table
+// and `tests/tooling/version.test.ts` holds it; this script owns the files.
 //
 // The three files cannot import each other -- a manifest, a Zig build manifest, and a
 // document -- so each is rewritten from the version already in `package.json`, and a
@@ -17,6 +16,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { nextVersion } from "./next-version.mjs";
 
 const PACKAGE = "package.json";
 const CHANGELOG = "CHANGELOG.md";
@@ -69,15 +70,14 @@ function stated(source) {
   return match ? match[2] : null;
 }
 
-/// The next prerelease, or null when the version is not one.
+/// The release directive: `--release major,beta`, `--release=beta`, or bare kinds.
 ///
-/// A stable version is refused rather than advanced. `1.0.0` claims the surface is
-/// settled, which is a judgement for a person to make by hand; a merge that could reach it
-/// unasked would publish a stability claim nobody reviewed.
-function nextPrerelease(version) {
-  const match = /^(.+)-([\w-]+)\.(\d+)$/.exec(version);
-  if (!match) return null;
-  return `${match[1]}-${match[2]}.${Number(match[3]) + 1}`;
+/// Unknown kinds fail in `nextVersion`, which owns the table, so the CLI and the workflow
+/// cannot disagree about what a directive means.
+function releaseKinds(args) {
+  return args
+    .flatMap((arg) => arg.replace(/^--release(=|$)/, "").split(","))
+    .filter((kind) => kind !== "");
 }
 
 /// Merged changes since the previous bump, grouped under the heading each type belongs to.
@@ -128,8 +128,7 @@ function main() {
   if (drifted.length > 0)
     throw new Error(`bump-version: ${drifted.length} sources disagree with ${PACKAGE}`);
 
-  const next = nextPrerelease(current);
-  if (next === null) throw new Error(`bump-version: ${current} is not a prerelease`);
+  const next = nextVersion(current, releaseKinds(process.argv.slice(2)));
 
   for (const source of SOURCES)
     write(source.path, read(source.path).replace(source.pattern, `$1${next}$3`));

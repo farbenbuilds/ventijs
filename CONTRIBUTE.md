@@ -48,7 +48,8 @@ plus `pnpm install`.
 | `pnpm finalize:exports` | node     | Add the `types` conditions `tsdown` leaves out of `exports`   |
 | `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
 | `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
-| `pnpm release`          | node     | Tag and push the version the tree carries; the release step   |
+| `pnpm bump`             | node     | Advance the version by a `--release <kind>` directive         |
+| `pnpm release`          | node     | Tag the version the tree carries by hand, for recovery        |
 | `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
 
 `tsdown` rewrites the `exports` map on every build, so the `types` conditions
@@ -131,11 +132,11 @@ pnpm lockfile.
 
 ## Releasing
 
-1. Merge the work. `bump.yml` does the rest: it advances the prerelease counter,
-   writing `package.json`, `build.zig.zon`, `README.md`, and the `CHANGELOG.md`
-   section for that merge's commits; commits it; and pushes the `v<version>`
-   tag. `.github/workflows/publish.yml` then builds the six platform packages
-   across five runners, checks the tag against `package.json`, assembles `npm/`,
+1. Merge the work. `bump.yml` does the rest: it advances the version, writing
+   `package.json`, `build.zig.zon`, `README.md`, and the `CHANGELOG.md` section
+   for that merge's commits; commits it; and pushes the `v<version>` tag.
+   `.github/workflows/publish.yml` then builds the six platform packages across
+   five runners, checks the tag against `package.json`, assembles `npm/`,
    publishes, and writes the GitHub Release.
 2. Pass lint, format, typecheck, unit, and build, then run the `ws` conformance
    suite and Autobahn and retain the benchmark report.
@@ -151,13 +152,32 @@ repository variable and its private key as the `RELEASE_APP_PRIVATE_KEY` secret.
 `pnpm release` (`scripts/tag-release.mjs`) pushes the tag by hand and remains the
 recovery path for a run that failed before its tag.
 
-The counter is deliberately unconditional: a pre-alpha's number tells a reader
-nothing, so inferring the bump from commit subjects would tie the published
-version to how a change happened to be described. Reaching `1.0.0` is a manual
-edit of the three versioned files, because it claims the surface is settled.
-`pnpm bump` runs the version step by hand for recovering a run that failed
-partway, and `tests/tooling/version.test.ts` fails if the versioned surfaces
-disagree.
+### What the next version is
+
+With no directive a prerelease advances its counter (`1.0.0-alpha.12` ->
+`1.0.0-alpha.13`), and a stable version starts the next patch's train
+(`1.0.0` -> `1.0.1-alpha.0`). A pull request directs the step with
+`release:<kind>` labels, and a base label combines with a prerelease label:
+
+| Label                                               | Result                                                                                    |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `release:alpha` / `release:beta` / `release:rc`     | Continue that train, or switch to it: `1.0.0-alpha.12` + `release:beta` -> `1.0.0-beta.0` |
+| `release:stable`                                    | Drop the prerelease: `1.0.0-beta.3` -> `1.0.0`, published on `latest`                     |
+| `release:patch` / `release:minor` / `release:major` | Bump the base from a stable version: `1.0.0` -> `1.0.1`, `1.1.0`, `2.0.0`                 |
+| a base label plus a prerelease label                | Start the new base in that train: `release:major` + `release:beta` -> `2.0.0-beta.0`      |
+
+A base bump from inside a train stays in that train unless `release:stable` is
+also set; a prerelease label on a stable version targets the next patch. Without
+a pull request -- a direct push, or a run by hand -- the same directive is a pair
+of dispatch inputs:
+
+```sh
+gh workflow run bump.yml -f base=minor -f preid=stable
+```
+
+`node scripts/next-version.mjs <version> <kind...>` prints any transition, and
+`tests/tooling/version.test.ts` holds the table and the three versioned surfaces
+together.
 
 The publish job holds no npm secret. `id-token: write` is the whole credential,
 because each of the six packages has a trusted publisher on npm naming

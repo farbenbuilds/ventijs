@@ -1,9 +1,11 @@
-//! The version is stated in three files that cannot import each other, and the marker that
-//! stops the bump from re-entering itself is a string that has to match elsewhere. Both are
-//! the bug this repository has shipped three times: one fact stated twice, one stale.
+//! The version is stated in three files that cannot import each other, and the transition
+//! table that decides the next one lives in `scripts/next-version.mjs`, exercised by
+//! `next-version.test.ts`. Every bug this repository has shipped in this area is the same
+//! shape: one fact stated twice, one of them stale.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { compareVersions } from "../../scripts/next-version.mjs";
 
 const ROOT = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, ROOT), "utf8");
@@ -26,22 +28,13 @@ const MARKERS = ["skip ci", "ci skip", "no ci", "skip actions", "actions skip"];
 /// diffed as text.
 const HEADING = /^## \[([^\]]+)\]/gm;
 
-/// The prerelease counter, or 0 for a stable version: a stable heading sorts first.
-const counterOf = (version: string) => Number(/(\d+)$/.exec(version)?.[1] ?? 0);
-
-type Entry = { readonly version: string; readonly counter: number };
-
-/// Zipped, not indexed: a non-null assertion asserts on `undefined`, not the invariant.
-function logged(): Entry[] {
-  return [...CHANGELOG.matchAll(HEADING)].map((match) => {
-    const version = match[1] ?? "";
-    return { version, counter: counterOf(version) };
-  });
+function logged(): string[] {
+  return [...CHANGELOG.matchAll(HEADING)].map((match) => match[1] ?? "");
 }
 
 /// Adjacent pairs, newest first: `[a, b]` names the direction, where `toEqual` does not.
-function descending(values: readonly number[]): [number, number][] {
-  return values.slice(1).map((value, index) => [values[index] ?? 0, value]);
+function descending(values: readonly string[]): [string, string][] {
+  return values.slice(1).map((value, index) => [values[index] ?? "", value]);
 }
 
 test("the three sources of the version agree with the manifest", () => {
@@ -57,10 +50,9 @@ test("the changelog is a log: newest first, and never ahead of the manifest", ()
   // changelog type still advances the version and leaves no section. What must hold is that
   // the log never runs ahead of the manifest, since a heading newer than the version is what
   // a hand-edited changelog looks like.
-  const current = counterOf(MANIFEST.version);
-  expect(entries[0]?.counter).toBeLessThanOrEqual(current);
-  for (const [newer, older] of descending(entries.map((entry) => entry.counter)))
-    expect(older).toBeLessThanOrEqual(newer);
+  expect(compareVersions(entries[0] ?? "", MANIFEST.version)).toBeLessThanOrEqual(0);
+  for (const [newer, older] of descending(entries))
+    expect(compareVersions(older, newer)).toBeLessThanOrEqual(0);
 });
 
 test("the loop guard matches the commit the bump makes", () => {
@@ -79,6 +71,15 @@ test("the commit the tag points at carries no CI skip marker", () => {
   const commit = /git commit -m "([^"]*)"/.exec(BUMP_WORKFLOW)?.[1] ?? "";
   expect(commit).not.toBe("");
   for (const marker of MARKERS) expect(commit.includes(`[${marker}]`), commit).toBe(false);
+});
+
+test("the merge's release directive reaches the bump as labels or inputs", () => {
+  // A push run has no inputs, so the directive is the merged pull request's labels; a
+  // dispatch run has no pull request, so it is the inputs. Both end at one kinds string.
+  expect(BUMP_WORKFLOW).toContain("pull-requests: read");
+  expect(BUMP_WORKFLOW).toContain("/commits/${{ github.sha }}/pulls");
+  expect(BUMP_WORKFLOW).toContain('node scripts/bump-version.mjs --release "${KINDS}"');
+  expect(BUMP_WORKFLOW).toContain("inputs.preid");
 });
 
 test("the bump tags through the release app, the one credential that starts a run", () => {
