@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { dockerArgs } from "./docker-args.ts";
+import { dockerArgs } from "./docker.ts";
 import { AGENT } from "./paths.ts";
-import { forgetContainer, registerContainer } from "./container-cleanup.ts";
-import { configFor } from "./config-for.ts";
+import { forgetContainer, registerContainer } from "./docker.ts";
+import { configFor } from "./paths.ts";
 import { exceedsInboundLimit } from "./expected-cases.ts";
-import type { SuiteMode } from "./suite-mode.ts";
+import type { SuiteMode } from "./expected-cases.ts";
 import { REPORTS_HOST_DIR, REPORT_INDEX_HOST_PATH } from "./paths.ts";
 import { parseReportIndex, toCaseReports } from "./report-index.ts";
 import type { CaseReport } from "./report-index.ts";
-import { shardContainerName } from "./shard-spec.ts";
+import { shardContainerName } from "./shard-plan.ts";
 
 /// The report directory is wiped first so a stale `index.json` from an earlier
 /// run can never be read as this run's evidence.

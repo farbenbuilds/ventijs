@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENGINE_PATHS, decideRun, isEnginePath } from "../autobahn/diff-gate.ts";
+import { ENGINE_PATHS, decideRun, isEnginePath } from "../autobahn/diff-gate-cli.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 

@@ -1,9 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
-import { AGENT, shardReportIndexPath } from "./paths.ts";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { AGENT, shardReportIndexPath, shardReportsDir, shardSpecPath } from "./paths.ts";
+import { removeContainer } from "./docker.ts";
 import { exceedsInboundLimit } from "./expected-cases.ts";
 import { parseReportIndex, toCaseReports } from "./report-index.ts";
 import type { CaseReport } from "./report-index.ts";
+import { shardContainerName, shardSpec, writeShardSpec } from "./shard-plan.ts";
 import type { Shard } from "./shard-plan.ts";
+import { runContainer } from "./suite.ts";
 
 export type ShardResult = {
   readonly shard: Shard;
@@ -43,4 +46,48 @@ export function duplicateCaseIds(results: readonly ShardResult[]): readonly stri
 /// Shards that produced no report, so the failure names the shard and not only a short total.
 export function silentShards(results: readonly ShardResult[]): readonly number[] {
   return results.filter((result) => result.cases.length === 0).map((result) => result.shard.id);
+}
+
+/// Writes each shard's `fuzzingclient.json` before anything is started.
+///
+/// The pinned `wstest` exposes no case-selection flag but `-s`, and the suite runs one server
+/// at a time, so N concurrent shards need N spec files; generating them keeps the union
+/// checkable by the gate instead of leaving N committed configurations to fall out of sync.
+function prepare(shard: Shard): void {
+  mkdirSync(shardReportsDir(shard.id), { recursive: true });
+  writeShardSpec(shardSpecPath(shard.id), shardSpec(shard));
+}
+
+/// Runs every shard's fuzzing client concurrently and collects what each wrote.
+///
+/// All containers are force-removed before this returns, on every path, so a cancelled or
+/// failed run cannot leave one holding a report directory. The streams are inherited rather
+/// than prefixed, which is what sharding gives up: N Python tracebacks interleave in one log.
+export async function runShards(shards: readonly Shard[]): Promise<readonly ShardResult[]> {
+  for (const shard of shards) prepare(shard);
+  // Settled, not raced: a shard whose report will not parse must not discard the other
+  // shards' evidence, so a rejected read becomes a failed shard the failure message names.
+  const settled = await Promise.allSettled(
+    shards.map(async (shard) => {
+      const name = shardContainerName(shard.id);
+      try {
+        const code = await runContainer({
+          configHostPath: shardSpecPath(shard.id),
+          reportsHostDir: shardReportsDir(shard.id),
+          name,
+        });
+        return { shard, code, cases: readShardCases(shard.id) };
+      } finally {
+        removeContainer(name);
+      }
+    }),
+  );
+  return settled.map((entry, index) => {
+    if (entry.status === "fulfilled") return entry.value;
+    const shard = shards[index];
+    process.stderr.write(
+      `autobahn: shard ${shard.id} report unreadable: ${String(entry.reason)}\n`,
+    );
+    return { shard, code: 127, cases: [] };
+  });
 }

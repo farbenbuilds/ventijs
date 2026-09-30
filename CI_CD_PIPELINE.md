@@ -196,9 +196,9 @@ engine gate` to branch protection alongside the suite, or a failing gate leaves
 the suite skipped rather than failed.
 
 `fuzzing-client` builds the addon, runs `tests/autobahn/preflight.ts` to prove
-the addon loads, checks the shard plan against the two case totals, pulls the
-fuzzing client by digest, and runs `node tests/autobahn/run.ts` with
-`AUTOBAHN_SHARDS=4`. A pull request runs the framing selection, 301 cases;
+the addon loads, pulls the fuzzing client by digest, and runs
+`node tests/autobahn/run.ts` with `AUTOBAHN_SHARDS=4`. A pull request runs the
+framing selection, 301 cases;
 `schedule` and `workflow_dispatch` pass `--full` for all 517, which is the weekly
 refresh. A run that passes writes its commit to the watermark cache, so a red run
 is retried on the next push rather than recorded as tested. The report is
@@ -214,10 +214,10 @@ tolerated because the fully conformant `ws` reference report carries it.
 
 A shard owns whole case groups rather than a slice of them, so the union of four
 shards is provably the case set one unsplit selection would pick, and the gate
-still holds each shard to the mode's own totals. `tests/autobahn/check-plan.ts`
-cross-checks the weight table against those totals, and
-`tests/autobahn/diff-gate.test.ts` holds the gate's path filter and the
-workflow's to each other.
+still holds each shard to the mode's own totals.
+`tests/autobahn/shard-weights.test.ts` cross-checks the weight table against those
+totals in the unit suite, and `tests/autobahn/diff-gate.test.ts` holds the gate's
+path filter and the workflow's to each other.
 
 The recorded run, the per-group causes, and the procedure for re-recording the
 baseline are in [COMPATIBILITY.md](COMPATIBILITY.md#rfc-6455-conformance) and

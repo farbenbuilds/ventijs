@@ -1,4 +1,4 @@
-import { loadVentiwsAddon } from "./addon.ts";
+import { loadVentiwsAddon } from "./target-runtime.ts";
 
 /// The compiled inbound message capacity, read from the addon: it is a Zig `comptime`
 /// constant in the artifact, so the artifact is the only authoritative place. It was a

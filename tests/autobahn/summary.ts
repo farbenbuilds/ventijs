@@ -1,10 +1,8 @@
 import { KNOWN_FAILURES } from "./baseline.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { formatCostRollup, rollupCosts } from "./cost-rollup.ts";
-import type { CostRollup } from "./cost-rollup.ts";
 import { INBOUND_LIMIT_BYTES } from "./expected-cases.ts";
-import { MODE_COUNTS } from "./suite-mode.ts";
+import { MODE_COUNTS } from "./expected-cases.ts";
 import type { GateCounts, GateResult } from "./gate.ts";
 import type { CaseReport } from "./report-index.ts";
 import type { EchoProbe } from "./probe-echo.ts";
@@ -34,11 +32,14 @@ export type AutobahnSummary = {
   readonly counts: GateResult["counts"] | null;
   readonly violations: GateResult["violations"];
   readonly cases: readonly CaseReport[];
-  /// Measured suite cost per group. Published on every run so the shard weight
-  /// table can be re-derived from a real report instead of a derivation.
-  readonly cost: CostRollup;
   readonly failure: string | null;
 };
+
+/// Sums the report's own per-case durations, raw: the weights are re-derived from
+/// the report, and a rollup here was a second derivation to keep in step.
+export function measuredSeconds(cases: readonly CaseReport[]): number {
+  return cases.reduce((total, entry) => total + entry.durationMs, 0) / 1000;
+}
 
 export function buildSummary(input: {
   readonly ok: boolean;
@@ -70,7 +71,6 @@ export function buildSummary(input: {
     counts: input.gate?.counts ?? null,
     violations: input.gate?.violations ?? [],
     cases: input.cases,
-    cost: rollupCosts(input.cases),
     failure: input.failure,
   };
 }
@@ -94,7 +94,7 @@ function describeCounts(counts: GateCounts, mode: "framing" | "full"): readonly 
 /// The plan and what it was worth. The critical path is the largest shard, and
 /// it is the number the weight table has to keep small, so it is printed even on
 /// a run that failed before the suite.
-function describeShards(shards: readonly Shard[], cost: CostRollup): readonly string[] {
+function describeShards(shards: readonly Shard[], cases: readonly CaseReport[]): readonly string[] {
   if (shards.length === 0) return [];
   const critical = Math.max(...shards.map((shard) => shard.costSeconds));
   const lines = [`shards     ${shards.length} (expected critical path ${critical.toFixed(0)}s)`];
@@ -104,9 +104,8 @@ function describeShards(shards: readonly Shard[], cost: CostRollup): readonly st
         `${shard.costSeconds.toFixed(0).padStart(6)}s expected`,
     );
   }
-  if (cost.groups.length > 0) {
-    lines.push(`cost       ${cost.totalSeconds.toFixed(0)}s measured, heaviest group first`);
-    lines.push(...formatCostRollup(cost));
+  if (cases.length > 0) {
+    lines.push(`measured   ${measuredSeconds(cases).toFixed(1)}s across ${cases.length} cases`);
   }
   return lines;
 }
@@ -124,7 +123,7 @@ export function formatSummary(summary: AutobahnSummary): string {
   if (summary.failure !== null) lines.push(`blocked    ${summary.failure}`);
   if (!summary.suiteRun) lines.push("suite      not run");
   if (summary.counts !== null) lines.push(...describeCounts(summary.counts, summary.mode));
-  lines.push(...describeShards(summary.shards, summary.cost));
+  lines.push(...describeShards(summary.shards, summary.cases));
   lines.push(
     `baseline   ${KNOWN_FAILURES.size} known failures across ${KNOWN_FAILURES.groups.length} groups`,
   );

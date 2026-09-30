@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
-import { forwardStderr, readLines } from "./child-io.ts";
-import type { TargetChild } from "./child-io.ts";
-import { releaseTarget, stopChild, trackTarget } from "./target-signals.ts";
+import { forwardStderr, readLines } from "./child-process.ts";
+import type { TargetChild } from "./child-process.ts";
+import { releaseTarget, stopChild, trackTarget } from "./child-process.ts";
 import { DEFAULT_TARGET_HOST, DEFAULT_TARGET_PORT, TARGET_ENTRY_PATH } from "./paths.ts";
-import { decodeTargetReady } from "./target-record.ts";
-import type { TargetReady } from "./target-record.ts";
+import { decodeTargetReady } from "./target-runtime.ts";
+import type { TargetReady } from "./target-runtime.ts";
 
 export type TargetProcess = {
   readonly ready: TargetReady;

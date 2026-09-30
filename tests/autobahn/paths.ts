@@ -38,3 +38,11 @@ export function shardReportIndexPath(id: number): string {
 
 export const PACKAGE_ROOT = resolve(HERE, "..", "..");
 export const TARGET_ENTRY_PATH = join(HERE, "target.ts");
+
+import type { SuiteMode } from "./expected-cases.ts";
+
+/// The config a mode selects. The container always mounts it at the same path,
+/// so only the host side of the bind changes.
+export function configFor(mode: SuiteMode): string {
+  return mode === "framing" ? CONFIG_FRAMING_HOST_PATH : CONFIG_HOST_PATH;
+}

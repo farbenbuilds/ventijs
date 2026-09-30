@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { evaluateGate } from "../autobahn/gate.ts";
-import { MODE_COUNTS } from "../autobahn/suite-mode.ts";
+import { MODE_COUNTS } from "../autobahn/expected-cases.ts";
 import { planShards } from "../autobahn/shard-plan.ts";
 import { duplicateCaseIds, silentShards, unionCases } from "../autobahn/shard-reports.ts";
 import type { ShardResult } from "../autobahn/shard-reports.ts";
 import type { CaseReport } from "../autobahn/report-index.ts";
-import { formatCostRollup, rollupCosts } from "../autobahn/cost-rollup.ts";
+import { measuredSeconds } from "../autobahn/summary.ts";
 
 function caseReport(
   id: string,
@@ -97,42 +97,12 @@ describe("the gate over a union", () => {
   });
 });
 
-describe("cost rollup", () => {
-  it("sums durations per group, heaviest first", () => {
-    const rollup = rollupCosts([
-      caseReport("6.1.1", 1000),
-      caseReport("6.2.1", 1000),
-      caseReport("9.1.1", 9000),
-      caseReport("12.1.1", 10),
-    ]);
-    expect(rollup.groups.map((entry) => entry.group)).toEqual(["9", "6", "12"]);
-    expect(rollup.groups[0].cases).toBe(1);
-    expect(rollup.groups[1].secondsPerCase).toBe(1);
-    expect(rollup.totalSeconds).toBeCloseTo(11.01, 5);
+describe("measured durations", () => {
+  it("sums the per-case durations raw, with no rollup", () => {
+    expect(measuredSeconds([caseReport("6.1.1", 1500), caseReport("9.1.1", 500)])).toBe(2);
   });
 
-  it("lists the slowest cases, which is how a pathological one is found", () => {
-    const rollup = rollupCosts([
-      caseReport("6.1.1", 10),
-      caseReport("9.3.1", 50_000),
-      caseReport("9.4.1", 20_000),
-    ]);
-    expect(rollup.slowest[0].id).toBe("9.3.1");
-  });
-
-  it("renders a share and a per-case mean for each group", () => {
-    const lines = formatCostRollup(
-      rollupCosts([caseReport("6.1.1", 2000), caseReport("9.1.1", 2000)]),
-    );
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain("50.0%");
-    expect(lines[0]).toContain("2.00s/case");
-  });
-
-  it("is empty rather than throwing when the suite never ran", () => {
-    const rollup = rollupCosts([]);
-    expect(rollup.groups).toEqual([]);
-    expect(rollup.totalSeconds).toBe(0);
-    expect(formatCostRollup(rollup)).toEqual([]);
+  it("is zero for an empty run", () => {
+    expect(measuredSeconds([])).toBe(0);
   });
 });

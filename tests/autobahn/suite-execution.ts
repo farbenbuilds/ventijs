@@ -1,12 +1,12 @@
 import { probeTarget } from "./probe-echo.ts";
 import type { EchoProbe } from "./probe-echo.ts";
-import type { SuiteMode } from "./suite-mode.ts";
+import type { SuiteMode } from "./expected-cases.ts";
 import type { CaseReport } from "./report-index.ts";
 import type { Shard } from "./shard-plan.ts";
 import type { TargetProcess } from "./target-process.ts";
 import type { ShardResult } from "./shard-reports.ts";
 import { runFuzzingClient, reportExists, readReportCases } from "./suite.ts";
-import { runShards } from "./shard-runner.ts";
+import { runShards } from "./shard-reports.ts";
 import { silentShards, unionCases } from "./shard-reports.ts";
 
 /// What one run measured.
