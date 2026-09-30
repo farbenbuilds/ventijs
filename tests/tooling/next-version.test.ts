@@ -1,5 +1,5 @@
-//! The transition table, away from the files it is written to: a directive in, the next
-//! version out. The three version sources and the workflow are held by `version.test.ts`.
+// The transition table, away from the files it is written to: a directive in, the next
+// version out. The three version sources and the workflow are held by `version.test.ts`.
 
 import { expect, test } from "vitest";
 import { compareVersions, nextVersion } from "../../scripts/next-version.mjs";

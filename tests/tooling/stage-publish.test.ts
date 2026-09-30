@@ -1,10 +1,10 @@
-//! `stage-publish.mjs` is the gate that stops a release publishing a platform nobody
-//! can install, and it is the one script in the release path with no coverage. It reads
-//! the scaffolded manifest and the laid-down directories and compares them, so the way
-//! it names a target on each side is the whole of its correctness: a build that laid
-//! down every platform reported all five missing when the two spellings differed. These
-//! run it for real, in a temporary tree, so the comparison is exercised rather than
-//! described.
+// `stage-publish.mjs` is the gate that stops a release publishing a platform nobody
+// can install, and it is the one script in the release path with no coverage. It reads
+// the scaffolded manifest and the laid-down directories and compares them, so the way
+// it names a target on each side is the whole of its correctness: a build that laid
+// down every platform reported all five missing when the two spellings differed. These
+// run it for real, in a temporary tree, so the comparison is exercised rather than
+// described.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

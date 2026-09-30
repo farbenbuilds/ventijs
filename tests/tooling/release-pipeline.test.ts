@@ -1,9 +1,9 @@
-//! The release pipeline is a chain of hand-offs between a maintainer's tag and the
-//! registry, and every link is a string in a YAML file rather than a call a compiler sees.
-//! The bug this repository has shipped repeatedly is a fact stated twice, one not in
-//! effect: a page for an unpublished version advertises an install that fails, a second
-//! trigger is a way in nothing uses, and a prerelease that is not marked as one reads as
-//! the newest stable thing.
+// The release pipeline is a chain of hand-offs between a maintainer's tag and the
+// registry, and every link is a string in a YAML file rather than a call a compiler sees.
+// The bug this repository has shipped repeatedly is a fact stated twice, one not in
+// effect: a page for an unpublished version advertises an install that fails, a second
+// trigger is a way in nothing uses, and a prerelease that is not marked as one reads as
+// the newest stable thing.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";

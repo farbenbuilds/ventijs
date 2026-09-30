@@ -1,8 +1,8 @@
-//! The published platform set is stated in three places that cannot import each other:
-//! the manifest the build graph reads, the loader that resolves it, and the workflow that
-//! schedules a runner for it. Each is read as text or as JSON and checked against the
-//! others, so a platform added to one and not the others fails here rather than at a
-//! user's install.
+// The published platform set is stated in three places that cannot import each other:
+// the manifest the build graph reads, the loader that resolves it, and the workflow that
+// schedules a runner for it. Each is read as text or as JSON and checked against the
+// others, so a platform added to one and not the others fails here rather than at a
+// user's install.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";

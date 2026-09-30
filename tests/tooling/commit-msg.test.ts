@@ -1,7 +1,7 @@
-//! The `commit-msg` hook is the only thing standing between a squash merge and a push
-//! GitHub reads as "skip all CI". It cannot be tested through CI, because a skipped push
-//! starts no workflow -- so the check is a script, and a script that has never been run is
-//! a rule nobody has.
+// The `commit-msg` hook is the only thing standing between a squash merge and a push
+// GitHub reads as "skip all CI". It cannot be tested through CI, because a skipped push
+// starts no workflow -- so the check is a script, and a script that has never been run is
+// a rule nobody has.
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";

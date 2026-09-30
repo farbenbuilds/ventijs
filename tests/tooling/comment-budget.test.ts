@@ -27,9 +27,11 @@ test("a file inside the budget is not flagged", () => {
   expect(violationsOf(`// one reason.\n${burst(60, 0)}`)).toEqual([]);
 });
 
+test("Zig's //! module doc is flagged in TypeScript", () => {
+  expect(violationsOf(`//! module essay\n${burst(60, 0)}`)[0]).toContain("//!");
+});
+
 test("a run of comment lines is capped", () => {
-  // Code lines are spread through it so the density budget is not what fires: this test
-  // is about adjacency, and a violation of both at once would not say which one did it.
   // Twelve consecutive comment lines, then enough code that the density budget is not
   // what fires: this test is about adjacency, and both firing at once would not say which.
   const source = [
@@ -57,9 +59,8 @@ test("a file inside the ratio is not flagged", () => {
 });
 
 test("a small file is capped in absolute terms, not by ratio", () => {
-  // Nine code lines and 18 comment lines is a ratio of 2.0, which a module of
-  // declarations cannot avoid, so a band judges it: the floor is a module doc, the
-  // ceiling stops a short file becoming an essay.
+  // Nine code lines and 18 comment lines is a ratio of 2.0, which a module of declarations
+  // cannot avoid, so a band judges it: the floor is a module doc, the ceiling stops an essay.
   expect(violationsOf(burst(9, 0))).toEqual([]);
   expect(violationsOf(burst(9, 1))[0]).toContain("-code-line file exceeds");
   expect(violationsOf(burst(9, 2))[0]).toContain("-code-line file exceeds");
@@ -120,9 +121,8 @@ test("a trailing comment is counted", () => {
     ...Array.from({ length: 30 }, (_, i) => `const v${i} = ${i}; // index ${i}`),
     ...Array.from({ length: 40 }, (_, i) => `const w${i} = ${i};`),
   ].join("\n");
-  // The 30 commented lines are also 30 consecutive, so the run budget fires as well. The
-  // assertion names the ratio message rather than counting, so it cannot pass on the run
-  // check having fired first.
+  // The 30 commented lines are also 30 consecutive, so the run budget fires as well; the
+  // assertion names the ratio message so it cannot pass on the run check having fired.
   expect(violationsOf(source).some((v) => v.includes("comment lines for"))).toBe(true);
 });
 

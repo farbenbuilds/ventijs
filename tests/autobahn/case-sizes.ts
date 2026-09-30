@@ -1,5 +1,5 @@
-//! What the pinned suite puts on the wire, per case. **Per case, not per prefix**: group 9
-//! walks `DATALEN` from 1 KiB to 4 MiB inside one prefix, so a cap in that range fits no single number.
+// What the pinned suite puts on the wire, per case. **Per case, not per prefix**: group 9
+// walks `DATALEN` from 1 KiB to 4 MiB inside one prefix, so a cap in that range fits no single number.
 
 /// 517 is the total in `CI_CD_PIPELINE.md`; the 514 `OK` and 3 `INFORMATIONAL` split is context.
 export const TOTAL_CASES = 517;

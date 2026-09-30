@@ -1,7 +1,7 @@
-//! The version is stated in three files that cannot import each other, and the transition
-//! table that decides the next one lives in `scripts/next-version.mjs`, exercised by
-//! `next-version.test.ts`. Every bug this repository has shipped in this area is the same
-//! shape: one fact stated twice, one of them stale.
+// The version is stated in three files that cannot import each other, and the transition
+// table that decides the next one lives in `scripts/next-version.mjs`, exercised by
+// `next-version.test.ts`. Every bug this repository has shipped in this area is the same
+// shape: one fact stated twice, one of them stale.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
