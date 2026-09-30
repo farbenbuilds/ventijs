@@ -91,6 +91,14 @@ test("the bump tags through the release app, the one credential that starts a ru
   expect(BUMP_WORKFLOW).not.toContain("id-token");
 });
 
+test("the checkout holds no credential that could authenticate the tag push", () => {
+  // actions/checkout otherwise persists a `GITHUB_TOKEN` Authorization header, which took
+  // precedence over the app token and made alpha.11's tag push a silent `GITHUB_TOKEN`
+  // push: the tag reached the remote with no publish run behind it.
+  expect(BUMP_WORKFLOW).toContain("persist-credentials: false");
+  expect(BUMP_WORKFLOW).toContain("BRANCH_TOKEN");
+});
+
 test("a re-run finds its own commit and an existing tag rather than bumping twice", () => {
   // A lost tag push is recovered by re-running: the version is already committed, and the
   // tag is pushed only when the remote does not have it.

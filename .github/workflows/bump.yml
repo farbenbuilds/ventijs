@@ -37,6 +37,9 @@ jobs:
           # `bump-version` scans `git log` for the previous bump commit; a depth-1 checkout
           # has none and writes no changelog section.
           fetch-depth: 0
+          # No persisted `GITHUB_TOKEN` credential: its Authorization header would
+          # authenticate the tag push below, and a `GITHUB_TOKEN` push starts no run.
+          persist-credentials: false
 
       # The checkout keeps the default `GITHUB_TOKEN` on purpose: the bump commit reaches
       # `main` without starting a second round of CI, and only the tag push needs a
@@ -66,6 +69,7 @@ jobs:
           # Through the environment: a version string is manifest data, and manifest data
           # interpolated into a `run:` line is shell input.
           VERSION: ${{ steps.bump.outputs.version }}
+          BRANCH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -82,7 +86,9 @@ jobs:
           # A merge landing during this job makes the push a non-fast-forward. Rebasing
           # onto it is a rebase of four lines onto a tree that did not touch them.
           git pull --rebase origin main
-          git push origin HEAD:main
+          # The default token authenticates this push, which is what keeps it silent: only
+          # the tag push below should start a run.
+          git push "https://x-access-token:${BRANCH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
 
       - name: Tag the version
         env:
