@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-alpha.12] - 2026-09-30
+
+### Fixed
+
+- fix(ci): keep checkout from authenticating the app-token tag push (#56)
+
 ## [1.0.0-alpha.10] - 2026-09-29
 
 ### Fixed
