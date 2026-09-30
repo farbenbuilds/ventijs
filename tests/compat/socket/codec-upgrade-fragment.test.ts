@@ -1,7 +1,7 @@
-//! Reassembly on the Node upgrade route.
-//!
-//! Its own file because a split message is the one case where what a peer sends and
-//! what the codec does differ: two frames, one message.
+// Reassembly on the Node upgrade route.
+//
+// Its own file because a split message is the one case where what a peer sends and
+// what the codec does differ: two frames, one message.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../../binding/support";

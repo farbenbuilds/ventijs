@@ -1,6 +1,6 @@
-//! A self-signed `wss:` server, shared by the client suites that need one. Its own module
-//! because the certificate is generated with `openssl` and taking a minute to mint, so a
-//! suite that needs two servers should mint one.
+// A self-signed `wss:` server, shared by the client suites that need one. Its own module
+// because the certificate is generated with `openssl` and taking a minute to mint, so a
+// suite that needs two servers should mint one.
 
 import { execFileSync } from "node:child_process";
 import { createServer as createHttps, type Server as HttpsServer } from "node:https";

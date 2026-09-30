@@ -1,8 +1,8 @@
-//! What a peer is refused for, and what the caller learns about it.
-//!
-//! A refusal is the half of the contract a hostile peer exercises, so each case here
-//! is a frame RFC 6455 forbids, the close code it maps to, and the offset a caller
-//! resumes from.
+// What a peer is refused for, and what the caller learns about it.
+//
+// A refusal is the half of the contract a hostile peer exercises, so each case here
+// is a frame RFC 6455 forbids, the close code it maps to, and the offset a caller
+// resumes from.
 
 import { expect, test } from "vitest";
 import {

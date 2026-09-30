@@ -1,6 +1,6 @@
-//! Which `@ventiws/binding-*` package a host resolves to. The mapping is the whole of
-//! the install-time dispatch, and a wrong answer is a `MODULE_NOT_FOUND` at first socket
-//! rather than anything a caller can act on, so each family is pinned from both sides.
+// Which `@ventiws/binding-*` package a host resolves to. The mapping is the whole of
+// the install-time dispatch, and a wrong answer is a `MODULE_NOT_FOUND` at first socket
+// rather than anything a caller can act on, so each family is pinned from both sides.
 
 import { expect, test } from "vitest";
 import {

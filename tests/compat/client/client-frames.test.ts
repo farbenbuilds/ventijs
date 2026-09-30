@@ -1,8 +1,8 @@
-//! What the client's frames look like on the wire, judged by a `ws` server.
-//!
-//! Its own file because the question is about the bytes rather than the events: a
-//! server that refuses an unmasked frame, a binary payload that keeps its bytes, and a
-//! message that survives the round trip at the size where framing stops being trivial.
+// What the client's frames look like on the wire, judged by a `ws` server.
+//
+// Its own file because the question is about the bytes rather than the events: a
+// server that refuses an unmasked frame, a binary payload that keeps its bytes, and a
+// message that survives the round trip at the size where framing stops being trivial.
 
 import { expect, test } from "vitest";
 import { engineLimits } from "../../../src/binding/server";

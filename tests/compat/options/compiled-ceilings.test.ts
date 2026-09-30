@@ -1,13 +1,13 @@
-//! Which option reads reach into the compiled addon, and which do not.
-//!
-//! Its own module because the property is a boundary, not a behaviour: `ts-test.yml`
-//! runs this directory with the addon available, and the reason it has to is that
-//! normalization reads a compiled ceiling. What matters is that it reads it *only* when
-//! a value has to be compared against it, because a normalizer that loads a binary to
-//! compute a default is a normalizer that cannot be exercised without one.
-//!
-//! Every case here runs with the addon's loader poisoned, so a read that should not happen
-//! fails rather than passing because a binary happened to be present.
+// Which option reads reach into the compiled addon, and which do not.
+//
+// Its own module because the property is a boundary, not a behaviour: `ts-test.yml`
+// runs this directory with the addon available, and the reason it has to is that
+// normalization reads a compiled ceiling. What matters is that it reads it *only* when
+// a value has to be compared against it, because a normalizer that loads a binary to
+// compute a default is a normalizer that cannot be exercised without one.
+//
+// Every case here runs with the addon's loader poisoned, so a read that should not happen
+// fails rather than passing because a binary happened to be present.
 
 import { afterEach, expect, test, vi } from "vitest";
 import type * as LoadModule from "../../../src/binding/load";

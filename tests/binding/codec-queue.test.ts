@@ -1,9 +1,9 @@
-//! The event queue: what fits, what waits, and where a caller resumes.
-//!
-//! The queue's bound is the codec's memory bound. A control payload is capped at 125
-//! bytes so a ring of them is cheap, and a data message's payload borrows the single
-//! reassembly buffer so only one of those can be waiting. These are the tests that
-//! say so.
+// The event queue: what fits, what waits, and where a caller resumes.
+//
+// The queue's bound is the codec's memory bound. A control payload is capped at 125
+// bytes so a ring of them is cheap, and a data message's payload borrows the single
+// reassembly buffer so only one of those can be waiting. These are the tests that
+// say so.
 
 import { expect, test } from "vitest";
 import {

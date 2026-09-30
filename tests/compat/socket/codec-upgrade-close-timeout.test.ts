@@ -1,8 +1,8 @@
-//! The close deadline on a socket the server owns.
-//!
-//! Its own file because the server's deadline is a different path from the client's:
-//! the value comes from the *server's* options rather than from a client's, and a
-//! socket that never gets it is a socket whose `close()` is a promise nobody keeps.
+// The close deadline on a socket the server owns.
+//
+// Its own file because the server's deadline is a different path from the client's:
+// the value comes from the *server's* options rather than from a client's, and a
+// socket that never gets it is a socket whose `close()` is a promise nobody keeps.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer, type ServerOptions } from "../../../src/index";

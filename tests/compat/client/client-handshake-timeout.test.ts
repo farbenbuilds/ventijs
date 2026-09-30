@@ -1,6 +1,6 @@
-//! `handshakeTimeout` against a peer that accepts and never answers, and the two
-//! shapes of "no deadline". `ws` gates the option on truthiness (`websocket.js:888`), so
-//! zero is a caller saying "no deadline" rather than a deadline that expires at once.
+// `handshakeTimeout` against a peer that accepts and never answers, and the two
+// shapes of "no deadline". `ws` gates the option on truthiness (`websocket.js:888`), so
+// zero is a caller saying "no deadline" rather than a deadline that expires at once.
 
 import { expect, test } from "vitest";
 import { createServer, type Server } from "node:http";

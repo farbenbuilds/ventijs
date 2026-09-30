@@ -1,13 +1,13 @@
-//! What a server-side socket reports for `url`.
-//!
-//! `ws` assigns `_url` in one place, `initAsClient` (`websocket.js:719`), so a socket a
-//! server accepted never gets one and the getter returns `undefined`
-//! (`websocket.js:190`) — while `@types/ws` declares `readonly url: string`, so the
-//! reference runtime and its own types disagree. ventiws's state record starts `url` at
-//! `""` (`src/compat/socket/state.ts:40`).
-//!
-//! Recorded rather than fixed. The honest type is `string | undefined`, and that means
-//! changing `SocketState.url` and the record's getter, neither of which this suite owns.
+// What a server-side socket reports for `url`.
+//
+// `ws` assigns `_url` in one place, `initAsClient` (`websocket.js:719`), so a socket a
+// server accepted never gets one and the getter returns `undefined`
+// (`websocket.js:190`) — while `@types/ws` declares `readonly url: string`, so the
+// reference runtime and its own types disagree. ventiws's state record starts `url` at
+// `""` (`src/compat/socket/state.ts:40`).
+//
+// Recorded rather than fixed. The honest type is `string | undefined`, and that means
+// changing `SocketState.url` and the record's getter, neither of which this suite owns.
 
 import { WebSocket as WsSocket, WebSocketServer as WsServer } from "ws";
 import { expect, test } from "vitest";

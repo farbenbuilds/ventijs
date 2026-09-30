@@ -1,6 +1,6 @@
-//! Two properties of the boundary a caller depends on, neither of which held:
-//! a `Buffer` handed to the decoder comes back unchanged, and a record the engine
-//! cannot carry does not stop the ones behind it.
+// Two properties of the boundary a caller depends on, neither of which held:
+// a `Buffer` handed to the decoder comes back unchanged, and a record the engine
+// cannot carry does not stop the ones behind it.
 
 import { expect, test } from "vitest";
 import {

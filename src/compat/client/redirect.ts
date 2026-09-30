@@ -10,9 +10,9 @@ import { emitEvent } from "../events/emitter";
 import { reportUnexpected } from "./unexpected";
 import { createError } from "../errors";
 import { parseAddress, type ClientAddress } from "./address";
-import { abort, create, finish } from "./dial";
+import { abort, create, finish } from "./hop";
+import { onUpgrade } from "./open";
 import { buildRequest, newKey } from "./request";
-import { stripCredentials } from "./credentials";
 import type { Attempt } from "./connect";
 
 /// A `Location` with any other status is not a redirect: a 200 carrying one is a server
@@ -33,6 +33,21 @@ export function onResponse(
     return;
   }
   reportUnexpected(attempt, request, response);
+}
+
+/// Credentials across a redirect. A security property rather than a step in a flow, and the
+/// one part of a hop whose failure is silent: a header that was not dropped produces no
+/// error and only a password on a server the caller did not name.
+
+/// In place, because `request.ts` hands `http.request` the *same* header object it stores on
+/// the handshake, so two copies would mean stripping one and sending the other.
+export function stripCredentials(headers: unknown): void {
+  if (typeof headers !== "object" || headers === null) return;
+  const map = headers as Record<string, string | string[]>;
+  for (const name of Object.keys(map)) {
+    const lower = name.toLowerCase();
+    if (lower === "authorization" || lower === "cookie") delete map[name];
+  }
 }
 
 /// The four refusals each end the chain, and each reports before it does, so a caller
@@ -91,7 +106,7 @@ function follow(
     newKey(),
     attempt.auth,
   );
-  const hop = create(attempt);
+  const hop = create(attempt, { upgrade: onUpgrade, response: onResponse });
   if (hop === null) return;
   // Before the hop goes out, the only order in which a listener can still change it.
   emitEvent(attempt.state, "redirect", next.url, hop);

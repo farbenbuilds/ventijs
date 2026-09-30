@@ -61,7 +61,6 @@ export function completeUpgrade(
   Object.defineProperty(socket, UPGRADED, { value: true });
   detachHandshakeError(socket);
   socket.write(headers.concat("\r\n").join("\r\n"));
-  void head;
   // Published before the socket opens, because opening is what emits `open` and `ws` has
   // assigned `_protocol` by then. An `open` listener otherwise saw an empty protocol on a
   // connection the server had already selected one for.
@@ -92,7 +91,7 @@ export function completeUpgrade(
     if (extensions) acceptedState.extensions = extensions.header;
     acceptedState.threshold = thresholdOf(state.normalizedOptions.perMessageDeflate);
   }
-  attachSocket(accepted, socket);
+  attachSocket(accepted, socket, undefined, head);
   if (state.normalizedOptions.clientTracking) trackClient(state, accepted);
   callback(accepted, request);
 }

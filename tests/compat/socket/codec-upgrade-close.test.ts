@@ -1,9 +1,9 @@
-//! Control frames and how a connection on the Node upgrade route ends.
-//!
-//! The codes are the whole contract here. A close that never reaches the peer is a
-//! 1006 to them, a refusal that reports the wrong code is a limit the application
-//! cannot diagnose, an error with no close leaves a socket open forever, and a ping
-//! that is not answered on time is a peer that drops the connection.
+// Control frames and how a connection on the Node upgrade route ends.
+//
+// The codes are the whole contract here. A close that never reaches the peer is a
+// 1006 to them, a refusal that reports the wrong code is a limit the application
+// cannot diagnose, an error with no close leaves a socket open forever, and a ping
+// that is not answered on time is a peer that drops the connection.
 
 import { expect, test } from "vitest";
 import { OPEN } from "../../../src/compat/ready-state";
@@ -86,6 +86,49 @@ test(
     const client = await openClient(harness.url);
     try {
       expect((await accepted).readyState).toBe(OPEN);
+    } finally {
+      client.close();
+      await harness.close();
+    }
+  },
+);
+
+test(
+  "a fractional close code truncates toward zero on the wire",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    const harness = await upgradeHarness();
+    const accepted = nextSocket(harness.server);
+    const client = await openClient(harness.url);
+    try {
+      const socket = await accepted;
+      const closed = new Promise<[number, string]>((resolve) => {
+        client.on("close", (code, reason) => resolve([code, reason.toString()]));
+      });
+      socket.close(1000.5, "done");
+      // `closeCodeOf` truncates before framing, so the peer reads 1000, not 1000.5.
+      expect(await closed).toEqual([1000, "done"]);
+    } finally {
+      client.close();
+      await harness.close();
+    }
+  },
+);
+
+test(
+  "an absent close reason reaches the peer as a bare close",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    const harness = await upgradeHarness();
+    const accepted = nextSocket(harness.server);
+    const client = await openClient(harness.url);
+    try {
+      const socket = await accepted;
+      const closed = new Promise<[number, string]>((resolve) => {
+        client.on("close", (code, reason) => resolve([code, reason.toString()]));
+      });
+      socket.close(1000, undefined);
+      expect(await closed).toEqual([1000, ""]);
     } finally {
       client.close();
       await harness.close();

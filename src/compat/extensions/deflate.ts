@@ -1,12 +1,10 @@
-/// Negotiating `permessage-deflate`, in both directions: `ws`'s rules with one
-/// deliberate divergence, a `*_max_window_bits` below 15 is declined because this
-/// codec's one-shot libdeflate compressor always emits a full window.
+/// `permessage-deflate` both ways under `ws`'s rules, one deliberate divergence: a below-15
+/// `*_max_window_bits` is declined, because one-shot libdeflate emits only a full window.
 
 import type { NormalizedPerMessageDeflate } from "../../types/options";
 import type { ParsedExtension } from "./grammar";
 import { formatExtension } from "./format";
 import { NO_CONTEXT_TAKEOVER, PERMESSAGE_DEFLATE } from "./negotiated";
-import { narrowed } from "./window";
 import { declines } from "./decline";
 import { normalizeParameters, WINDOW_BITS, type Normalized } from "./params";
 
@@ -79,6 +77,15 @@ export function acceptAsClient(
   return { accepted: answer(options, normalized) };
 }
 
+/// 15 is the only window libdeflate emits, so only a client window below it is written.
+function narrowClientWindow(
+  parameters: Record<string, string>,
+  option: number | false | undefined,
+): void {
+  if (typeof option !== "number" || option >= WINDOW_BITS) return;
+  parameters.client_max_window_bits = String(option);
+}
+
 /// This codec's own two parameters and nothing else, deliberately not a subset of the
 /// offer: RFC 7692 section 7.1.2.2 lets a server answer with unoffered parameters and
 /// `ws` accepts both `no_context_takeover` ones unasked, so the header states what this
@@ -87,8 +94,9 @@ export function acceptAsClient(
 function answer(options: NormalizedPerMessageDeflate, offer: Normalized): AcceptedDeflate {
   const parameters: Record<string, string> = { ...NO_CONTEXT_TAKEOVER };
   if (offer.server_no_context_takeover) parameters.server_no_context_takeover = "";
-  narrowed(parameters, "server_max_window_bits", options.serverMaxWindowBits);
-  narrowed(parameters, "client_max_window_bits", options.clientMaxWindowBits);
+  // The server window is never written: 15 is all this compressor emits, and a below-15
+  // option is declined by `serverWindowUsable` before an answer is built.
+  narrowClientWindow(parameters, options.clientMaxWindowBits);
   return {
     name: PERMESSAGE_DEFLATE,
     parameters,

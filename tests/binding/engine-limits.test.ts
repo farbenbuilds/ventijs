@@ -1,5 +1,5 @@
-//! The limits the prose claims, asserted against the binary. A restated constant is a
-//! second copy that fails silently, so these assert relations and floors.
+// The limits the prose claims, asserted against the binary. A restated constant is a
+// second copy that fails silently, so these assert relations and floors.
 
 import { expect, test } from "vitest";
 import { engineLimits } from "../../src/binding/server";

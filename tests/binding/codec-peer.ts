@@ -1,9 +1,9 @@
-//! A listener a codec test can read frames from, and a `ws` client it can read from.
-//!
-//! The buffering is the point. A peer that writes the instant its handshake
-//! completes delivers its first bytes before a test has attached a reader, and those
-//! bytes are then gone rather than late, so a test fails for a reason that has
-//! nothing to do with the codec.
+// A listener a codec test can read frames from, and a `ws` client it can read from.
+//
+// The buffering is the point. A peer that writes the instant its handshake
+// completes delivers its first bytes before a test has attached a reader, and those
+// bytes are then gone rather than late, so a test fails for a reason that has
+// nothing to do with the codec.
 
 import { createServer, type Socket } from "node:net";
 import { WebSocket as WsClient } from "ws";

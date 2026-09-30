@@ -1,10 +1,10 @@
-//! The hop limit, measured instead of reasoned about.
-//!
-//! The two implementations put the comparison on opposite sides of the increment: `ws`
-//! increments and then compares (`websocket.js:911`), ventiws compares and only creates a
-//! hop afterwards (`redirect.ts:46`). Whether that is a divergence is not decidable by
-//! reading either one, so the fixture is a chain that never ends and the assertion is how
-//! many requests the peer actually received.
+// The hop limit, measured instead of reasoned about.
+//
+// The two implementations put the comparison on opposite sides of the increment: `ws`
+// increments and then compares (`websocket.js:911`), ventiws compares and only creates a
+// hop afterwards (`redirect.ts:46`). Whether that is a divergence is not decidable by
+// reading either one, so the fixture is a chain that never ends and the assertion is how
+// many requests the peer actually received.
 
 import { WebSocket as WsSocket } from "ws";
 import { expect, test } from "vitest";

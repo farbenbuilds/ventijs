@@ -1,9 +1,9 @@
-//! A close handshake that is never answered.
-//!
-//! Its own file because the deadline is the only thing standing between a hung peer
-//! and a socket that holds its transport and its codec slot for the life of the
-//! process. `ws` bounds the wait with `closeTimeout`; without it a `close()` on a peer
-//! that has stopped reading is a promise that is never kept.
+// A close handshake that is never answered.
+//
+// Its own file because the deadline is the only thing standing between a hung peer
+// and a socket that holds its transport and its codec slot for the life of the
+// process. `ws` bounds the wait with `closeTimeout`; without it a `close()` on a peer
+// that has stopped reading is a promise that is never kept.
 
 import { expect, test } from "vitest";
 import { WebSocket, type ClientOptions } from "../../../src/index";

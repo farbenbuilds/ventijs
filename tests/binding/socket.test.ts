@@ -58,15 +58,22 @@ test(
 );
 
 test(
-  "close transitions exactly once and rejects later sends",
+  "close is refused without latching or staging a close record",
   { timeout: TEST_TIMEOUT_MS },
   async () => {
     const { server, connection, socket } = await connectedSocket();
     try {
-      expect(closeSocket(server.handle, connection, 1000, new Uint8Array())).toBe("ok");
-      expect(closeSocket(server.handle, connection, 1000, new Uint8Array())).toBe("closing");
-      expect(sendSocket(server.handle, connection, new Uint8Array([1]))).toBe("closing");
-      expect(closeSocket(server.handle, connection, 1005, new Uint8Array())).toBe("closing");
+      expect(closeSocket(server.handle, connection, 1000, new Uint8Array())).toBe(
+        "policy-violation",
+      );
+      expect(closeSocket(server.handle, connection, 1000, new Uint8Array())).toBe(
+        "policy-violation",
+      );
+      // No latch and no staged record: a close frame would debit the buffered amount
+      // and never drain.
+      expect(socketBufferedAmount(server.handle, connection)).toBe(0);
+      expect(sendSocket(server.handle, connection, new Uint8Array([1]), true)).toBe("ok");
+      expect(socketBufferedAmount(server.handle, connection)).toBe(1);
     } finally {
       socket.close();
       await server.dispose();

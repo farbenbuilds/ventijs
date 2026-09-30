@@ -1,10 +1,10 @@
-//! The `upgrade` event, and the order it fires in.
-//!
-//! Split out of `client-handshake-events.test.ts` because it is the only one of the three
-//! that is about a *successful* handshake, and its one load-bearing property is the order:
-//! `ws` emits the response before it checks anything, so a listener may close the socket
-//! from it. A validation failure ahead of the event would make the event unobservable on
-//! exactly the responses a caller most wants to inspect.
+// The `upgrade` event, and the order it fires in.
+//
+// Split out of `client-handshake-events.test.ts` because it is the only one of the three
+// that is about a *successful* handshake, and its one load-bearing property is the order:
+// `ws` emits the response before it checks anything, so a listener may close the socket
+// from it. A validation failure ahead of the event would make the event unobservable on
+// exactly the responses a caller most wants to inspect.
 
 import type { IncomingMessage } from "node:http";
 import { expect, test } from "vitest";

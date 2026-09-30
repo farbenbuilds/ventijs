@@ -1,5 +1,4 @@
 import { socketBufferedAmount } from "../../binding/socket";
-import { queuedBytes } from "./queued";
 import type { CodedError } from "../../types/errors";
 import type { SocketState } from "../../types/socket";
 import type { ErrorStatus } from "../../types/status";
@@ -53,8 +52,16 @@ export function statusError(status: ErrorStatus): CodedError {
   return createStatusError(status, `ventiws: socket operation failed with status "${status}"`);
 }
 
-/// A transport-owned socket has no staging ring, so it reads the transport's own queue;
-/// see `queued.ts`.
+/// `ws` reports its sender's queue length, and a transport's is the same number:
+/// `writableLength` is the one property on a Node stream that means "waiting to go out".
+/// A `DESTROYED` stream reports zero, which is right for a socket that will never write
+/// again, so reading it on a closed socket is harmless.
+export function queuedBytes(state: SocketState): number {
+  if (state.transport === null) return 0;
+  return state.transport.writableLength;
+}
+
+/// A transport-owned socket has no staging ring, so it reads the transport's own queue.
 export function bufferedAmountOf(state: SocketState): number {
   if (state.attachment === null) return queuedBytes(state);
   return socketBufferedAmount(state.attachment.server, state.attachment.connection);

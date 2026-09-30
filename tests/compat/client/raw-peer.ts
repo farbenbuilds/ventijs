@@ -1,9 +1,9 @@
-//! A peer that completes the handshake and then says nothing useful.
-//!
-//! Its own module because the interesting cases are the ones `ws` will not do: a 101
-//! with no subprotocol after one was requested, a 101 with a wrong accept digest, a
-//! response that is not a 101 at all. A conforming server is what the other suite
-//! uses; this is what a hostile or broken one looks like.
+// A peer that completes the handshake and then says nothing useful.
+//
+// Its own module because the interesting cases are the ones `ws` will not do: a 101
+// with no subprotocol after one was requested, a 101 with a wrong accept digest, a
+// response that is not a 101 at all. A conforming server is what the other suite
+// uses; this is what a hostile or broken one looks like.
 
 import { createServer, type Server, type Socket } from "node:net";
 import { createHash } from "node:crypto";

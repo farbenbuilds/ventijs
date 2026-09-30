@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
+import { closeFrameWritten } from "../../../src/compat/socket/lifecycle";
 import { createWebSocketStream } from "../../../src/compat/stream";
 import { WebSocket, WebSocketServer } from "../../../src/index";
+import type { CodedError } from "../../../src/types/errors";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
 import { attached, terminateClient } from "./socket-support";
 
@@ -83,18 +85,29 @@ test("send reports ring overflow through the callback", { timeout: TEST_TIMEOUT_
   }
 });
 
-test("close latches the closing state exactly once", { timeout: TEST_TIMEOUT_MS }, async () => {
-  const { server, client, socket } = await attached();
-  try {
-    socket.close(1000, "done");
-    expect(socket.readyState).toBe(socket.CLOSING);
-    expect(() => socket.close(1000, "done")).not.toThrow();
-    expect(socket.readyState).toBe(socket.CLOSING);
-  } finally {
-    terminateClient(client);
-    await server.dispose();
-  }
-});
+/// The engine route cannot frame an app-initiated close yet: the first close reports the
+/// missing implementation, a second is not a second event, and the socket stays OPEN.
+test(
+  "an unsupported engine-route close reports once and leaves the socket OPEN",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    const { server, client, socket } = await attached();
+    try {
+      const errors: CodedError[] = [];
+      socket.on("error", (error: Error) => {
+        errors.push(error as CodedError);
+      });
+      socket.close(1000, "done");
+      socket.close(1000, "done");
+      expect(errors.map((error) => error.code)).toEqual(["ERR_POLICY_VIOLATION"]);
+      expect(socket.readyState).toBe(socket.OPEN);
+      expect(closeFrameWritten(socket)).toBe(false);
+    } finally {
+      terminateClient(client);
+      await server.dispose();
+    }
+  },
+);
 
 test("pause and resume mirror the native dispatch flag", { timeout: TEST_TIMEOUT_MS }, async () => {
   const { server, client, socket } = await attached();

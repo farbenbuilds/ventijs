@@ -1,12 +1,12 @@
-//! What `bufferedAmount` counts on a client, measured against `ws` while a peer stalls.
-//!
-//! `ws` reports `socket._writableState.length + sender._bufferedBytes`, which is every
-//! byte of the connection that has not reached the kernel yet, framing included.
-//! ventiws reads the transport's own queue (`src/compat/socket/queued.ts`), which is the
-//! Node stream's `writableLength` and therefore the same queue for the client route.
-//! The absolute figure is not assertable: the kernel takes a run-dependent number of
-//! frames before its send buffer fills, and both libraries see that run. The marginal
-//! cost of one message is, and it says whether a caller polling this number can trust it.
+// What `bufferedAmount` counts on a client, measured against `ws` while a peer stalls.
+//
+// `ws` reports `socket._writableState.length + sender._bufferedBytes`, which is every
+// byte of the connection that has not reached the kernel yet, framing included.
+// ventiws reads the transport's own queue (`src/compat/socket/payload.ts`), which is the
+// Node stream's `writableLength` and therefore the same queue for the client route.
+// The absolute figure is not assertable: the kernel takes a run-dependent number of
+// frames before its send buffer fills, and both libraries see that run. The marginal
+// cost of one message is, and it says whether a caller polling this number can trust it.
 
 import { WebSocket as WsSocket, WebSocketServer as WsServer } from "ws";
 import { expect, test } from "vitest";

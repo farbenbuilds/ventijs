@@ -6,7 +6,7 @@
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
-import { abort } from "./dial";
+import { abort } from "./hop";
 import type { Attempt } from "./connect";
 
 /// Fails unless a listener took the response.

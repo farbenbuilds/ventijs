@@ -1,13 +1,13 @@
-//! `maxPayload` and `maxFragments` on the server side of the public surface.
-//!
-//! These are the two options that were normalized, reported on `server.options`, and
-//! then never read: the codec had one compiled capacity and no argument to change it,
-//! so the answer to "what is the largest message this accepts" was a `comptime`
-//! constant while the reported value was `ws`'s 100 MiB.
-//!
-//! Every case here is small and names the option it set. A test that measured the
-//! boundary by allocating whatever the build happened to cap at would pass whether or
-//! not the option was read, which is the failure these replace.
+// `maxPayload` and `maxFragments` on the server side of the public surface.
+//
+// These are the two options that were normalized, reported on `server.options`, and
+// then never read: the codec had one compiled capacity and no argument to change it,
+// so the answer to "what is the largest message this accepts" was a `comptime`
+// constant while the reported value was `ws`'s 100 MiB.
+//
+// Every case here is small and names the option it set. A test that measured the
+// boundary by allocating whatever the build happened to cap at would pass whether or
+// not the option was read, which is the failure these replace.
 
 import { expect, test } from "vitest";
 import { WebSocketServer } from "../../../src/index";

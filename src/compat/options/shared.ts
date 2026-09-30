@@ -1,5 +1,6 @@
-import type { NormalizedPerMessageDeflate } from "../../types/options";
+import type { NormalizedPerMessageDeflate, WindowBitsOption } from "../../types/options";
 import type { PerMessageDeflateOptions } from "../../types/ws";
+import { MAX_WINDOW_BITS, MIN_WINDOW_BITS } from "../extensions/params";
 import { createError } from "../errors";
 
 export const DEFAULT_MAX_PAYLOAD = 100 * 1024 * 1024;
@@ -55,6 +56,24 @@ export function parseProtocolHeader(header: string): readonly string[] {
   return normalizeProtocols(header.split(",").map((protocol) => protocol.trim()));
 }
 
+/// The RFC 7692 window range, enforced at construction. `ws` writes an out-of-range option
+/// into a header and lets the peer fail; `false` is the runtime's name-no-window form.
+function windowBitsOf(name: string, raw: unknown): WindowBitsOption {
+  if (raw === undefined || raw === false) return raw;
+  if (
+    typeof raw === "number" &&
+    Number.isInteger(raw) &&
+    raw >= MIN_WINDOW_BITS &&
+    raw <= MAX_WINDOW_BITS
+  ) {
+    return raw;
+  }
+  return invalidOption(
+    `The ${name} option must be an integer in [${MIN_WINDOW_BITS}, ${MAX_WINDOW_BITS}] (received ${String(raw)})`,
+    RangeError,
+  );
+}
+
 export function normalizePerMessageDeflate(
   value: boolean | PerMessageDeflateOptions | undefined,
   fallback: boolean,
@@ -67,8 +86,8 @@ export function normalizePerMessageDeflate(
   return {
     serverNoContextTakeover: options.serverNoContextTakeover,
     clientNoContextTakeover: options.clientNoContextTakeover,
-    serverMaxWindowBits: options.serverMaxWindowBits,
-    clientMaxWindowBits: options.clientMaxWindowBits,
+    serverMaxWindowBits: windowBitsOf("serverMaxWindowBits", options.serverMaxWindowBits),
+    clientMaxWindowBits: windowBitsOf("clientMaxWindowBits", options.clientMaxWindowBits),
     threshold: options.threshold ?? DEFAULT_THRESHOLD,
     concurrencyLimit: options.concurrencyLimit ?? DEFAULT_CONCURRENCY_LIMIT,
     zlibDeflateOptions: options.zlibDeflateOptions,

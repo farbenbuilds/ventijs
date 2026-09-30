@@ -1,9 +1,7 @@
-/// Whether the window this compressor emits, 15, is the one a client offer allows.
-///
-/// The comparison against this side's own option is `ws`'s, at `permessage-deflate.js:166`: a
-/// server that asked for more than the client offered has nothing to give back. What `ws` does
-/// not do is decline a window it cannot produce. It accepts, answers, then compresses at 15
-/// regardless, so the header claims a window the stream does not use.
+/// Whether a client offer allows the 15-bit window this compressor emits, and whether the
+/// server's own configured window is one it can produce. The offer comparison is `ws`'s at
+/// `permessage-deflate.js:166`; a below-15 option is declined because one-shot libdeflate
+/// emits only 15, so answering it would name a window the stream never uses.
 
 import type { NormalizedPerMessageDeflate } from "../../types/options";
 import { WINDOW_BITS, type Normalized } from "./params";
@@ -12,12 +10,16 @@ export function serverWindowUsable(
   options: NormalizedPerMessageDeflate,
   offer: Normalized,
 ): boolean {
+  const wanted = options.serverMaxWindowBits;
+  // A window below 15 is one no offer can grant: declining every offer beats answering with
+  // a parameter this compressor cannot honour.
+  if (typeof wanted === "number" && wanted < WINDOW_BITS) return false;
   const asked = offer.server_max_window_bits;
   if (asked === undefined) return true;
-  if (options.serverMaxWindowBits === false) return false;
-  if (typeof options.serverMaxWindowBits === "number") {
-    if (options.serverMaxWindowBits > asked) return false;
-    return options.serverMaxWindowBits >= WINDOW_BITS;
+  if (wanted === false) return false;
+  if (typeof wanted === "number") {
+    if (wanted > asked) return false;
+    return wanted >= WINDOW_BITS;
   }
   return asked >= WINDOW_BITS;
 }

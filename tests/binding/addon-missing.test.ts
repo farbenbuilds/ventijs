@@ -1,6 +1,6 @@
-//! What a caller reads when the native addon is not there. The load is lazy so importing
-//! ventiws works without the artifact, which left the first load inside an `upgrade` listener
-//! where a missing artifact was an uncaught exception: hence a pure message function.
+// What a caller reads when the native addon is not there. The load is lazy so importing
+// ventiws works without the artifact, which left the first load inside an `upgrade` listener
+// where a missing artifact was an uncaught exception: hence a pure message function.
 
 import { expect, test } from "vitest";
 import { missingAddonMessage } from "../../src/binding/addon-error";

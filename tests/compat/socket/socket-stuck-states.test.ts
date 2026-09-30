@@ -1,6 +1,6 @@
-//! The states a socket can reach that a caller would call a bug, and the teardown a
-//! thrown listener is owed. The event-loop cases are in `socket-event-loop.test.ts`.
-//! None of these is a `ws` behaviour, because `ws` has no equivalent state to get into.
+// The states a socket can reach that a caller would call a bug, and the teardown a
+// thrown listener is owed. The event-loop cases are in `socket-event-loop.test.ts`.
+// None of these is a `ws` behaviour, because `ws` has no equivalent state to get into.
 
 import { Duplex } from "node:stream";
 import { expect, test } from "vitest";

@@ -105,10 +105,12 @@ test(
       state.deliveryPaused = true;
       state.maxBufferedChunks = 2;
       state.pendingInput.push(Buffer.alloc(0), Buffer.alloc(0));
+      // Held while the socket is open; the refusal's terminal transition releases them.
+      expect(state.pendingInput).toHaveLength(2);
       ingest(state, framed(1));
       const error = await failure;
       expect(error.code).toBe("WS_ERR_TOO_MANY_BUFFERED_PARTS");
-      expect(state.pendingInput).toHaveLength(2);
+      expect(state.pendingInput).toHaveLength(0);
     } finally {
       raw.destroy();
       await harness.close();

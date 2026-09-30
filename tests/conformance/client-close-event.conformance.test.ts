@@ -1,7 +1,7 @@
-//! Every way a client handshake can fail, observed the way a caller observes it. The abort path
-//! latched `CLOSED` and then called the function that dispatches `close`, which returns
-//! immediately on a socket that is already there, so every pre-101 failure set the ready state
-//! and emitted no event. Existing tests missed it by asserting `readyState`, which was correct.
+// Every way a client handshake can fail, observed the way a caller observes it. The abort path
+// latched `CLOSED` and then called the function that dispatches `close`, which returns
+// immediately on a socket that is already there, so every pre-101 failure set the ready state
+// and emitted no event. Existing tests missed it by asserting `readyState`, which was correct.
 
 import { WebSocket as WsClient } from "ws";
 import { expect, test } from "vitest";

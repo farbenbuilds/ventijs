@@ -1,9 +1,9 @@
-//! The extension header grammar, in isolation.
-//!
-//! Its own module because this is the one piece of negotiation a peer can attack with
-//! nothing but bytes, and a hand-written recursive-descent parser is exactly the kind of
-//! code that is correct on the examples in its own documentation. Every case here is a
-//! shape RFC 6455 section 9.1 allows or a near miss of one.
+// The extension header grammar, in isolation.
+//
+// Its own module because this is the one piece of negotiation a peer can attack with
+// nothing but bytes, and a hand-written recursive-descent parser is exactly the kind of
+// code that is correct on the examples in its own documentation. Every case here is a
+// shape RFC 6455 section 9.1 allows or a near miss of one.
 
 import { describe, expect, test } from "vitest";
 import { parseExtensions } from "../../../src/compat/extensions/grammar";

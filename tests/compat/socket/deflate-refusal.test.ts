@@ -1,9 +1,9 @@
-//! An offer this build cannot accept, answered with a 400.
-//!
-//! Its own module because these are the only cases that end the handshake, and the reason
-//! the negotiation returns an outcome rather than a nullable header: a 400 has to stop the
-//! handshake, and a 101 written after it is a stream error on the caller's own socket
-//! rather than the refusal the peer was told about.
+// An offer this build cannot accept, answered with a 400.
+//
+// Its own module because these are the only cases that end the handshake, and the reason
+// the negotiation returns an outcome rather than a nullable header: a 400 has to stop the
+// handshake, and a 101 written after it is a stream error on the caller's own socket
+// rather than the refusal the peer was told about.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../../binding/support";

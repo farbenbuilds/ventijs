@@ -17,7 +17,7 @@ import { CLOSED } from "../ready-state";
 import { acceptExtension } from "./extension";
 import { protocolRejection } from "./protocols";
 import { expectedAccept } from "./request";
-import { abort, discard } from "./dial";
+import { abort, discard } from "./hop";
 import type { Attempt } from "./connect";
 
 export function onUpgrade(

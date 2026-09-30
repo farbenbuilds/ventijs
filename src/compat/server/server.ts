@@ -71,8 +71,7 @@ export function createWebSocketServer(
     normalizedOptions: normalized,
     path: resolved.path ?? "",
     // Truthiness, not `=== false`: `ws` gates on `clientTracking` being truthy, so
-    // `null`, `0` and `""` all disable it. `?? true` read those as absent and left
-    // tracking on, which put a `clients` set where `ws` has none.
+    // `null`, `0` and `""` all disable tracking and the `clients` key stays absent.
     clients: normalized.clientTracking ? new Set<WebSocket>() : undefined,
     webSocket: (resolved.WebSocket ?? socketClass) as ServerSocketConstructor,
     server: null,

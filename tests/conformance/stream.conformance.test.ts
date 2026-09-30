@@ -1,7 +1,7 @@
-//! `createWebSocketStream` against a real server on each side. `ws` is the contract, so
-//! every scenario runs on both implementations and the transcripts have to match; the
-//! literal each test pins is `ws`'s own answer, so a divergence reads as a difference and a
-//! shared regression reads as one.
+// `createWebSocketStream` against a real server on each side. `ws` is the contract, so
+// every scenario runs on both implementations and the transcripts have to match; the
+// literal each test pins is `ws`'s own answer, so a divergence reads as a difference and a
+// shared regression reads as one.
 
 import type { DuplexOptions } from "node:stream";
 import { expect, test } from "vitest";

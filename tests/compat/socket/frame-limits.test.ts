@@ -1,10 +1,10 @@
-//! The three options that were normalized, documented, typed, and never read.
-//!
-//! All three are limits a caller sets to bound a peer: how much UTF-8 validation
-//! costs, how many pieces a message may be split into, and whether the events go out
-//! on the read that produced them. Each was a no-op, so each is a knob an operator
-//! turned believing it was protecting something, and the docs described a behaviour
-//! the code did not have.
+// The three options that were normalized, documented, typed, and never read.
+//
+// All three are limits a caller sets to bound a peer: how much UTF-8 validation
+// costs, how many pieces a message may be split into, and whether the events go out
+// on the read that produced them. Each was a no-op, so each is a knob an operator
+// turned believing it was protecting something, and the docs described a behaviour
+// the code did not have.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer, type ServerOptions } from "../../../src/index";

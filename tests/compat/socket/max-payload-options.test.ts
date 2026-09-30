@@ -1,9 +1,9 @@
-//! `maxPayload` as the client and as a validated option.
-//!
-//! The server-side boundaries are in `max-payload.test.ts`. What is here is the other
-//! end of the same contract: a local send over the limit is refused without closing
-//! the socket, and an option out of range is refused by name before a connection is
-//! ever made.
+// `maxPayload` as the client and as a validated option.
+//
+// The server-side boundaries are in `max-payload.test.ts`. What is here is the other
+// end of the same contract: a local send over the limit is refused without closing
+// the socket, and an option out of range is refused by name before a connection is
+// ever made.
 
 import { expect, test } from "vitest";
 import { codecCeilings, codecLimits, destroyCodec } from "../../../src/binding/codec";

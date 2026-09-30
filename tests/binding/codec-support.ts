@@ -1,5 +1,5 @@
-//! Codec fixtures shared by the binding suites. The defaults are the compiled ceilings, not
-//! `ws`'s, so the "over the capacity" cases are the smallest over-limit payloads available.
+// Codec fixtures shared by the binding suites. The defaults are the compiled ceilings, not
+// `ws`'s, so the "over the capacity" cases are the smallest over-limit payloads available.
 
 import { CODEC_ROLE, createCodec, type CodecOptions } from "../../src/binding/codec";
 

@@ -1,4 +1,4 @@
-//! The teardown three handshake suites share, so a fix here fixes all.
+// The teardown three handshake suites share, so a fix here fixes all.
 
 import { WebSocket } from "../../../src/index";
 

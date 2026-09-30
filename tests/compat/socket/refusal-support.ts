@@ -1,8 +1,8 @@
-//! The refusal harness: one server, one malformed frame, and what each side hears.
-//!
-//! Its own module because the two refusal suites need it and it is the part that decides
-//! whether a test means anything. The server is ventiws's own, so the socket is the
-//! facade's and the frames are the codec's.
+// The refusal harness: one server, one malformed frame, and what each side hears.
+//
+// Its own module because the two refusal suites need it and it is the part that decides
+// whether a test means anything. The server is ventiws's own, so the socket is the
+// facade's and the frames are the codec's.
 
 import type { WebSocketServer } from "../../../src/index";
 import { TEST_TIMEOUT_MS } from "../../binding/support";

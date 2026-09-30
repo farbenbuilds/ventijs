@@ -1,5 +1,5 @@
-//! The facts three `permessage-deflate` suites share. Under 1024 bytes a payload goes out
-//! raw, so the threshold cases would pass for the wrong reason.
+// The facts three `permessage-deflate` suites share. Under 1024 bytes a payload goes out
+// raw, so the threshold cases would pass for the wrong reason.
 
 import { WebSocketServer } from "../../../src/index";
 import type { ServerOptions } from "../../../src/types/ws";

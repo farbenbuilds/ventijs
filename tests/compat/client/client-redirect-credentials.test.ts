@@ -1,10 +1,10 @@
-//! What a redirect may carry to another origin.
-//!
-//! Its own file because it is a security question rather than a routing one. A
-//! redirect is under the control of whatever answered, so a `Location` naming another
-//! host must not deliver the credentials the first host was given, and a redirect
-//! within one host must, because a caller who authenticated expects to still be
-//! authenticated when the same server sends them elsewhere on itself.
+// What a redirect may carry to another origin.
+//
+// Its own file because it is a security question rather than a routing one. A
+// redirect is under the control of whatever answered, so a `Location` naming another
+// host must not deliver the credentials the first host was given, and a redirect
+// within one host must, because a caller who authenticated expects to still be
+// authenticated when the same server sends them elsewhere on itself.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";
