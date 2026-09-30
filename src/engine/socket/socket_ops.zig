@@ -51,27 +51,18 @@ pub fn send(slot: anytype, ring: anytype, index: u32, generation: u32, kind: pay
     return .ok;
 }
 
-/// Validates a close code and reason, stages the close frame, and enters
-/// `closing`. A second close observes `closing`.
-pub fn close(slot: anytype, ring: anytype, index: u32, generation: u32, code: u16, reason: []const u8) status.Status {
+/// Validates a close code and reason, then refuses with `policy_violation`: the engine
+/// route cannot frame an app-initiated close until the engine-thread drain `AGENTS.md`
+/// names as missing exists, and the outbound ring only publishes text and binary, so a
+/// staged close record would report success for a frame nothing can deliver. The record
+/// is left open, not latched.
+pub fn close(slot: anytype, _: anytype, _: u32, generation: u32, code: u16, reason: []const u8) status.Status {
     if (slot.generation != generation) return .invalid_handle;
     if (slot.blocked_status()) |blocked| return blocked;
     if (!status.valid_close_code(code)) return .invalid_close_code;
     if (reason.len > status.max_close_reason_bytes) return .invalid_close_reason;
     if (!std.unicode.utf8ValidateSlice(reason)) return .invalid_close_reason;
-
-    var frame: [2 + status.max_close_reason_bytes]u8 = undefined;
-    std.mem.writeInt(u16, frame[0..2], code, .big);
-    @memcpy(frame[2 .. 2 + reason.len], reason);
-    ring.stage(.close, index, generation, frame[0 .. 2 + reason.len]) catch |err| {
-        return switch (err) {
-            error.PayloadTooLarge => .invalid_close_reason,
-            error.QueueFull => .backpressure,
-        };
-    };
-    slot.state.store(.closing, .release);
-    _ = slot.buffered.fetchAdd(@intCast(2 + reason.len), .monotonic);
-    return .ok;
+    return .policy_violation;
 }
 
 /// Sets the inbound-dispatch pause flag for an open connection.

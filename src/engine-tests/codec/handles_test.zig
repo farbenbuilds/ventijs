@@ -4,9 +4,15 @@
 
 const std = @import("std");
 const testing = std.testing;
+const napi = @import("napi-zig");
 const capacities = @import("../../engine/codec/capacities.zig");
 const handles = @import("../../engine/codec/handles.zig");
 const limits = @import("../../engine/codec/limits.zig");
+
+const c = napi.c;
+
+/// Dummy non-null environment. The table only compares it; it never dereferences it.
+const env: c.napi_env = @ptrFromInt(0x1000);
 
 /// The compiled ceilings: the point of the table is generations and liveness, not limits.
 const max_message = capacities.max_message_bytes;
@@ -17,54 +23,44 @@ fn with_limits(message_bytes: usize, fragment_count: usize) limits.Limits {
 }
 
 test "a created codec resolves through its handle" {
-    const handle = try handles.create(.server, with_limits(max_message, max_fragments));
-    defer handles.destroy(handle.to_int());
+    const handle = try handles.create(env, .server, with_limits(max_message, max_fragments));
+    defer _ = handles.destroy(env, handle.to_int());
     try testing.expectEqual(@as(usize, 1), handles.live_count());
-    try testing.expect(handles.resolve(handle.to_int()) != null);
-    try testing.expectEqual(handles.Role.server, handles.role_of(handle.to_int()).?);
+    try testing.expect(handles.resolve(env, handle.to_int()) != null);
+    try testing.expectEqual(handles.Role.server, handles.role_of(env, handle.to_int()).?);
 }
 
 test "a destroyed codec stops resolving immediately" {
-    const handle = try handles.create(.server, with_limits(max_message, max_fragments));
+    const handle = try handles.create(env, .server, with_limits(max_message, max_fragments));
     const raw = handle.to_int();
-    try testing.expect(handles.resolve(raw) != null);
-    handles.destroy(raw);
-    try testing.expect(handles.resolve(raw) == null);
+    try testing.expect(handles.resolve(env, raw) != null);
+    _ = handles.destroy(env, raw);
+    try testing.expect(handles.resolve(env, raw) == null);
     try testing.expectEqual(@as(usize, 0), handles.live_count());
 }
 
 test "a reused slot hands out a fresh generation" {
-    const first = try handles.create(.server, with_limits(max_message, max_fragments));
+    const first = try handles.create(env, .server, with_limits(max_message, max_fragments));
     const stale = first.to_int();
-    handles.destroy(stale);
+    _ = handles.destroy(env, stale);
 
-    const second = try handles.create(.client, with_limits(max_message, max_fragments));
-    defer handles.destroy(second.to_int());
+    const second = try handles.create(env, .client, with_limits(max_message, max_fragments));
+    defer _ = handles.destroy(env, second.to_int());
     try testing.expectEqual(first.index, second.index);
     try testing.expect(second.generation != first.generation);
     // The stale handle must not resolve to the new occupant, which is the point of the
     // generation rather than of the index alone.
-    try testing.expect(handles.resolve(stale) == null);
-    try testing.expect(handles.resolve(second.to_int()) != null);
+    try testing.expect(handles.resolve(env, stale) == null);
+    try testing.expect(handles.resolve(env, second.to_int()) != null);
 }
 
 test "a double destroy is a no-op rather than a double free" {
-    const handle = try handles.create(.server, with_limits(max_message, max_fragments));
+    const handle = try handles.create(env, .server, with_limits(max_message, max_fragments));
     const raw = handle.to_int();
-    handles.destroy(raw);
-    handles.destroy(raw);
-    try testing.expect(handles.resolve(raw) == null);
+    _ = handles.destroy(env, raw);
+    _ = handles.destroy(env, raw);
+    try testing.expect(handles.resolve(env, raw) == null);
     try testing.expectEqual(@as(usize, 0), handles.live_count());
-}
-
-test "a handle from another environment is refused rather than followed" {
-    // A Worker thread has its own `napi_env` and the table is process-wide, so a handle
-    // acquired on one environment must not resolve on another; the facade pairs
-    // resolution with an environment check, and an out-of-range index is refused rather
-    // than wrapping into a live slot.
-    try testing.expect(handles.resolve(0xffff_ffff_ffff_ffff) == null);
-    try testing.expect(handles.resolve(capacities.codec_capacity) == null);
-    try testing.expect(handles.role_of(0xffff_ffff_ffff_ffff) == null);
 }
 
 test "a ceiling above the compiled one is refused rather than clamped" {
@@ -92,10 +88,10 @@ test "a ceiling of 0 becomes the ceiling, because ws reads it as no limit" {
 
 test "a handle reports the ceilings it was created with" {
     // Read back rather than echoed: only the thing enforcing the limit can report it.
-    const handle = try handles.create(.server, with_limits(4096, 8));
-    defer handles.destroy(handle.to_int());
-    try testing.expectEqual([2]usize{ 4096, 8 }, handles.ceilings_of(handle.to_int()));
-    try testing.expectEqual([2]usize{ 0, 0 }, handles.ceilings_of(0xffff_ffff_ffff_ffff));
+    const handle = try handles.create(env, .server, with_limits(4096, 8));
+    defer _ = handles.destroy(env, handle.to_int());
+    try testing.expectEqual([2]usize{ 4096, 8 }, handles.ceilings_of(env, handle.to_int()));
+    try testing.expectEqual([2]usize{ 0, 0 }, handles.ceilings_of(env, 0xffff_ffff_ffff_ffff));
 }
 
 test "the table is bounded" {
@@ -103,10 +99,10 @@ test "the table is bounded" {
     var created: [8]u64 = undefined;
     var filled: usize = 0;
     while (filled < created.len) : (filled += 1) {
-        const handle = handles.create(.server, with_limits(max_message, max_fragments)) catch break;
+        const handle = handles.create(env, .server, with_limits(max_message, max_fragments)) catch break;
         created[filled] = handle.to_int();
     }
     try testing.expectEqual(created.len, filled);
-    for (created[0..filled]) |raw| handles.destroy(raw);
+    for (created[0..filled]) |raw| _ = handles.destroy(env, raw);
     try testing.expectEqual(@as(usize, 0), handles.live_count());
 }

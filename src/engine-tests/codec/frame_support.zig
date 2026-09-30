@@ -34,26 +34,26 @@ pub const Frame = struct {
     payload: []const u8,
     mask: ?[4]u8 = null,
 
-    pub fn bytes(self: Frame, out: []u8) []const u8 {
-        const length: u7 = if (self.payload.len > 65535)
+    pub fn bytes(frame: Frame, out: []u8) []const u8 {
+        const length: u7 = if (frame.payload.len > 65535)
             127
-        else if (self.payload.len > 125)
+        else if (frame.payload.len > 125)
             126
         else
-            @intCast(self.payload.len);
+            @intCast(frame.payload.len);
         const header: zslay.types.FrameHeader = .{
-            .fin = self.fin,
+            .fin = frame.fin,
             .rsv1 = false,
             .rsv2 = false,
             .rsv3 = false,
-            .opcode = @intFromEnum(self.opcode),
-            .mask = self.mask != null,
+            .opcode = @intFromEnum(frame.opcode),
+            .mask = frame.mask != null,
             .payload_len = length,
         };
-        const written = zslay.frame.encode_header(out[0..14], header, self.payload.len, self.mask) catch unreachable;
-        @memcpy(out[written..][0..self.payload.len], self.payload);
-        if (self.mask) |key| zslay.frame.mask(out[written..][0..self.payload.len], key, 0);
-        return out[0 .. written + self.payload.len];
+        const written = zslay.frame.encode_header(out[0..14], header, frame.payload.len, frame.mask) catch unreachable;
+        @memcpy(out[written..][0..frame.payload.len], frame.payload);
+        if (frame.mask) |key| zslay.frame.mask(out[written..][0..frame.payload.len], key, 0);
+        return out[0 .. written + frame.payload.len];
     }
 };
 

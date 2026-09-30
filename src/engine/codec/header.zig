@@ -76,9 +76,9 @@ pub fn wire_opcode(kind: Kind) ?zslay.Opcode {
 /// RFC 6455 section 5.3 requires a fresh, unpredictable key per frame, because the mask
 /// exists to stop a malicious script on the peer from poisoning a proxy's cache with bytes
 /// of its own choosing; a predictable key is no mask, so this reads `randomSecure` and
-/// reports a failure rather than falling back to a weak source. The `Threaded` is built per
-/// call because a generator seeded once would make every mask predictable from the first.
+/// reports a failure rather than falling back to a weak source. No `Io` reaches the codec,
+/// and a per-frame `Threaded` leaks the fallback entropy fd its instance caches, so the
+/// std singleton is the process-wide source.
 pub fn draw_masking_key(key: *zslay.MaskingKey) !void {
-    var source: std.Io.Threaded = std.Io.Threaded.init_single_threaded;
-    source.io().randomSecure(key) catch return error.RandomSourceUnavailable;
+    std.Io.Threaded.global_single_threaded.io().randomSecure(key) catch return error.RandomSourceUnavailable;
 }

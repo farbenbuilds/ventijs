@@ -41,5 +41,7 @@ pub fn destroy(target: *instance.Instance) void {
     instance.servers.retire(target.handle);
     target.channel.close();
     target.cluster.deinit();
+    // The cluster only borrows the `Io`; the instance owns it, so this releases the urandom file.
+    target.io.deinit();
     std.heap.smp_allocator.destroy(target);
 }

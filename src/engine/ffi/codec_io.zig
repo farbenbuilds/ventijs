@@ -11,8 +11,7 @@ const handles = @import("../codec/handles.zig");
 /// again after draining. The argument is read, never consumed, so the same bytes can go
 /// to a second codec, which is what a conformance comparison needs.
 pub fn codec_feed(env: napi.Env, handle: u64, bytes: []const u8) !abi.Count {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return abi.feed_refusal(.stale_handle);
+    const peer = handles.resolve(env.handle, handle) orelse return abi.feed_refusal(.stale_handle);
     // One memcpy per scratch piece rather than per frame, and the caller's buffer
     // comes back unchanged.
     const result = peer.ingest(bytes);
@@ -26,22 +25,19 @@ pub fn codec_feed(env: napi.Env, handle: u64, bytes: []const u8) !abi.Count {
 /// Where the last `codec_feed` stopped. A separate call because the return's sign is
 /// already the outcome; guessing this wrong drops bytes or delivers a frame twice.
 pub fn codec_resume(env: napi.Env, handle: u64) !abi.Count {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return abi.feed_refusal(.stale_handle);
+    const peer = handles.resolve(env.handle, handle) orelse return abi.feed_refusal(.stale_handle);
     return @intCast(peer.resume_at());
 }
 
 /// Events waiting to be taken, so a caller can loop without calling `codec_select`.
 pub fn codec_pending(env: napi.Env, handle: u64) !abi.Count {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return abi.feed_refusal(.stale_handle);
+    const peer = handles.resolve(env.handle, handle) orelse return abi.feed_refusal(.stale_handle);
     return @intCast(peer.pending());
 }
 
 /// Selects the next event, or reports that there is none.
 pub fn codec_select(env: napi.Env, handle: u64) !bool {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return false;
+    const peer = handles.resolve(env.handle, handle) orelse return false;
     return peer.select();
 }
 
@@ -49,7 +45,7 @@ pub fn codec_select(env: napi.Env, handle: u64) !bool {
 /// a buffer inside the codec that the next frame overwrites: a handed-out `Buffer` has to
 /// be the only copy, or a listener retaining it reads the next message's bytes.
 pub fn codec_event(env: napi.Env, handle: u64) !?napi.Val {
-    const peer = handles.resolve(handle) orelse return null;
+    const peer = handles.resolve(env.handle, handle) orelse return null;
     const event = peer.selected_event() orelse return null;
     const buffer = try env.createBuffer(event.payload.len);
     @memcpy(buffer.data[0..event.payload.len], event.payload);
@@ -63,8 +59,7 @@ pub fn codec_event(env: napi.Env, handle: u64) !?napi.Val {
 }
 
 pub fn codec_take(env: napi.Env, handle: u64) !void {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return;
+    const peer = handles.resolve(env.handle, handle) orelse return;
     peer.take();
 }
 
@@ -73,7 +68,7 @@ pub fn codec_take(env: napi.Env, handle: u64) !void {
 /// message. Null without an interior boundary, and copied out because the boundaries live
 /// in codec memory the next message overwrites.
 pub fn codec_fragments(env: napi.Env, handle: u64) !?napi.Val {
-    const peer = handles.resolve(handle) orelse return null;
+    const peer = handles.resolve(env.handle, handle) orelse return null;
     const ends = peer.fragment_ends();
     if (ends.len < 2) return null;
     const array = try env.createArrayWithLength(@intCast(ends.len));
@@ -87,7 +82,6 @@ pub fn codec_fragments(env: napi.Env, handle: u64) !?napi.Val {
 /// because it touches both: a half-received frame and a formatted outbound frame are the
 /// same slot's state.
 pub fn codec_reset(env: napi.Env, handle: u64) !void {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return;
+    const peer = handles.resolve(env.handle, handle) orelse return;
     peer.reset();
 }

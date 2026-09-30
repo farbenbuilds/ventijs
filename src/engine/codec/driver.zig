@@ -107,28 +107,28 @@ fn room(comptime Codec: type, peer: *const Codec) bool {
     return peer.events.has_message_room() or opcode == .continuation;
 }
 
-/// `queued` includes a fragment with nothing to queue; either way the parser has moved on,
-/// so the loop is guaranteed to progress.
+/// `queued` includes a fragment with nothing to queue and a data frame dropped after a
+/// close; either way the parser has moved on, so the loop is guaranteed to progress.
 const Settled = enum { queued, full, failed };
 
 fn settle(comptime Codec: type, peer: *Codec) Settled {
+    // Checked before `finish`, which completes the frame and releases its bytes: a
+    // header-only frame never reaches the payload copy, so finishing first would consume
+    // the frame and drop the event it produced.
+    if (!room(Codec, peer)) return .full;
     const finished = peer.rx.finish() catch |err| {
         peer.failure = events.classify(err);
         return .failed;
     };
-
-    const event = switch (finished) {
-        .fragment => return .queued,
-        .event => |value| value,
-    };
-    switch (event.kind) {
-        .text, .binary => {
-            if (!peer.events.has_message_room()) return .full;
-            peer.events.message = event;
-        },
-        else => {
-            if (!peer.events.has_control_room()) return .full;
-            peer.events.push_control(event);
+    switch (finished) {
+        .fragment => {},
+        .event => |event| switch (event.kind) {
+            .text, .binary => {
+                // `ws` stops parsing at a close, and RFC 6455 section 5.5.1 forbids data
+                // after one, so a message completed later is never delivered.
+                if (!peer.events.has_close_queued()) peer.events.message = event;
+            },
+            else => peer.events.push_control(event),
         },
     }
     return .queued;

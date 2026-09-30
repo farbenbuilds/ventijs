@@ -21,8 +21,7 @@ pub fn codec_encode(
     mask_frame: abi.Arg,
     mask: []const u8,
 ) !abi.Count {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return abi.encode_refusal(.stale_handle);
+    const peer = handles.resolve(env.handle, handle) orelse return abi.encode_refusal(.stale_handle);
     const wanted = abi.event_kind(kind) orelse return abi.encode_refusal(.unexpected_opcode);
     return switch (peer.tx.encode(wanted, fin != 0, payload, compress != 0, mask, mask_frame != 0)) {
         .ok => |length| @intCast(length),
@@ -32,7 +31,7 @@ pub fn codec_encode(
 
 /// The framed bytes waiting to be copied out, as a JavaScript-owned buffer.
 pub fn codec_outbound(env: napi.Env, handle: u64) !?napi.Val {
-    const peer = handles.resolve(handle) orelse return null;
+    const peer = handles.resolve(env.handle, handle) orelse return null;
     const bytes = peer.tx.bytes();
     const buffer = try env.createBuffer(bytes.len);
     @memcpy(buffer.data[0..bytes.len], bytes);
@@ -41,7 +40,6 @@ pub fn codec_outbound(env: napi.Env, handle: u64) !?napi.Val {
 
 /// Whether the last `codec_encode` produced a masked frame, so a caller can assert the role was honoured.
 pub fn codec_outbound_masked(env: napi.Env, handle: u64) !bool {
-    _ = env;
-    const peer = handles.resolve(handle) orelse return false;
+    const peer = handles.resolve(env.handle, handle) orelse return false;
     return peer.tx.last_was_masked();
 }

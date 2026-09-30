@@ -28,33 +28,43 @@ pub fn event_store(comptime slots: usize) type {
         /// The one queued data message, or null when the slot is free.
         message: ?Decoded = null,
 
+        /// Latched when a close event is queued; a message completed after that is data
+        /// after a close, which `ws` drops rather than delivers (RFC 6455 section 5.5.1).
+        close_queued: bool = false,
+
         /// The event the caller has selected with `select` and not yet taken.
         selected: bool = false,
         /// Which store the selection points at, so `take` retires the right one.
         selected_message: bool = false,
 
         /// Events waiting to be taken, including one already selected.
-        pub fn pending(self: *const Self) usize {
-            return self.count + @intFromBool(self.message != null);
+        pub fn pending(store: *const Self) usize {
+            return store.count + @intFromBool(store.message != null);
         }
 
         /// Whether a control event can be queued without evicting one.
-        pub fn has_control_room(self: *const Self) bool {
-            return self.count < slots;
+        pub fn has_control_room(store: *const Self) bool {
+            return store.count < slots;
         }
 
         /// Whether a data message can be queued without overwriting the bytes of one
         /// that is already waiting.
-        pub fn has_message_room(self: *const Self) bool {
-            return self.message == null;
+        pub fn has_message_room(store: *const Self) bool {
+            return store.message == null;
+        }
+
+        /// Whether a close event is waiting. Data frames are dropped once it is, because
+        /// `ws` stops parsing at a close and only controls keep their ring order.
+        pub fn has_close_queued(store: *const Self) bool {
+            return store.close_queued;
         }
 
         /// The copy is a control frame's whole point: the receive buffer it came from is
         /// reused by the next control frame, and a pong the caller has not written yet
         /// must still be readable when it is.
-        pub fn push_control(self: *Self, event: Decoded) void {
-            const slot = (self.head + self.count) % slots;
-            const buffer = &self.owned[slot];
+        pub fn push_control(store: *Self, event: Decoded) void {
+            const slot = (store.head + store.count) % slots;
+            const buffer = &store.owned[slot];
             const length = @min(event.payload.len, buffer.len);
             // RFC 6455 section 5.5 caps a control payload at 125 bytes, which is the
             // size of every slot, so a larger one can only be a bug in whatever produced
@@ -62,59 +72,61 @@ pub fn event_store(comptime slots: usize) type {
             // delivered as a valid frame with the wrong bytes.
             std.debug.assert(event.payload.len <= buffer.len);
             @memcpy(buffer[0..length], event.payload[0..length]);
-            self.controls[slot] = .{
+            store.controls[slot] = .{
                 .kind = event.kind,
                 .code = event.code,
                 .failure = event.failure,
                 .payload = buffer[0..length],
             };
-            self.count += 1;
+            if (event.kind == .close) store.close_queued = true;
+            store.count += 1;
         }
 
         /// Selection and taking are separate so the payload can be read between them:
         /// the payload borrows receive state and the caller has to copy it out before
         /// the event is retired.
-        pub fn select(self: *Self) bool {
-            if (self.message != null and self.count > 0 and self.controls[self.head].kind == .close) {
-                self.selected = true;
-                self.selected_message = true;
+        pub fn select(store: *Self) bool {
+            if (store.message != null and store.count > 0 and store.controls[store.head].kind == .close) {
+                store.selected = true;
+                store.selected_message = true;
                 return true;
             }
-            if (self.count > 0) {
-                self.selected = true;
-                self.selected_message = false;
+            if (store.count > 0) {
+                store.selected = true;
+                store.selected_message = false;
                 return true;
             }
-            if (self.message == null) return false;
-            self.selected = true;
-            self.selected_message = true;
+            if (store.message == null) return false;
+            store.selected = true;
+            store.selected_message = true;
             return true;
         }
 
-        pub fn selected_event(self: *const Self) ?Decoded {
-            if (!self.selected) return null;
-            if (self.selected_message) return self.message;
-            return self.controls[self.head];
+        pub fn selected_event(store: *const Self) ?Decoded {
+            if (!store.selected) return null;
+            if (store.selected_message) return store.message;
+            return store.controls[store.head];
         }
 
-        pub fn take(self: *Self) void {
-            if (!self.selected) return;
-            self.selected = false;
-            if (self.selected_message) {
-                self.message = null;
+        pub fn take(store: *Self) void {
+            if (!store.selected) return;
+            store.selected = false;
+            if (store.selected_message) {
+                store.message = null;
                 return;
             }
-            self.controls[self.head] = undefined;
-            self.head = (self.head + 1) % slots;
-            self.count -= 1;
+            store.controls[store.head] = undefined;
+            store.head = (store.head + 1) % slots;
+            store.count -= 1;
         }
 
-        pub fn reset(self: *Self) void {
-            self.head = 0;
-            self.count = 0;
-            self.message = null;
-            self.selected = false;
-            self.selected_message = false;
+        pub fn reset(store: *Self) void {
+            store.head = 0;
+            store.count = 0;
+            store.message = null;
+            store.close_queued = false;
+            store.selected = false;
+            store.selected_message = false;
         }
     };
 }

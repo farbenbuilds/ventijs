@@ -98,3 +98,15 @@ test "sequence indexes wrap within the power-of-two ring" {
     try std.testing.expectEqual(@as(u64, capacity), wrapped);
     try std.testing.expectEqual(@as(u64, 0), wrapped & (capacity - 1));
 }
+
+test "an overtaken abandoned reservation cannot wrap pending" {
+    // The only drop path abandons the newest reservation and closes the channel, so a
+    // later completion cannot overtake it in service. The arithmetic still must not
+    // report ~2^64 pending, which would pin `finalize` on `EventsPending` forever.
+    var ring = Ring{};
+    const stale = ring.reserve().?;
+    ring.drop(stale);
+    const live = ring.reserve().?;
+    ring.complete(live);
+    try std.testing.expectEqual(@as(u64, 0), ring.pending());
+}

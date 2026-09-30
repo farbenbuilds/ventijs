@@ -46,9 +46,16 @@ pub fn transmit() type {
             };
         }
 
-        pub fn deinit(self: *Self) void {
-            self.buffer.deinit();
-            self.compress.deinit();
+        pub fn deinit(tx: *Self) void {
+            tx.buffer.deinit();
+            tx.compress.deinit();
+        }
+
+        /// Drops the formatted frame so a reset codec cannot hand the previous message back
+        /// out: the buffer keeps its allocation, the logical length is what names a frame.
+        pub fn reset(tx: *Self) void {
+            tx.length = 0;
+            tx.masked = false;
         }
 
         /// `compress` asks for a compressed payload with RSV1 set, honoured only for a
@@ -57,9 +64,9 @@ pub fn transmit() type {
         /// concatenate. `mask` is `ws`'s `generateMask`: the caller's own four bytes, or empty
         /// to draw one from the operating system. A server never masks either way, and
         /// `mask_frame` is a client opting out through `send`'s `mask` option.
-        pub fn encode(self: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8, mask_frame: bool) outbound.Encoded {
+        pub fn encode(tx: *Self, kind: Kind, fin: bool, payload: []const u8, compress: bool, mask: []const u8, mask_frame: bool) outbound.Encoded {
             const opcode = header.wire_opcode(kind) orelse return .{ .failed = .invalid_opcode };
-            if (payload.len > self.max_message_bytes) return .{ .failed = .unsupported_message_length };
+            if (payload.len > tx.max_message_bytes) return .{ .failed = .unsupported_message_length };
             const control = opcode.is_control();
             // RFC 6455 section 5.5: a control frame is capped at 125 bytes and must not
             // be fragmented, so a caller cannot put an unframable frame on the wire.
@@ -70,10 +77,10 @@ pub fn transmit() type {
 
             // Taken before anything is framed, which is what keeps the frame one contiguous
             // buffer with one header. `ws` decides the same way, in its sender.
-            const wire = deflate.wire(&self.compress, payload, self.max_message_bytes, control, fin, compress) catch
+            const wire = deflate.wire(&tx.compress, payload, tx.max_message_bytes, control, fin, compress) catch
                 return .{ .failed = .unsupported_message_length };
 
-            const masked = self.role == .client and mask_frame;
+            const masked = tx.role == .client and mask_frame;
             const base: zslay.types.FrameHeader = .{
                 .fin = fin,
                 .rsv1 = false,
@@ -104,33 +111,33 @@ pub fn transmit() type {
             const framed = std.math.add(usize, wire.bytes.len, header_capacity) catch {
                 return .{ .failed = .unsupported_message_length };
             };
-            self.buffer.reserve(framed, self.max_message_bytes + header_capacity) catch {
+            tx.buffer.reserve(framed, tx.max_message_bytes + header_capacity) catch {
                 return .{ .failed = .unsupported_message_length };
             };
             const written = zslay.frame.encode_header(
-                self.buffer.items[0..header_capacity],
+                tx.buffer.items[0..header_capacity],
                 base,
                 wire.bytes.len,
                 key,
             ) catch return .{ .failed = .protocol_error };
-            const start = self.buffer.items[written..][0..wire.bytes.len];
+            const start = tx.buffer.items[written..][0..wire.bytes.len];
             @memcpy(start, wire.bytes);
             // After the header and before the mask: RSV1 is in the first octet and the
             // mask covers the payload only.
-            if (wire.compressed) rsv1.mark(self.buffer.items[0..written]);
+            if (wire.compressed) rsv1.mark(tx.buffer.items[0..written]);
             if (key) |drawn| uwz.websocket_mask.apply(start, drawn, 0);
-            self.length = written + wire.bytes.len;
-            self.masked = masked;
-            return .{ .ok = self.length };
+            tx.length = written + wire.bytes.len;
+            tx.masked = masked;
+            return .{ .ok = tx.length };
         }
 
-        pub fn bytes(self: *const Self) []const u8 {
-            return self.buffer.window(self.length);
+        pub fn bytes(tx: *const Self) []const u8 {
+            return tx.buffer.window(tx.length);
         }
 
         /// Whether the last `encode` masked its frame, for a caller asserting the role.
-        pub fn last_was_masked(self: *const Self) bool {
-            return self.masked;
+        pub fn last_was_masked(tx: *const Self) bool {
+            return tx.masked;
         }
     };
 }

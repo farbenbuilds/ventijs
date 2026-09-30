@@ -7,12 +7,10 @@ const socket = @import("../../engine/socket/socket.zig");
 const Ring = payload.payload_ring(4, 16);
 const Slab = socket.socket_slab(4, Ring, Ring);
 
-test "send is refused once closing and closed" {
+test "send is refused once closed" {
     var slab = Slab{};
     slab.open(2, 7);
 
-    try std.testing.expectEqual(socket.Status.ok, slab.close(2, 7, 1000, ""));
-    try std.testing.expectEqual(socket.Status.closing, slab.send(2, 7, .text, "late"));
     try std.testing.expect(slab.finish(2));
     try std.testing.expectEqual(socket.Status.closed, slab.send(2, 7, .text, "late"));
     try std.testing.expectEqual(socket.Status.closed, slab.close(2, 7, 1000, ""));
@@ -69,10 +67,6 @@ test "pause and resume dispatch are idempotent while open" {
     try std.testing.expectEqual(socket.Status.ok, slab.resume_dispatch(0, 1));
     try std.testing.expectEqual(socket.Status.ok, slab.resume_dispatch(0, 1));
     try std.testing.expect(!slab.is_paused(0));
-
-    try std.testing.expectEqual(socket.Status.ok, slab.close(0, 1, 1000, ""));
-    try std.testing.expectEqual(socket.Status.closing, slab.pause_dispatch(0, 1));
-    try std.testing.expectEqual(socket.Status.closing, slab.resume_dispatch(0, 1));
 }
 
 test "the terminal latch flips exactly once per generation" {

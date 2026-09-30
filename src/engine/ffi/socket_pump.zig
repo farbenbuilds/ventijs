@@ -23,9 +23,9 @@ pub fn pump_socket(env: napi.Env, server: u40, connection: u64) !Status {
     return @intFromEnum(flush(target));
 }
 
-/// Staged payloads the engine refused. The outbound counterpart of
-/// `socket_inbound.server_dropped_messages`: the pump reported `ok` for bytes the engine
-/// then discarded, so this is where the loss becomes observable.
+/// Staged payloads the pump refused, left at the head of the ring for a later pump. The
+/// outbound counterpart of `socket_inbound.server_dropped_messages`: without this count a
+/// refused publish is invisible to a caller that only saw the `sendSocket` status.
 pub fn server_undelivered_messages(env: napi.Env, server: u40) !u64 {
     const target = instance.lookup(env, server) orelse return error.UnknownServer;
     return target.undelivered.load(.acquire);
@@ -57,9 +57,9 @@ fn queue(target: *instance.Instance, view: anytype) usize {
 }
 
 /// Whether a staged record can make the topic hop: the publisher maps a message onto a
-/// text or binary opcode and nothing else, so a staged close frame would reach the peer
-/// as a binary message carrying `[0x03, 0xE8]` as payload and it would never see a close
-/// frame.
+/// text or binary opcode and nothing else. A control record is refused here, so it can
+/// never reach the peer as a binary message carrying `[0x03, 0xE8]` instead of a close
+/// frame; `close` reports `policy-violation` before it stages anything.
 fn can_publish(kind: payload.Kind) bool {
     return switch (kind) {
         .text, .binary => true,

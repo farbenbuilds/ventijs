@@ -56,46 +56,46 @@ pub const Compressor = struct {
     output: growth.buffer(u8) = .{},
     stream: ?uwz.compression_stream.CompressionStream = null,
 
-    pub fn deinit(self: *Compressor) void {
-        if (self.stream) |*stream| stream.deinit();
-        self.stream = null;
-        self.input.deinit();
-        self.output.deinit();
+    pub fn deinit(compressor: *Compressor) void {
+        if (compressor.stream) |*stream| stream.deinit();
+        compressor.stream = null;
+        compressor.input.deinit();
+        compressor.output.deinit();
     }
 
-    /// The slice borrows `self.output` and is valid until the next call, like receive payloads.
-    pub fn compress(self: *Compressor, message: []const u8, ceiling: usize) Error![]const u8 {
+    /// The slice borrows `compressor.output` and is valid until the next call, like receive payloads.
+    pub fn compress(compressor: *Compressor, message: []const u8, ceiling: usize) Error![]const u8 {
         // At least two bytes: the framing holds one byte back and an empty message is legal.
-        try self.input.reserve(@max(message.len, 1), ceiling);
-        const stream = try self.engine();
+        try compressor.input.reserve(@max(message.len, 1), ceiling);
+        const stream = try compressor.engine();
 
         stream.write(message) catch return error.CorruptPayload;
         const bound = try std.math.add(usize, stream.output_bound(), compatibility_byte.len);
-        try self.output.reserve(bound, try std.math.add(usize, bound, ceiling));
+        try compressor.output.reserve(bound, try std.math.add(usize, bound, ceiling));
 
         // The last octet closes a final block and RFC 7692 has none, so a zero takes its place.
-        const room = self.output.items[0 .. self.output.items.len - compatibility_byte.len];
+        const room = compressor.output.items[0 .. compressor.output.items.len - compatibility_byte.len];
         // A zero-length result means the output did not fit, not that the message was empty.
         const closed = stream.finish(room) catch return error.OutOfMemory;
         if (closed.len == 0) return error.CorruptPayload;
-        self.output.items[closed.len] = 0;
-        return self.output.window(closed.len + compatibility_byte.len);
+        compressor.output.items[closed.len] = 0;
+        return compressor.output.window(closed.len + compatibility_byte.len);
     }
 
     /// Built on the first compressed message and rewound here: the borrow of `input` that
     /// `reserve` may have moved, the write cursor, and the closed flag.
-    fn engine(self: *Compressor) Error!*uwz.compression_stream.CompressionStream {
-        if (self.stream) |*stream| {
-            stream.input = self.input.items;
+    fn engine(compressor: *Compressor) Error!*uwz.compression_stream.CompressionStream {
+        if (compressor.stream) |*stream| {
+            stream.input = compressor.input.items;
             stream.input_length = 0;
             stream.closed = false;
             return stream;
         }
-        self.stream = uwz.compression_stream.CompressionStream.init(
+        compressor.stream = uwz.compression_stream.CompressionStream.init(
             .deflate_raw,
             level,
-            self.input.items,
+            compressor.input.items,
         ) catch return error.OutOfMemory;
-        return &self.stream.?;
+        return &compressor.stream.?;
     }
 };
