@@ -1,15 +1,15 @@
 name: Bump
 
-# A merge advances the version; the tag that publishes is pushed by a maintainer. The two
-# are deliberately separate: `publish.yml` takes no dispatch, so the only tag that can
-# publish is one a person pushed, and this workflow cannot release by itself.
+# A merge advances the version, commits it, and pushes the release tag. The tag is pushed
+# with the release app's installation token, not `GITHUB_TOKEN`: a `GITHUB_TOKEN` push
+# starts no workflow run, and the tag trigger is the only way into `publish.yml`.
 on:
   push:
     branches:
       - main
   # The escape hatch. A run that failed before its commit leaves `main` unbumped, and this
-  # advances the version without waiting for the next merge. A dispatch always advances,
-  # so it is not a re-run button.
+  # advances the version without waiting for the next merge. A re-run after the commit but
+  # before the tag finds its own commit at HEAD and only pushes the tag.
   workflow_dispatch:
 
 permissions:
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   bump:
-    name: Advance the prerelease
+    name: Bump, tag, publish
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # The commit this job makes lands on `main` and starts this workflow again. The marker
@@ -38,10 +38,27 @@ jobs:
           # has none and writes no changelog section.
           fetch-depth: 0
 
+      # The checkout keeps the default `GITHUB_TOKEN` on purpose: the bump commit reaches
+      # `main` without starting a second round of CI, and only the tag push needs a
+      # credential that triggers runs.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Advance the counter
         id: bump
         run: |
-          node scripts/bump-version.mjs
+          version=$(node -p "require('./package.json').version")
+          # A re-run after a run that pushed the bump commit but lost the tag push finds its
+          # own commit at HEAD; bumping again would skip a version.
+          if [ "$(git log -1 --format=%s)" = "chore(release): v$version" ]; then
+            echo "version $version is already committed"
+          else
+            node scripts/bump-version.mjs
+          fi
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Commit the version
@@ -52,10 +69,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # If `bump-version` wrote nothing there is nothing to commit; failing on a
+          # A re-run that found its own commit at HEAD has nothing to commit; failing on a
           # no-op would page for it.
           if git diff --quiet; then
-            echo "version already advanced"
+            echo "version already committed"
             exit 0
           fi
           # No CI skip marker here, deliberately: GitHub reads one anywhere in a tagged
@@ -66,3 +83,18 @@ jobs:
           # onto it is a rebase of four lines onto a tree that did not touch them.
           git pull --rebase origin main
           git push origin HEAD:main
+
+      - name: Tag the version
+        env:
+          TAG: v${{ steps.bump.outputs.version }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          remote="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
+          # A re-run after a lost tag push finds the tag already there; the publish run it
+          # started is re-run from its own page, not by pushing the tag again.
+          if git ls-remote --tags "$remote" "refs/tags/$TAG" | grep -q .; then
+            echo "$TAG already exists"
+            exit 0
+          fi
+          git tag "$TAG"
+          git push "$remote" "refs/tags/$TAG"

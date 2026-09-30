@@ -81,14 +81,22 @@ test("the commit the tag points at carries no CI skip marker", () => {
   for (const marker of MARKERS) expect(commit.includes(`[${marker}]`), commit).toBe(false);
 });
 
-test("the bump neither tags nor starts a publish run", () => {
-  // A release is a tag pushed by a maintainer. A tag pushed with `GITHUB_TOKEN` starts no
-  // workflow run, and `publish.yml` takes no dispatch, so a tagging or dispatching step
-  // here would be a release path that can never reach the registry.
-  expect(BUMP_WORKFLOW).not.toContain("git tag");
+test("the bump tags through the release app, the one credential that starts a run", () => {
+  // `publish.yml` takes no dispatch, and a tag pushed with `GITHUB_TOKEN` starts no run, so
+  // the tag is pushed with an installation token; the bump commit itself stays silent.
+  expect(BUMP_WORKFLOW).toContain("actions/create-github-app-token@v3");
+  expect(BUMP_WORKFLOW).toContain("secrets.RELEASE_APP_PRIVATE_KEY");
+  expect(BUMP_WORKFLOW).toContain('git push "$remote" "refs/tags/$TAG"');
   expect(BUMP_WORKFLOW).not.toContain("gh workflow run");
   expect(BUMP_WORKFLOW).not.toContain("id-token");
-  expect(BUMP_WORKFLOW).not.toMatch(/refs\/tags/);
+});
+
+test("a re-run finds its own commit and an existing tag rather than bumping twice", () => {
+  // A lost tag push is recovered by re-running: the version is already committed, and the
+  // tag is pushed only when the remote does not have it.
+  expect(BUMP_WORKFLOW).toContain("is already committed");
+  expect(BUMP_WORKFLOW).toContain('git ls-remote --tags "$remote" "refs/tags/$TAG"');
+  expect(BUMP_WORKFLOW).toContain('echo "$TAG already exists"');
 });
 
 test("the bump keeps the history the changelog scan reads", () => {

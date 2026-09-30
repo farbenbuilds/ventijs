@@ -1,9 +1,9 @@
 # ventiws CI/CD Pipeline
 
 Nine workflows touch the repository. Seven gate a change, `bump.yml` advances
-the version a release tag will name, and `publish.yml` publishes a release. A
-passing pipeline is evidence for the configurations it exercised; it is not
-proof that no memory or security defect remains.
+the version and pushes the release tag on a merge, and `publish.yml` publishes
+a release. A passing pipeline is evidence for the configurations it exercised;
+it is not proof that no memory or security defect remains.
 
 ## Job matrix
 
@@ -16,7 +16,7 @@ proof that no memory or security defect remains.
 | `zig-test.yml` | Zig unit tests, Binding lifecycle tests    | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite |
 | `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                       |
 | `perf.yml`     | Echo throughput against `ws`               | push and pull request on a Zig, manifest, or `bench/` path, manual                   | the benchmark report, uploaded as an artifact              |
-| `bump.yml`     | Advance the prerelease                     | push to `main`, manual                                                               | nothing; it commits the next version and stops             |
+| `bump.yml`     | Advance the prerelease, push the tag       | push to `main`, manual                                                               | nothing: it commits the version and starts the publish     |
 | `publish.yml`  | Platform build matrix, publish to npm      | a `v*` tag pushed by a maintainer                                                    | every platform builds and its addon loads and echoes       |
 
 Every gating workflow runs on `ubuntu-24.04`. Node is `node@24` and pnpm
@@ -32,8 +32,9 @@ rather than to gate a change, so its matrix is the published set.
 
 ## Release and native matrix
 
-`publish.yml` runs on a `v*` tag a maintainer pushes. It is the only workflow that
-builds anything but Linux, and the reason is that a published addon has to exist
+`publish.yml` runs on the `v*` tag `bump.yml` pushes, or one pushed by hand. It
+is the only workflow that builds anything but Linux, and the reason is that a
+published addon has to exist
 for every platform the package claims to support.
 
 | Job             | Runner             | Platform built                                        |
@@ -115,8 +116,9 @@ a token.
 main package is never on the registry pointing at bindings that are not there
 yet. It checks the tag against `package.json` first, so a tag pushed by hand
 cannot publish a version nobody released. The tag is the only way to start it:
-`bump.yml` advances the version on a merge and stops there, and a tag pushed with
-`GITHUB_TOKEN` starts no run, so the tag that releases is pushed by a person.
+`bump.yml` pushes it with the release app's installation token
+(`RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`), because a tag pushed
+with `GITHUB_TOKEN` starts no run.
 
 The publish is not transactional: a failure part way leaves the earlier packages
 on the registry. `napi-zig publish` treats an already-published version as a
