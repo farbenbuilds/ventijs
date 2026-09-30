@@ -1,10 +1,10 @@
-//! The stream harness: a real server per implementation, and the normalization both legs
-//! are compared through.
-//!
-//! The stub this replaced answered `send` and `close` from memory, so it could not show
-//! either thing these tests exist for: an object-mode conversion decided by the readable
-//! side, and a `finish` that has to land before the close handshake has completed. Both are
-//! orderings on a live connection, so both legs are real servers now.
+// The stream harness: a real server per implementation, and the normalization both legs
+// are compared through.
+//
+// The stub this replaced answered `send` and `close` from memory, so it could not show
+// either thing these tests exist for: an object-mode conversion decided by the readable
+// side, and a `finish` that has to land before the close handshake has completed. Both are
+// orderings on a live connection, so both legs are real servers now.
 
 import type { Duplex, DuplexOptions } from "node:stream";
 import {

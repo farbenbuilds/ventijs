@@ -1,10 +1,10 @@
-//! The options a caller sets that the transport now acts on: the close deadline, the
-//! write queue, and pausing.
-//!
-//! Each of these was normalized and then never read, which is the worst kind of gap:
-//! the option validated, the docs listed it, and a caller who set it watched nothing
-//! happen. The tests are the reason they are read now, so they are written as
-//! behaviours rather than as "the field is set".
+// The options a caller sets that the transport now acts on: the close deadline, the
+// write queue, and pausing.
+//
+// Each of these was normalized and then never read, which is the worst kind of gap:
+// the option validated, the docs listed it, and a caller who set it watched nothing
+// happen. The tests are the reason they are read now, so they are written as
+// behaviours rather than as "the field is set".
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer, type ServerOptions } from "../../../src/index";

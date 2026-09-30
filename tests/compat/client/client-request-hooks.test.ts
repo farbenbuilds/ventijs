@@ -1,9 +1,9 @@
-//! `finishRequest` and `generateMask`: the two `ws` options that were typed and inert.
-//!
-//! Both are declared by `@types/ws`, so a TypeScript caller reaches them without a cast
-//! and reasonably believes they work. `finishRequest` is the last chance to touch the
-//! opening request, which is the only point at which a signature or a `Cookie` can still
-//! be set; `generateMask` is the only way to control the key a client masks with.
+// `finishRequest` and `generateMask`: the two `ws` options that were typed and inert.
+//
+// Both are declared by `@types/ws`, so a TypeScript caller reaches them without a cast
+// and reasonably believes they work. `finishRequest` is the last chance to touch the
+// opening request, which is the only point at which a signature or a `Cookie` can still
+// be set; `generateMask` is the only way to control the key a client masks with.
 
 import type { Socket } from "node:net";
 import { expect, test } from "vitest";

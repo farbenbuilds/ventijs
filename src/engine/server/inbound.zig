@@ -24,12 +24,13 @@ pub fn on_message(slot: usize, ws: *uwz.WebSocket, bytes: []const u8, opcode: uw
         .text => .text,
         else => .binary,
     };
-    if (!queues.stage_inbound(&server.sockets, index, generation, kind, bytes)) return;
+    const sequence = queues.stage_inbound(&server.sockets, index, generation, kind, bytes) orelse return;
     _ = server.channel.emit(.{
         .kind = .connection_message,
         .server = server.handle.to_int(),
         .index = index,
         .generation = generation,
         .code = @intCast(bytes.len),
+        .sequence = @truncate(sequence),
     });
 }

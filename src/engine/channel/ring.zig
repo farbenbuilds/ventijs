@@ -92,12 +92,14 @@ pub fn event_ring(
             _ = ring.abandoned.fetchAdd(1, .monotonic);
         }
 
-        /// Reserved events that are neither dispatched nor abandoned.
+        /// Reserved events that are neither dispatched nor abandoned. The second
+        /// subtraction saturates because a later completion can numerically overtake an
+        /// abandoned reservation, and a wrapped count would strand `finalize` waiting
+        /// forever. Clamping at zero is exact wherever a counter is reachable: the only
+        /// drop path abandons the newest reservation and closes the channel to new ones.
         pub fn pending(ring: *Self) u64 {
-            const reserved = ring.reserved.load(.acquire);
-            const completed = ring.completed.load(.acquire);
-            const abandoned = ring.abandoned.load(.acquire);
-            return reserved -% completed -% abandoned;
+            const outstanding = ring.reserved.load(.acquire) -% ring.completed.load(.acquire);
+            return outstanding -| ring.abandoned.load(.acquire);
         }
 
         /// Events that were reserved but never queued for dispatch.

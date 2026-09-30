@@ -1,9 +1,9 @@
-//! The socket half of the codec fixtures.
-//!
-//! The codec never sees a socket, so a test that wants its bytes read by an
-//! independent implementation has to do the handshake itself. These helpers speak
-//! the opening handshake in both directions and nothing else, so a test file holds
-//! frames rather than HTTP.
+// The socket half of the codec fixtures.
+//
+// The codec never sees a socket, so a test that wants its bytes read by an
+// independent implementation has to do the handshake itself. These helpers speak
+// the opening handshake in both directions and nothing else, so a test file holds
+// frames rather than HTTP.
 
 import { connect, type Socket } from "node:net";
 import { createHash, randomBytes } from "node:crypto";

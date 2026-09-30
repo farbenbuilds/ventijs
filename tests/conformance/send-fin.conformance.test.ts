@@ -1,9 +1,9 @@
-//! `send`'s `fin` option, from the client, and across a multi-byte character.
-//!
-//! Split from `send-options.conformance.test.ts` for the module budget, and separated
-//! by *direction* rather than by length. The framing decision is shared code, so the
-//! only thing that can regress these two independently is the client; one file per
-//! direction is what makes that visible.
+// `send`'s `fin` option, from the client, and across a multi-byte character.
+//
+// Split from `send-options.conformance.test.ts` for the module budget, and separated
+// by *direction* rather than by length. The framing decision is shared code, so the
+// only thing that can regress these two independently is the client; one file per
+// direction is what makes that visible.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../src/index";

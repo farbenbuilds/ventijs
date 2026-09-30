@@ -24,10 +24,8 @@ export function defaultShouldHandle(state: ServerState, request: IncomingMessage
   return (index !== -1 ? url.slice(0, index) : url) === path;
 }
 
-/// `ws` evaluates `this.shouldHandle(request)`, so a caller who reassigns
-/// `server.shouldHandle` changes the decision. Calling the module-level rule instead made
-/// the documented override a no-op that still passed any test invoking the method
-/// directly.
+/// `ws` evaluates `this.shouldHandle(request)`: an assigned `server.shouldHandle` function
+/// decides, and `defaultShouldHandle` applies only when there is none.
 export function shouldHandle(state: ServerState, request: IncomingMessage): boolean {
   const assigned = state.record?.shouldHandle;
   if (typeof assigned === "function") return assigned(request);

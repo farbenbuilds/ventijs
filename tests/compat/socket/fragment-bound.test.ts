@@ -1,9 +1,9 @@
-//! The compiled fragment bound, and what a peer exceeding it is closed with.
-//!
-//! Split from `frame-limits.test.ts` because the fragment bound is a *count* a peer
-//! controls, where the other two limits there are a byte total and a boolean. The
-//! count needs a fixture of its own: exceeding it means writing sixteen thousand
-//! frames, and nothing about that is legible inside a test about UTF-8.
+// The compiled fragment bound, and what a peer exceeding it is closed with.
+//
+// Split from `frame-limits.test.ts` because the fragment bound is a *count* a peer
+// controls, where the other two limits there are a byte total and a boolean. The
+// count needs a fixture of its own: exceeding it means writing sixteen thousand
+// frames, and nothing about that is legible inside a test about UTF-8.
 
 import { expect, test } from "vitest";
 import { engineLimits } from "../../../src/binding/server";

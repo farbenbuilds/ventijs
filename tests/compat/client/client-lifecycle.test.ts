@@ -1,9 +1,9 @@
-//! How a client connection opens and ends.
-//!
-//! Its own file because the *order* of events is the contract in every case here. A
-//! caller treats `open` as "the connection is live", so anything that can arrive in
-//! the same read as the handshake has to be proved to come after it, and a close that
-//! never reached the peer is a 1006 to it no matter what the local socket believes.
+// How a client connection opens and ends.
+//
+// Its own file because the *order* of events is the contract in every case here. A
+// caller treats `open` as "the connection is live", so anything that can arrive in
+// the same read as the handshake has to be proved to come after it, and a close that
+// never reached the peer is a 1006 to it no matter what the local socket believes.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";

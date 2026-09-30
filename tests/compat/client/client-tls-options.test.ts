@@ -1,9 +1,9 @@
-//! The `wss:` client options that reach `http.request`. `@types/ws` types `ClientOptions`
-//! as extending `SecureContextOptions` and the `http.request` options, and `ws` spreads
-//! the caller's object into the request, so a private CA or a client certificate is part of
-//! the contract. Seventeen keys were read and every one of the rest was dropped, so a
-//! caller pinning an internal CA got a `self-signed certificate` error naming the
-//! certificate they had just supplied.
+// The `wss:` client options that reach `http.request`. `@types/ws` types `ClientOptions`
+// as extending `SecureContextOptions` and the `http.request` options, and `ws` spreads
+// the caller's object into the request, so a private CA or a client certificate is part of
+// the contract. Seventeen keys were read and every one of the rest was dropped, so a
+// caller pinning an internal CA got a `self-signed certificate` error naming the
+// certificate they had just supplied.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";

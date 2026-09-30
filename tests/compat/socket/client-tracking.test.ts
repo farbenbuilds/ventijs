@@ -1,6 +1,6 @@
-//! `clientTracking`, which decides whether `server.clients` exists at all. Its own file because
-//! it is the one option whose *absence* is the observable: `ws` leaves the key off the server
-//! entirely rather than setting it to `undefined`.
+// `clientTracking`, which decides whether `server.clients` exists at all. Its own file because
+// it is the one option whose *absence* is the observable: `ws` leaves the key off the server
+// entirely rather than setting it to `undefined`.
 
 import { expect, test } from "vitest";
 import { WebSocketServer, type ServerOptions } from "../../../src/index";

@@ -1,11 +1,11 @@
-//! What the engine route does with a peer that sends a message and a close in one read.
-//!
-//! Both frames are parsed in one pass on the engine thread and both are staged before
-//! Node runs, so by the time the application takes the message the connection has already
-//! been closed and its slab slot released. The take used to resolve a connection handle
-//! first, so it returned null and the message the engine had already parsed was dropped
-//! and counted as lost. This is Autobahn case 7.1.1, and it is data loss rather than a
-//! conformance detail: the peer sent a message and the application never saw it.
+// What the engine route does with a peer that sends a message and a close in one read.
+//
+// Both frames are parsed in one pass on the engine thread and both are staged before
+// Node runs, so by the time the application takes the message the connection has already
+// been closed and its slab slot released. The take used to resolve a connection handle
+// first, so it returned null and the message the engine had already parsed was dropped
+// and counted as lost. This is Autobahn case 7.1.1, and it is data loss rather than a
+// conformance detail: the peer sent a message and the application never saw it.
 
 import { connect } from "node:net";
 import { expect, test } from "vitest";

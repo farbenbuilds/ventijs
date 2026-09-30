@@ -1,8 +1,8 @@
-//! What a peer sends is decoded into the right events.
-//!
-//! The frames here are built by the fixture rather than by the codec's own encoder,
-//! so a decoder that is wrong in a symmetric way still fails: the expected outcome
-//! comes from RFC 6455, not from the code under test.
+// What a peer sends is decoded into the right events.
+//
+// The frames here are built by the fixture rather than by the codec's own encoder,
+// so a decoder that is wrong in a symmetric way still fails: the expected outcome
+// comes from RFC 6455, not from the code under test.
 
 import { expect, test } from "vitest";
 import { CODEC_KINDS, destroyCodec, feedCodec } from "../../src/binding/codec";

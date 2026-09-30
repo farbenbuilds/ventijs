@@ -1,8 +1,8 @@
-//! The window a `permessage-deflate` *offer* names, in both directions. Split from
-//! `deflate.test.ts` because the two directions have opposite owners: a client offer's
-//! `client_max_window_bits` is the window the client will use, while its
-//! `server_max_window_bits` is a limit on what this server may emit. Reading either the
-//! wrong way round answers a valid option with a 400.
+// The window a `permessage-deflate` *offer* names, in both directions. Split from
+// `deflate.test.ts` because the two directions have opposite owners: a client offer's
+// `client_max_window_bits` is the window the client will use, while its
+// `server_max_window_bits` is a limit on what this server may emit. Reading either the
+// wrong way round answers a valid option with a 400.
 
 import { describe, expect, test } from "vitest";
 import { acceptAsServer } from "../../../src/compat/extensions/deflate";
@@ -92,6 +92,28 @@ describe("a window named in a client offer", () => {
     expect(
       acceptAsServer(configurations("permessage-deflate; client_max_window_bits"), false),
     ).toBeNull();
+  });
+});
+
+/// The answer a producible window negotiates, which every non-refusal here expects.
+const NEGOTIATED = "permessage-deflate; server_no_context_takeover; client_no_context_takeover";
+
+describe("a server window named only in the options", () => {
+  test.each([8, 9, 10, 11, 12, 13, 14])("an option of %i is declined, never advertised", (bits) => {
+    // The compressor emits 15 at every level, so an option-only below-15 window can only be
+    // answered with a lie: `ws` writes the option into the 101 header and ignores it in the
+    // stream. Declining is the divergence COMPATIBILITY.md documents, on every path.
+    const server = normalizePerMessageDeflate({ serverMaxWindowBits: bits }, true);
+    expect(acceptAsServer(configurations("permessage-deflate"), server)).toHaveProperty("refusal");
+  });
+
+  test.each([
+    [undefined, "permessage-deflate"],
+    [15, "permessage-deflate"],
+    [15, "permessage-deflate; server_max_window_bits=15"],
+  ])("an option of %s still negotiates against %s", (bits, header) => {
+    const server = normalizePerMessageDeflate({ serverMaxWindowBits: bits }, true);
+    expect(acceptedHeader(acceptAsServer(configurations(header), server))).toBe(NEGOTIATED);
   });
 });
 

@@ -1,7 +1,7 @@
-//! RFC 7692 on the wire. The `ws` peers prove interoperability -- a message this build
-//! compresses is a message `ws` reads, and the other way round -- while the raw peer proves the
-//! *decisions* (which header went out, whether RSV1 is set), because `ws` decompresses
-//! transparently and would hide both.
+// RFC 7692 on the wire. The `ws` peers prove interoperability -- a message this build
+// compresses is a message `ws` reads, and the other way round -- while the raw peer proves the
+// *decisions* (which header went out, whether RSV1 is set), because `ws` decompresses
+// transparently and would hide both.
 
 import { expect, test } from "vitest";
 import { WebSocketServer as WsServer } from "ws";

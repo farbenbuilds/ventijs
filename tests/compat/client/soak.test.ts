@@ -1,7 +1,7 @@
-//! A leak in a socket library is not a bug a unit test finds, because every unit test exits
-//! while its sockets are still live. The checkable claim is narrower: a process that opens and
-//! closes many connections must end with the resources it started with. The counts read are the
-//! engine's and the runtime's, not the facade's, because the facade's are under suspicion.
+// A leak in a socket library is not a bug a unit test finds, because every unit test exits
+// while its sockets are still live. The checkable claim is narrower: a process that opens and
+// closes many connections must end with the resources it started with. The counts read are the
+// engine's and the runtime's, not the facade's, because the facade's are under suspicion.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "../../../src/index";

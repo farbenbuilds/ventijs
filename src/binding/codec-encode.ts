@@ -44,19 +44,3 @@ export function codecOutboundMasked(handle: bigint): boolean {
   const addon = loadAddon();
   return callNative(() => addon.codecOutboundMasked(handle));
 }
-
-export function codecFailureCode(handle: bigint): number {
-  const addon = loadAddon();
-  return callNative(() => addon.codecFailureCode(handle));
-}
-
-/// Drops every buffered byte and event, for a connection abandoned early.
-export function resetCodec(handle: bigint): void {
-  const addon = loadAddon();
-  callNative(() => addon.codecReset(handle));
-}
-
-export function codecRole(handle: bigint): number {
-  const addon = loadAddon();
-  return callNative(() => addon.codecRole(handle));
-}

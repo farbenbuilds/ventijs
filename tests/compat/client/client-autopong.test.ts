@@ -1,10 +1,10 @@
-//! `autoPong`, asked and answered.
-//!
-//! Its own file because the option is one bit with two observable consequences and
-//! both have to be pinned: a ping the socket answers on its own, and a ping it leaves
-//! for the application. A client that answered when told not to would be a client that
-//! lies about a protocol deadline, and one that refused to answer when told to would
-//! hang peers whose application never reads `ping`.
+// `autoPong`, asked and answered.
+//
+// Its own file because the option is one bit with two observable consequences and
+// both have to be pinned: a ping the socket answers on its own, and a ping it leaves
+// for the application. A client that answered when told not to would be a client that
+// lies about a protocol deadline, and one that refused to answer when told to would
+// hang peers whose application never reads `ping`.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../../binding/support";

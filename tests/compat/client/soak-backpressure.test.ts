@@ -1,8 +1,8 @@
-//! What a peer that does not read costs the writer.
-//!
-//! Its own file because it is the one production question a correctness suite cannot
-//! answer: a socket library that grows a queue without bound is a memory leak with a
-//! delay, and nothing short of pushing bytes at a peer that ignores them will show it.
+// What a peer that does not read costs the writer.
+//
+// Its own file because it is the one production question a correctness suite cannot
+// answer: a socket library that grows a queue without bound is a memory leak with a
+// delay, and nothing short of pushing bytes at a peer that ignores them will show it.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";

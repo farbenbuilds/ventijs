@@ -1,11 +1,11 @@
-//! IPC connections: the `ws+unix:` form, which is a UNIX domain socket or a Windows
-//! named pipe rather than a host and a port.
-//!
-//! It was recorded as `deferred` on the grounds that "`fd` transport is part of the
-//! client constructor", and then the error message for an unsupported scheme listed
-//! `ws+unix:` among the accepted ones. So the address was both rejected and advertised:
-//! a caller who read the error message could not tell whether the form was supported.
-//! It is a socket path and one line in `net.connect`, so it is supported now.
+// IPC connections: the `ws+unix:` form, which is a UNIX domain socket or a Windows
+// named pipe rather than a host and a port.
+//
+// It was recorded as `deferred` on the grounds that "`fd` transport is part of the
+// client constructor", and then the error message for an unsupported scheme listed
+// `ws+unix:` among the accepted ones. So the address was both rejected and advertised:
+// a caller who read the error message could not tell whether the form was supported.
+// It is a socket path and one line in `net.connect`, so it is supported now.
 
 import { expect, test } from "vitest";
 import { createServer, type Server } from "node:http";

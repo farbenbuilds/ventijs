@@ -30,6 +30,10 @@ test {
     _ = @import("codec/close_test.zig");
     _ = @import("codec/fragments_test.zig");
     _ = @import("codec/handles_test.zig");
+    _ = @import("codec/handles_env_test.zig");
     _ = @import("codec/deflate_test.zig");
+    _ = @import("codec/deflate_messages_test.zig");
     _ = @import("codec/rsv1_test.zig");
+    _ = @import("codec/backpressure_hold_test.zig");
+    _ = @import("codec/close_order_test.zig");
 }

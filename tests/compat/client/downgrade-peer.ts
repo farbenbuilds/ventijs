@@ -1,9 +1,9 @@
-//! A TLS peer whose only job is to answer one opening request with a redirect.
-//!
-//! Its own module because `redirect-peer.ts` is a plain `node:net` listener and a
-//! downgrade is the one redirect that has to arrive over TLS: the point is the `wss:`
-//! hop, so the first listener has to speak `wss:` for the refusal to be the one under
-//! test rather than a certificate error.
+// A TLS peer whose only job is to answer one opening request with a redirect.
+//
+// Its own module because `redirect-peer.ts` is a plain `node:net` listener and a
+// downgrade is the one redirect that has to arrive over TLS: the point is the `wss:`
+// hop, so the first listener has to speak `wss:` for the refusal to be the one under
+// test rather than a certificate error.
 
 import { createServer, type Server, type TLSSocket } from "node:tls";
 import { certificates } from "./tls-support";

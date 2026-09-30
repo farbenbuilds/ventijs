@@ -1,10 +1,10 @@
-//! The three `send` options that were ignored: `compress`, `mask`, and a `Blob` payload.
-//!
-//! All three were wrong on the wire rather than absent. `compress: false` compressed anyway, so
-//! a caller shipping already-compressed payloads paid a deflate on both ends for nothing. A
-//! `Blob` threw, though `ws` accepts one and its own API reference lists it as a valid payload.
-//! `mask: false` is the odd one: `ws` honours it, and the peer then refuses the frame, because
-//! RFC 6455 section 5.1 requires a client to mask and a server to close on one that does not.
+// The three `send` options that were ignored: `compress`, `mask`, and a `Blob` payload.
+//
+// All three were wrong on the wire rather than absent. `compress: false` compressed anyway, so
+// a caller shipping already-compressed payloads paid a deflate on both ends for nothing. A
+// `Blob` threw, though `ws` accepts one and its own API reference lists it as a valid payload.
+// `mask: false` is the odd one: `ws` honours it, and the peer then refuses the frame, because
+// RFC 6455 section 5.1 requires a client to mask and a server to close on one that does not.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "../../src/index";

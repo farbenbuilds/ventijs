@@ -1,6 +1,7 @@
 //! Turning a completed frame into an event, or into nothing. Deciding what a frame *meant*
 //! is kept apart from consuming its bytes so each raises the error that actually happened.
 
+const std = @import("std");
 const zslay = @import("zslay");
 const close_payload = @import("close_payload.zig");
 const events = @import("events.zig");
@@ -37,18 +38,28 @@ pub fn finish(comptime State: type, peer: *State) anyerror!Finished {
 
     if (peer.inflate.is_compressed()) try decompress(State, peer);
     const message_opcode = peer.message_opcode orelse return error.ProtocolError;
+    const payload = peer.message.written();
     // A message ending mid-sequence is invalid although every byte was in range, which a
     // byte-wise validator cannot see; this is what `skipUTF8Validation` turns off.
-    if (message_opcode == .text and peer.validate_utf8 and !utf8.complete(peer.utf8_state)) {
+    if (message_opcode == .text and peer.validate_utf8 and !valid_text(State, peer, payload)) {
         return error.InvalidUtf8;
     }
-    const kind: Kind = if (message_opcode == .text) .text else .binary;
-    const payload = peer.message.written();
+    // The inflate state belongs to the message that just ended: kept, the next compressed
+    // message inflates this one's staged bytes instead of its own.
+    peer.inflate.clear();
     peer.message.clear();
     peer.message_opcode = null;
     peer.utf8_state = .{};
     peer.conn.complete_frame();
-    return .{ .event = .{ .kind = kind, .payload = payload } };
+    return .{ .event = .{ .kind = if (message_opcode == .text) .text else .binary, .payload = payload } };
+}
+
+/// An uncompressed message was fed to the incremental validator chunk by chunk and only
+/// needs its sequence closed; a compressed one was staged, so its inflated bytes are the
+/// first the validator sees.
+fn valid_text(comptime State: type, peer: *State, payload: []const u8) bool {
+    if (peer.inflate.is_compressed()) return std.unicode.utf8ValidateSlice(payload);
+    return utf8.complete(peer.utf8_state);
 }
 
 /// `maxPayload` bounds the *delivered* message, so a peer inflating a small payload to a

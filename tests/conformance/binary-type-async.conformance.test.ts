@@ -1,8 +1,8 @@
-//! `binaryType` values that need a `Blob` or a whole message to prove, split from
-//! `binary-type.conformance.test.ts` for the module budget.
-//!
-//! `blob` is asynchronous by construction -- reading one is a promise -- so its case
-//! is longer than a Buffer comparison and does not belong inline with the others.
+// `binaryType` values that need a `Blob` or a whole message to prove, split from
+// `binary-type.conformance.test.ts` for the module budget.
+//
+// `blob` is asynchronous by construction -- reading one is a promise -- so its case
+// is longer than a Buffer comparison and does not belong inline with the others.
 
 import { expect, test } from "vitest";
 import type { WebSocket } from "../../src/index";

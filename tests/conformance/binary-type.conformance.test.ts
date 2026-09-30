@@ -1,13 +1,13 @@
-//! `binaryType`, which decides what a *binary* message looks like to a listener.
-//!
-//! It was accepted, stored, and readable back, and then never consulted. Every value
-//! therefore delivered a `Buffer`, which is the `nodebuffer` answer: a caller who set
-//! `"arraybuffer"` and compiled cleanly got a `Buffer` with no error and no warning,
-//! and the mismatch only shows up where the application reads `.byteLength` or
-//! `.byteOffset` on what it believed was an `ArrayBuffer`.
-//!
-//! The peer is a real `ws` client throughout, so the payload bytes are never in
-//! question -- only what ventiws hands to its own listener.
+// `binaryType`, which decides what a *binary* message looks like to a listener.
+//
+// It was accepted, stored, and readable back, and then never consulted. Every value
+// therefore delivered a `Buffer`, which is the `nodebuffer` answer: a caller who set
+// `"arraybuffer"` and compiled cleanly got a `Buffer` with no error and no warning,
+// and the mismatch only shows up where the application reads `.byteLength` or
+// `.byteOffset` on what it believed was an `ArrayBuffer`.
+//
+// The peer is a real `ws` client throughout, so the payload bytes are never in
+// question -- only what ventiws hands to its own listener.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../binding/support";

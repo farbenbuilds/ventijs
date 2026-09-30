@@ -1,13 +1,13 @@
-//! What a `wss:` to `ws:` redirect does, which the two implementations do differently.
-//!
-//! Measured, not assumed: `ws` follows it. The condition at `websocket.js:846` is one arm
-//! of a credential rule, `!isSameHost || (_originalSecure && !isSecure)`, whose second arm
-//! only deletes `authorization`, `cookie` and `auth` (`websocket.js:851-856`) before
-//! `initAsClient` dials the new hop. ventiws refuses the hop outright (`redirect.ts:66`).
-//!
-//! The refusal is the safer of the two and it stays, but it is a divergence and a caller
-//! migrating has to be able to see it, so both legs run here and the expectation is
-//! written down rather than implied.
+// What a `wss:` to `ws:` redirect does, which the two implementations do differently.
+//
+// Measured, not assumed: `ws` follows it. The condition at `websocket.js:846` is one arm
+// of a credential rule, `!isSameHost || (_originalSecure && !isSecure)`, whose second arm
+// only deletes `authorization`, `cookie` and `auth` (`websocket.js:851-856`) before
+// `initAsClient` dials the new hop. ventiws refuses the hop outright (`redirect.ts:66`).
+//
+// The refusal is the safer of the two and it stays, but it is a divergence and a caller
+// migrating has to be able to see it, so both legs run here and the expectation is
+// written down rather than implied.
 
 import { WebSocket as WsSocket } from "ws";
 import { expect, test } from "vitest";

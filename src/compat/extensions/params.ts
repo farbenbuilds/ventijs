@@ -6,8 +6,8 @@
 export const WINDOW_BITS = 15;
 
 // RFC 7692 section 7.1.2.1 fixes the range at 8 to 15.
-const MIN_WINDOW_BITS = 8;
-const MAX_WINDOW_BITS = 15;
+export const MIN_WINDOW_BITS = 8;
+export const MAX_WINDOW_BITS = 15;
 
 /// A number naming the window a peer will use, `true` for RFC 7692's valueless form (it
 /// can take a window the server chooses), and `undefined` for absent. Three things, not

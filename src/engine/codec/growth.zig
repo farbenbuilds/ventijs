@@ -23,52 +23,52 @@ pub fn buffer(comptime T: type) type {
         }
 
         /// Releases the allocation; a buffer that never grew still holds its floor.
-        pub fn deinit(self: *Self) void {
-            if (self.items.len == 0) return;
-            allocator.free(self.items);
-            self.* = .{};
+        pub fn deinit(storage: *Self) void {
+            if (storage.items.len == 0) return;
+            allocator.free(storage.items);
+            storage.* = .{};
         }
 
         /// A ceiling refusal and a failed allocation are both `OutOfMemory` because the copy
         /// cannot happen either way; a caller that must tell them apart compares to the ceiling first.
-        pub fn grow(self: *Self, needed: usize, ceiling: usize) Error!void {
-            const total = std.math.add(usize, self.length, needed) catch return error.OutOfMemory;
+        pub fn grow(storage: *Self, needed: usize, ceiling: usize) Error!void {
+            const total = std.math.add(usize, storage.length, needed) catch return error.OutOfMemory;
             if (total > ceiling) return error.OutOfMemory;
             // The reallocation and the length advance are separate decisions: the length has
             // to move whether or not the capacity did, which shows up only on a second append.
-            if (total > self.items.len) try self.realloc(total);
-            self.length = total;
+            if (total > storage.items.len) try storage.realloc(total);
+            storage.length = total;
         }
 
         /// Grows the *capacity* without the logical length, for a staging area: the outbound
         /// frame buffer is rewritten whole, so its length is the last frame's, not a running total.
-        pub fn reserve(self: *Self, capacity: usize, ceiling: usize) Error!void {
-            if (capacity <= self.items.len) return;
+        pub fn reserve(storage: *Self, capacity: usize, ceiling: usize) Error!void {
+            if (capacity <= storage.items.len) return;
             if (capacity > ceiling) return error.OutOfMemory;
-            try self.realloc(capacity);
+            try storage.realloc(capacity);
         }
 
-        pub fn written(self: *const Self) []const T {
-            return self.items[0..self.length];
+        pub fn written(storage: *const Self) []const T {
+            return storage.items[0..storage.length];
         }
 
-        pub fn window(self: *const Self, count: usize) []const T {
-            return self.items[0..count];
+        pub fn window(storage: *const Self, count: usize) []const T {
+            return storage.items[0..count];
         }
 
-        pub fn tail(self: *const Self, count: usize) []T {
-            return self.items[self.length - count .. self.length];
+        pub fn tail(storage: *const Self, count: usize) []T {
+            return storage.items[storage.length - count .. storage.length];
         }
 
-        pub fn clear(self: *Self) void {
-            self.length = 0;
+        pub fn clear(storage: *Self) void {
+            storage.length = 0;
         }
 
         /// Reallocates keeping what was written. `realloc` rather than allocate-copy-free, so
         /// a growth step does not walk the bytes it preserves; the target rounds to a power of two.
-        fn realloc(self: *Self, capacity: usize) Error!void {
+        fn realloc(storage: *Self, capacity: usize) Error!void {
             const target = @max(capacity, std.math.ceilPowerOfTwo(usize, capacity) catch capacity);
-            self.items = try allocator.realloc(self.items, target);
+            storage.items = try allocator.realloc(storage.items, target);
         }
     };
 }

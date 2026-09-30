@@ -39,6 +39,7 @@ const MAX_COMMENT_LINES = 24;
 const MIN_COMMENT_LINES = 6;
 
 export function commentViolations(name, source, violations) {
+  zigModuleDocInTypeScript(name, source, violations);
   const isTest = name.startsWith(TEST_PREFIX);
   const density = isTest ? TEST_DENSITY : name.endsWith(".zig") ? ZIG_DENSITY : SOURCE_DENSITY;
   const run = isTest ? TEST_RUN : SOURCE_RUN;
@@ -71,6 +72,14 @@ function densityViolations(name, source, comments, code, density) {
     return [message];
   }
   return [];
+}
+
+/// `//!` is Zig's module-doc sigil, not TypeScript's, and a `.ts` file carrying one has
+/// copied a form the language does not have; `///` is what the source tree uses.
+function zigModuleDocInTypeScript(name, source, violations) {
+  if (!/\.(?:ts|mts|cts)$/.test(name)) return;
+  if (!source.split("\n").some((line) => line.startsWith("//!"))) return;
+  violations.push(`${name}: uses Zig's //! module doc in TypeScript`);
 }
 
 /// A capacity table: every code line declares a constant, and every constant carries one

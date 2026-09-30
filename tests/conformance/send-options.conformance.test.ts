@@ -1,7 +1,7 @@
-//! `send`'s options on the wire. `binary` and `fin` were normalized, documented, and never read:
-//! `send(buffer, { binary: false })` put a binary frame on the wire where `ws` puts text, and
-//! `send(data, { fin: false })` framed a complete message with `fin` set. The peer is a real `ws`
-//! client throughout, so every assertion is about how a conforming implementation reads the bytes.
+// `send`'s options on the wire. `binary` and `fin` were normalized, documented, and never read:
+// `send(buffer, { binary: false })` put a binary frame on the wire where `ws` puts text, and
+// `send(data, { fin: false })` framed a complete message with `fin` set. The peer is a real `ws`
+// client throughout, so every assertion is about how a conforming implementation reads the bytes.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../binding/support";

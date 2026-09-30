@@ -1,7 +1,7 @@
-//! `allowSynchronousEvents`, which decides whether the events a read produces are delivered
-//! inside that read or on a later tick. The option was normalized, typed, and never read.
-//! The pause is observable, not just the delay: `ws` stops its parse loop, so a `close` frame
-//! sitting behind the messages in the same read is not delivered before them.
+// `allowSynchronousEvents`, which decides whether the events a read produces are delivered
+// inside that read or on a later tick. The option was normalized, typed, and never read.
+// The pause is observable, not just the delay: `ws` stops its parse loop, so a `close` frame
+// sitting behind the messages in the same read is not delivered before them.
 
 import { expect, test } from "vitest";
 import { WebSocketServer, type ServerOptions } from "../../../src/index";

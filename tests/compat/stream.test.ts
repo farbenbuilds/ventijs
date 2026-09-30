@@ -1,5 +1,5 @@
-//! `createWebSocketStream` on ventiws's own server: the two `ws` behaviours a caller can
-//! only see on a live connection, pinned to the values `ws` produces.
+// `createWebSocketStream` on ventiws's own server: the two `ws` behaviours a caller can
+// only see on a live connection, pinned to the values `ws` produces.
 
 import { expect, test } from "vitest";
 import { createWebSocketStream } from "../../src/compat/stream";

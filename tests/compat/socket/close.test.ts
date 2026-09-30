@@ -1,19 +1,40 @@
 import { expect, test } from "vitest";
+import { closeFrameWritten } from "../../../src/compat/socket/lifecycle";
+import type { WebSocket } from "../../../src/index";
+import type { CodedError } from "../../../src/types/errors";
 import { TEST_TIMEOUT_MS } from "../../binding/support";
 import { attached, terminateClient } from "./socket-support";
 
 const MAX_MESSAGE_BYTES = 32 * 1024;
 
-test("fractional close codes truncate like ws", { timeout: TEST_TIMEOUT_MS }, async () => {
-  const { server, client, socket } = await attached();
-  try {
-    expect(() => socket.close(1000.5)).not.toThrow();
-    expect(socket.readyState).toBe(socket.CLOSING);
-  } finally {
-    terminateClient(client);
-    await server.dispose();
-  }
-});
+/// The engine route cannot frame an app-initiated close yet: a valid close reports the
+/// missing implementation once, writes no frame, and leaves the socket OPEN.
+function expectUnsupportedClose(socket: WebSocket, code: number, reason?: unknown): void {
+  const errors: CodedError[] = [];
+  socket.on("error", (error: Error) => {
+    errors.push(error as CodedError);
+  });
+  socket.close(code, reason as never);
+  expect(errors).toHaveLength(1);
+  expect(errors[0]?.code).toBe("ERR_POLICY_VIOLATION");
+  expect(errors[0]?.message).toMatch(/app-initiated close is not implemented/);
+  expect(socket.readyState).toBe(socket.OPEN);
+  expect(closeFrameWritten(socket)).toBe(false);
+}
+
+test(
+  "a fractional close code is validated and then refused as unsupported",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    const { server, client, socket } = await attached();
+    try {
+      expectUnsupportedClose(socket, 1000.5);
+    } finally {
+      terminateClient(client);
+      await server.dispose();
+    }
+  },
+);
 
 /// Pins GHSA-58qx-3vcg-4xpx. A `Float32Array` reports an element count smaller
 /// than its `byteLength`, so accepting it as a close reason would size a frame
@@ -40,9 +61,9 @@ test(
   },
 );
 
-/// `ws` treats any argument without a truthy `length` as "no reason data", so
-/// these still produce a bare close frame instead of being refused. `null` is a
-/// deliberate divergence: `ws` surfaces a V8-internal `TypeError` there.
+/// `ws` treats any argument without a truthy `length` as "no reason data", so the close is
+/// attempted; the engine route then reports the unsupported close instead of sending a bare
+/// frame. `null` is a deliberate divergence: `ws` surfaces a V8-internal `TypeError` there.
 test.each([
   ["undefined", undefined],
   ["null", null],
@@ -52,13 +73,12 @@ test.each([
   ["a number", 42],
   ["an object with no length", {}],
 ])(
-  "an absent reason (%s) still sends a bare close frame",
+  "an absent reason (%s) on the engine route reports the unsupported close",
   { timeout: TEST_TIMEOUT_MS },
   async (_name, reason) => {
     const { server, client, socket } = await attached();
     try {
-      expect(() => socket.close(1000, reason as never)).not.toThrow();
-      expect(socket.readyState).toBe(socket.CLOSING);
+      expectUnsupportedClose(socket, 1000, reason);
     } finally {
       terminateClient(client);
       await server.dispose();
@@ -80,27 +100,27 @@ test("an oversize close reason is refused", { timeout: TEST_TIMEOUT_MS }, async 
   }
 });
 
+/// The ring rejection reaches the socket as an error, and the unsupported close that follows
+/// leaves the socket OPEN rather than latching it; the one-way `errorEmitted` latch means the
+/// close's own report is not a second event.
 test(
-  "sends the ring rejects surface an error and latch the socket",
-  {
-    timeout: TEST_TIMEOUT_MS,
-  },
+  "a refused send reports backpressure and an unsupported close does not latch",
+  { timeout: TEST_TIMEOUT_MS },
   async () => {
     const { server, client, socket } = await attached();
     try {
-      const failures: Error[] = [];
-      socket.on("error", (error) => {
-        failures.push(error);
+      const failures: CodedError[] = [];
+      socket.on("error", (error: Error) => {
+        failures.push(error as CodedError);
       });
       for (let index = 0; index < 9; index += 1) {
         socket.send(new Uint8Array(MAX_MESSAGE_BYTES));
       }
       socket.close(1000);
       await new Promise((resolve) => setImmediate(resolve));
-      expect(failures.map((error) => (error as { code?: string }).code)).toEqual([
-        "ERR_BACKPRESSURE",
-      ]);
-      expect(socket.readyState).toBe(socket.CLOSED);
+      expect(failures.map((error) => error.code)).toEqual(["ERR_BACKPRESSURE"]);
+      expect(socket.readyState).toBe(socket.OPEN);
+      expect(closeFrameWritten(socket)).toBe(false);
     } finally {
       terminateClient(client);
       await server.dispose();

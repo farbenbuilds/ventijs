@@ -1,8 +1,8 @@
-//! Waiting for bytes off a socket, in one place.
-//!
-//! Its own file because the shape is the same every time — accumulate, resolve at a
-//! threshold, stop listening, and clear the timer — and three copies of it would be
-//! three places for a leak to hide.
+// Waiting for bytes off a socket, in one place.
+//
+// Its own file because the shape is the same every time — accumulate, resolve at a
+// threshold, stop listening, and clear the timer — and three copies of it would be
+// three places for a leak to hide.
 
 import type { Socket } from "node:net";
 import { TEST_TIMEOUT_MS } from "./codec-net";

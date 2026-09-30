@@ -1,10 +1,10 @@
-//! The client suite's shared pieces: a `ws` server, a ventiws client, and a wait.
-//!
-//! Its own module because the two client suites need the same harness and the
-//! harness has one job that is easy to get wrong: every listener a test needs has to
-//! exist before the peer speaks, because `open` and `close` are emitted
-//! synchronously and a listener attached afterwards never sees the event it was
-//! waiting for.
+// The client suite's shared pieces: a `ws` server, a ventiws client, and a wait.
+//
+// Its own module because the two client suites need the same harness and the
+// harness has one job that is easy to get wrong: every listener a test needs has to
+// exist before the peer speaks, because `open` and `close` are emitted
+// synchronously and a listener attached afterwards never sees the event it was
+// waiting for.
 
 import type { IncomingMessage } from "node:http";
 import { WebSocketServer as WsServer, type WebSocket as WsSocket } from "ws";

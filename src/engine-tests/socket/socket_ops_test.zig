@@ -39,7 +39,7 @@ test "send rejects oversized payloads and unknown slots" {
     try std.testing.expectEqual(@as(u32, 0), slab.buffered(0, 1));
 }
 
-test "close validates the code and reason" {
+test "close validates the code and reason before refusing" {
     var slab = Slab{};
     slab.open(0, 1);
 
@@ -47,55 +47,53 @@ test "close validates the code and reason" {
     try std.testing.expectEqual(socket.Status.invalid_close_code, slab.close(0, 1, 999, ""));
     try std.testing.expectEqual(socket.Status.invalid_close_reason, slab.close(0, 1, 1000, "x" ** 124));
     try std.testing.expectEqual(socket.Status.invalid_close_reason, slab.close(0, 1, 1000, "\xff\xfe"));
-    try std.testing.expectEqual(socket.Status.ok, slab.close(0, 1, 3001, "bye"));
-    try std.testing.expectEqual(socket.Status.closing, slab.close(0, 1, 1000, ""));
-
-    const view = slab.ring.peek().?;
-    try std.testing.expectEqual(payload.Kind.close, view.kind);
-    try std.testing.expectEqualSlices(u8, &.{ 0x0b, 0xb9, 'b', 'y', 'e' }, view.bytes);
+    // A valid close is refused without staging: the ring only publishes text and binary.
+    try std.testing.expectEqual(socket.Status.policy_violation, slab.close(0, 1, 3001, "bye"));
+    try std.testing.expectEqual(socket.Status.policy_violation, slab.close(0, 1, 1000, ""));
+    try std.testing.expectEqual(@as(?socket.State, .open), slab.state_of(0));
+    try std.testing.expectEqual(@as(usize, 0), slab.ring.pending());
+    try std.testing.expectEqual(@as(u32, 0), slab.buffered(0, 1));
 }
 
-test "close accepts the exact reason boundary and accounts its bytes" {
-    const BigRing = payload.payload_ring(4, 256);
-    const BigSlab = socket.socket_slab(4, BigRing, BigRing);
-    var slab = BigSlab{};
+test "close accepts the exact reason boundary and still refuses" {
+    var slab = Slab{};
     slab.open(0, 1);
     const reason = "x" ** 123;
 
-    try std.testing.expectEqual(socket.Status.ok, slab.close(0, 1, 1000, reason));
-    try std.testing.expectEqual(@as(u32, 125), slab.buffered(0, 1));
-    try std.testing.expectEqual(@as(usize, 125), slab.ring.peek().?.bytes.len);
+    try std.testing.expectEqual(socket.Status.policy_violation, slab.close(0, 1, 1000, reason));
+    try std.testing.expectEqual(@as(?socket.State, .open), slab.state_of(0));
+    try std.testing.expectEqual(@as(usize, 0), slab.ring.pending());
+    try std.testing.expectEqual(@as(u32, 0), slab.buffered(0, 1));
 }
 
-test "close reports backpressure instead of staging into a full ring" {
+test "close refuses regardless of ring occupancy and stages nothing" {
     var slab = Slab{};
     slab.open(0, 1);
     for (0..4) |_| {
         try std.testing.expectEqual(socket.Status.ok, slab.send(0, 1, .text, "x"));
     }
 
-    try std.testing.expectEqual(socket.Status.backpressure, slab.close(0, 1, 1000, ""));
+    try std.testing.expectEqual(socket.Status.policy_violation, slab.close(0, 1, 1000, ""));
     try std.testing.expectEqual(@as(?socket.State, .open), slab.state_of(0));
     try std.testing.expectEqual(@as(usize, 4), slab.ring.pending());
 }
 
-test "concurrent close stages exactly one frame" {
+test "concurrent close never stages or latches" {
     var slab = Slab{};
     slab.open(0, 1);
 
-    var ready = std.atomic.Value(bool).init(false);
+    var refusals = std.atomic.Value(u32).init(0);
     const Runner = struct {
-        fn run(target: *Slab, gate: *std.atomic.Value(bool)) void {
-            while (!gate.load(.acquire)) std.atomic.spinLoopHint();
-            _ = target.close(0, 1, 1000, "");
+        fn run(target: *Slab, tally: *std.atomic.Value(u32)) void {
+            if (target.close(0, 1, 1000, "") == .policy_violation) _ = tally.fetchAdd(1, .monotonic);
         }
     };
 
     var threads: [4]std.Thread = undefined;
-    for (&threads) |*thread| thread.* = try std.Thread.spawn(.{}, Runner.run, .{ &slab, &ready });
-    ready.store(true, .release);
+    for (&threads) |*thread| thread.* = try std.Thread.spawn(.{}, Runner.run, .{ &slab, &refusals });
     for (threads) |thread| thread.join();
 
-    try std.testing.expectEqual(@as(usize, 1), slab.ring.pending());
-    try std.testing.expectEqual(@as(?socket.State, .closing), slab.state_of(0));
+    try std.testing.expectEqual(@as(u32, 4), refusals.load(.acquire));
+    try std.testing.expectEqual(@as(?socket.State, .open), slab.state_of(0));
+    try std.testing.expectEqual(@as(usize, 0), slab.ring.pending());
 }

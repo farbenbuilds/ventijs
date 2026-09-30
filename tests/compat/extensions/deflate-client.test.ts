@@ -1,9 +1,9 @@
-//! `permessage-deflate` negotiation from the client's side.
-//!
-//! Split from `deflate.test.ts` because a server reading an offer and a client reading
-//! an answer are two decisions, and the one that is not the same code is the one most
-//! likely to be tested only once: the client writes a header it chose, and then has to
-//! accept whatever a peer sends back, including parameters this codec never offered.
+// `permessage-deflate` negotiation from the client's side.
+//
+// Split from `deflate.test.ts` because a server reading an offer and a client reading
+// an answer are two decisions, and the one that is not the same code is the one most
+// likely to be tested only once: the client writes a header it chose, and then has to
+// accept whatever a peer sends back, including parameters this codec never offered.
 
 import { describe, expect, test } from "vitest";
 import { acceptAsClient } from "../../../src/compat/extensions/deflate";

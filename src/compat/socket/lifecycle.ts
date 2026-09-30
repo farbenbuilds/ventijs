@@ -3,7 +3,7 @@ import { CLOSE_ABNORMAL, CLOSE_NORMAL } from "../../protocol/close-codes";
 import type { SocketState } from "../../types/socket";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
-import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
+import { CLOSED, CLOSING, CONNECTING, OPEN } from "../ready-state";
 import { closeCodeOf } from "./close-code";
 import { toCloseReason } from "./close-reason";
 import { armCloseTimeout, closeFramed } from "./codec-close";
@@ -29,6 +29,8 @@ export function finishConnection(state: SocketState, code: number, reason: Buffe
   state.readyState = CLOSED;
   state.closeCode = code;
   state.closeReason = reason;
+  // Released on the terminal transition: the parse can never resume.
+  state.pendingInput = [];
   emitEvent(state, "close", code, reason);
 }
 
@@ -108,6 +110,12 @@ export function closeConnection(state: SocketState, code?: unknown, reason?: unk
   }
   if (status === "closing" || status === "closed") {
     finishConnection(state, CLOSE_ABNORMAL, EMPTY);
+    return;
+  }
+  if (status === "policy-violation") {
+    // The engine route cannot frame an app-initiated close yet; undo the latch and report.
+    state.readyState = OPEN;
+    reportWithoutClosing(state, closeFailure(status));
     return;
   }
   failConnection(state, closeFailure(status));

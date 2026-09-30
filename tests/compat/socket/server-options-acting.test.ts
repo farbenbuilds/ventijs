@@ -1,6 +1,6 @@
-//! Server options that were normalized, reported on `server.options`, and then never acted
-//! on. `autoPong` was the sharpest: a test set `autoPong: false` and asserted the *server*
-//! socket got no pong, which is true either way because the automatic pong goes to the client.
+// Server options that were normalized, reported on `server.options`, and then never acted
+// on. `autoPong` was the sharpest: a test set `autoPong: false` and asserted the *server*
+// socket got no pong, which is true either way because the automatic pong goes to the client.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer, type ServerOptions } from "../../../src/index";

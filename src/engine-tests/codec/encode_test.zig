@@ -112,6 +112,16 @@ test "a round trip through the encoder and the decoder preserves the message" {
     }
 }
 
+test "a reset codec does not outbound the frame it held before" {
+    // The reset is the disconnect path, and a transmit length left over would make
+    // `codec_outbound` hand the previous message out as if the reset never happened.
+    var peer = support.client();
+    _ = support.framed(&peer, .text, true, "stale");
+    peer.reset();
+    try testing.expectEqual(@as(usize, 0), peer.tx.bytes().len);
+    try testing.expect(!peer.tx.last_was_masked());
+}
+
 test "an encoded close frame carries the code and reason the decoder reads back" {
     // Both halves on one frame: the encoder lays out the two code bytes and the
     // reason, and the decoder has to split them back the way `ws` reports them.

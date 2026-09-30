@@ -1,5 +1,5 @@
-//! Which cases the compiled cap blocks, and how many. The facts about the pinned suite are in
-//! `case-sizes.ts`; this is the arithmetic over them, and the part that changes with the build.
+// Which cases the compiled cap blocks, and how many. The facts about the pinned suite are in
+// `case-sizes.ts`; this is the arithmetic over them, and the part that changes with the build.
 
 import { INBOUND_LIMIT_BYTES } from "./inbound-limit.ts";
 import {

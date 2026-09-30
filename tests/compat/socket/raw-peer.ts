@@ -1,13 +1,13 @@
-//! A raw WebSocket peer, for the assertions a `ws` peer cannot make.
-//!
-//! Its own module because `ws` decompresses transparently and masks deliberately, so a
-//! round trip through it cannot show whether RSV1 was set, what a header said, or which
-//! close code a peer earned. Everything here reads the bytes.
-//!
-//! The client half of this peer is the minimum needed to open a connection: a socket, a
-//! request with the extension offered, and enough of a frame reader to take one frame
-//! apart. Sending a frame is in here too, because the RSV1 cases have to put a bit where
-//! `ws` will not.
+// A raw WebSocket peer, for the assertions a `ws` peer cannot make.
+//
+// Its own module because `ws` decompresses transparently and masks deliberately, so a
+// round trip through it cannot show whether RSV1 was set, what a header said, or which
+// close code a peer earned. Everything here reads the bytes.
+//
+// The client half of this peer is the minimum needed to open a connection: a socket, a
+// request with the extension offered, and enough of a frame reader to take one frame
+// apart. Sending a frame is in here too, because the RSV1 cases have to put a bit where
+// `ws` will not.
 
 import { connect, type Socket } from "node:net";
 import { deflateRawSync, inflateRawSync } from "node:zlib";

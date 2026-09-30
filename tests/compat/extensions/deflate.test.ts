@@ -1,9 +1,10 @@
-//! `permessage-deflate` negotiation, in both directions.
-//!
-//! Separate from `grammar.test.ts` because the two answer different questions. That one asks
-//! whether a header is well formed; this one asks what is done with one, and the answers are
-//! `ws`'s answers. Window handling is in `deflate-window.test.ts`, which splits from this
-//! file only because the rules there are long enough to need the room.
+// `permessage-deflate` negotiation, in both directions.
+//
+// Separate from `grammar.test.ts` because the two answer different questions. That one asks
+// whether a header is well formed; this one asks what is done with one, and the answers are
+// `ws`'s answers. Window handling is in `deflate-window.test.ts`, which splits from this
+// file only because the rules there are long enough to need the room; the range of the
+// window *options* is checked here, next to the negotiation they feed.
 
 import { describe, expect, test } from "vitest";
 import { acceptAsServer } from "../../../src/compat/extensions/deflate";
@@ -92,5 +93,43 @@ describe("a server reading a client offer", () => {
       server,
     );
     expect(outcome).toHaveProperty("refusal");
+  });
+});
+
+describe("window options outside RFC 7692's range", () => {
+  test.each([7, 16, 0, 3.5, Number.NaN])("a value of %s is refused at construction", (bits) => {
+    expect(() => normalizePerMessageDeflate({ serverMaxWindowBits: bits }, true)).toThrow(
+      RangeError,
+    );
+    expect(() => normalizePerMessageDeflate({ clientMaxWindowBits: bits }, true)).toThrow(
+      RangeError,
+    );
+  });
+
+  test.each([null, true, "12"])("a non-number value of %s is refused at construction", (bits) => {
+    const raw = bits as unknown as number;
+    expect(() => normalizePerMessageDeflate({ serverMaxWindowBits: raw }, true)).toThrow(
+      RangeError,
+    );
+    expect(() => normalizePerMessageDeflate({ clientMaxWindowBits: raw }, true)).toThrow(
+      RangeError,
+    );
+  });
+
+  test("the refusal carries the normalization error code", () => {
+    expect(() => normalizePerMessageDeflate({ serverMaxWindowBits: 7 }, true)).toThrow(
+      expect.objectContaining({ code: "ERR_INVALID_OPTION" }),
+    );
+  });
+
+  test("false stays the runtime's name-no-window form", () => {
+    // `ws` compares the option against `false` at `permessage-deflate.js:166`, and
+    // `@types/ws` types it as a number, so the cast is the declaration gap, not a value.
+    const server = normalizePerMessageDeflate(
+      { serverMaxWindowBits: false } as unknown as { serverMaxWindowBits: number },
+      true,
+    );
+    expect(server).not.toBe(false);
+    if (server !== false) expect(server.serverMaxWindowBits).toBe(false);
   });
 });

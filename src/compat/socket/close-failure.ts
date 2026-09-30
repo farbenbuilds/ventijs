@@ -17,7 +17,11 @@ export function closeFailure(status: EngineStatus): Error {
     case "invalid-close-code":
     case "invalid-close-reason":
     case "protocol-error":
-    case "policy-violation":
       return statusError(status);
+    case "policy-violation":
+      return createError(
+        "ERR_POLICY_VIOLATION",
+        "ventiws: app-initiated close is not implemented on the engine route",
+      );
   }
 }

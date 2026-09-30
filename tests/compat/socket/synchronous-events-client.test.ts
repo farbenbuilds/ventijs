@@ -1,6 +1,6 @@
-//! `allowSynchronousEvents` on the client, which reads the same option through the same shared
-//! path as the server. Separated by *direction* because the two differ in what can be asserted:
-//! only the server cases can force three frames into one write.
+// `allowSynchronousEvents` on the client, which reads the same option through the same shared
+// path as the server. Separated by *direction* because the two differ in what can be asserted:
+// only the server cases can force three frames into one write.
 
 import { expect, test } from "vitest";
 import { WebSocket, WebSocketServer, type ServerOptions } from "../../../src/index";

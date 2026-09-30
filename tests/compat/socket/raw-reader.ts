@@ -1,5 +1,5 @@
-//! Reading exact byte counts off a raw socket, without losing the leftovers. The leftover buffer
-//! has to be right in exactly one place: dropping it makes the next read start mid-frame.
+// Reading exact byte counts off a raw socket, without losing the leftovers. The leftover buffer
+// has to be right in exactly one place: dropping it makes the next read start mid-frame.
 
 import type { Socket } from "node:net";
 

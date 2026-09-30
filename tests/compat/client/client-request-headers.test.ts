@@ -1,10 +1,10 @@
-//! The header precedence `ws` settles on the opening handshake, read off a hand-answering
-//! raw peer. Each case here is an order rather than a value, and the order is `ws`'s:
-//! the library's upgrade headers go over the caller's, URL credentials fill `Authorization`
-//! only when the caller set none, and an empty `origin` is no header rather than an empty
-//! one. The other order lets a caller who merges headers from a config object produce a
-//! request that is not an upgrade, and the failure surfaces as a server-side 400 that names
-//! nothing about the cause.
+// The header precedence `ws` settles on the opening handshake, read off a hand-answering
+// raw peer. Each case here is an order rather than a value, and the order is `ws`'s:
+// the library's upgrade headers go over the caller's, URL credentials fill `Authorization`
+// only when the caller set none, and an empty `origin` is no header rather than an empty
+// one. The other order lets a caller who merges headers from a config object produce a
+// request that is not an upgrade, and the failure surfaces as a server-side 400 that names
+// nothing about the cause.
 
 import { expect, test } from "vitest";
 import { createServer } from "node:net";

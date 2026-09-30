@@ -1,9 +1,9 @@
-//! A redirect chain, and the rules about what may be carried through one.
-//!
-//! A redirect is something that happens *before* a peer is a WebSocket server, which
-//! makes it the one handshake path a real deployment hits routinely — a load balancer
-//! or a CDN that moves a socket URL — and the one whose failure mode is a connection
-//! that silently never opens.
+// A redirect chain, and the rules about what may be carried through one.
+//
+// A redirect is something that happens *before* a peer is a WebSocket server, which
+// makes it the one handshake path a real deployment hits routinely — a load balancer
+// or a CDN that moves a socket URL — and the one whose failure mode is a connection
+// that silently never opens.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";

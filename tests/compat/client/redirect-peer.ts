@@ -1,10 +1,10 @@
-//! A peer that answers an opening request with something other than a handshake.
-//!
-//! A `node:http` server is the wrong fixture here, and the reason is worth stating: a
-//! WebSocket handshake arrives on its `upgrade` event, not its `request` event, so an
-//! HTTP server never sees the request this is about. This is a raw listener answering
-//! one request per connection, which is what a redirect actually looks like on the wire
-//! and what a load balancer or a CDN in front of a socket endpoint produces.
+// A peer that answers an opening request with something other than a handshake.
+//
+// A `node:http` server is the wrong fixture here, and the reason is worth stating: a
+// WebSocket handshake arrives on its `upgrade` event, not its `request` event, so an
+// HTTP server never sees the request this is about. This is a raw listener answering
+// one request per connection, which is what a redirect actually looks like on the wire
+// and what a load balancer or a CDN in front of a socket endpoint produces.
 
 import { createServer, type Server, type Socket } from "node:net";
 import { acceptValue } from "../../binding/codec-net";

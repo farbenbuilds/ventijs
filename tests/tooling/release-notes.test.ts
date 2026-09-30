@@ -1,7 +1,7 @@
-//! The release notes are the changelog sections between two tags, so the boundary is a git
-//! question as much as a text one: which tag preceded this commit, and does the changelog
-//! have a section for it. Running the script against a real tagged repository is the only
-//! way both halves are covered at once.
+// The release notes are the changelog sections between two tags, so the boundary is a git
+// question as much as a text one: which tag preceded this commit, and does the changelog
+// have a section for it. Running the script against a real tagged repository is the only
+// way both halves are covered at once.
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";

@@ -33,49 +33,49 @@ pub const Message = struct {
         return .{ .compressible = compressible };
     }
 
-    pub fn deinit(self: *Message) void {
-        if (self.stream) |*open| open.deinit();
-        self.stream = null;
-        self.staged.deinit();
-        self.input.deinit();
+    pub fn deinit(message: *Message) void {
+        if (message.stream) |*open| open.deinit();
+        message.stream = null;
+        message.staged.deinit();
+        message.input.deinit();
     }
 
-    pub fn is_compressed(self: *const Message) bool {
-        return self.compressed;
+    pub fn is_compressed(message: *const Message) bool {
+        return message.compressed;
     }
 
     /// Latches a compressed message and clears the bit so `zslay` will parse the header. A
     /// refusal is returned rather than latched: the driver owns the refusal.
-    pub fn inspect(self: *Message, first: *u8) ?events.Failure {
-        return rsv1.inspect(&self.compressed, first, self.compressible);
+    pub fn inspect(message: *Message, first: *u8) ?events.Failure {
+        return rsv1.inspect(&message.compressed, first, message.compressible);
     }
 
-    pub fn stage(self: *Message, chunk: []const u8, ceiling: usize) Error!void {
-        self.staged.grow(chunk.len, ceiling) catch return error.TooLarge;
-        @memcpy(self.staged.tail(chunk.len), chunk);
+    pub fn stage(message: *Message, chunk: []const u8, ceiling: usize) Error!void {
+        message.staged.grow(chunk.len, ceiling) catch return error.TooLarge;
+        @memcpy(message.staged.tail(chunk.len), chunk);
     }
 
     /// Forgets the message, delivered or refused. The allocations stay: a peer that
     /// compresses one message will compress the next.
-    pub fn clear(self: *Message) void {
-        self.compressed = false;
-        self.staged.clear();
+    pub fn clear(message: *Message) void {
+        message.compressed = false;
+        message.staged.clear();
     }
 
     /// Restores the stripped octets and inflates into `out`, which grows into the ceiling
     /// rather than starting at it: sizing it to `maxPayload` would allocate a connection's
     /// whole 100 MiB default the first time it received a compressed message. A message
     /// that still does not fit at the ceiling is a 1009 rather than a short one.
-    pub fn inflate(self: *Message, out: *growth.buffer(u8), ceiling: usize) Error![]const u8 {
-        const total = try std.math.add(usize, self.staged.length, deflate.restore_len);
-        self.staged.grow(deflate.restore_len, total) catch return error.TooLarge;
-        const tail = self.staged.tail(deflate.restore_len);
+    pub fn inflate(message: *Message, out: *growth.buffer(u8), ceiling: usize) Error![]const u8 {
+        const total = try std.math.add(usize, message.staged.length, deflate.restore_len);
+        message.staged.grow(deflate.restore_len, total) catch return error.TooLarge;
+        const tail = message.staged.tail(deflate.restore_len);
         @memcpy(tail[0..deflate.sync_flush_tail.len], &deflate.sync_flush_tail);
         @memcpy(tail[deflate.sync_flush_tail.len..], &deflate.final_empty_block);
-        try self.input.reserve(total, total);
-        const stream = try self.engine();
+        try message.input.reserve(total, total);
+        const stream = try message.engine();
 
-        stream.write(self.staged.written()) catch return error.TooLarge;
+        stream.write(message.staged.written()) catch return error.TooLarge;
         while (true) {
             if (stream.finish(out.items)) |plain| {
                 return plain;
@@ -93,17 +93,17 @@ pub const Message = struct {
 
     /// A rewind is what a finished pass leaves behind: the borrow of `input`, which
     /// `reserve` may have moved, the write cursor, and the closed flag.
-    fn engine(self: *Message) Error!*uwz.compression_stream.DecompressionStream {
-        if (self.stream) |*open| {
-            open.input = self.input.items;
+    fn engine(message: *Message) Error!*uwz.compression_stream.DecompressionStream {
+        if (message.stream) |*open| {
+            open.input = message.input.items;
             open.input_length = 0;
             open.closed = false;
             return open;
         }
-        self.stream = uwz.compression_stream.DecompressionStream.init(
+        message.stream = uwz.compression_stream.DecompressionStream.init(
             .deflate_raw,
-            self.input.items,
+            message.input.items,
         ) catch return error.OutOfMemory;
-        return &self.stream.?;
+        return &message.stream.?;
     }
 };

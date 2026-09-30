@@ -1,9 +1,9 @@
-//! What a `ws` server does with what the client sends, and what the client reads back.
-//!
-//! The peer is `ws`'s, so each case asks whether `ws` accepts this client's frames and
-//! whether this client reads `ws`'s. The frame shapes are the subject of
-//! `client-frames.test.ts`, and how a connection opens and ends is the subject of
-//! `client-lifecycle.test.ts`.
+// What a `ws` server does with what the client sends, and what the client reads back.
+//
+// The peer is `ws`'s, so each case asks whether `ws` accepts this client's frames and
+// whether this client reads `ws`'s. The frame shapes are the subject of
+// `client-frames.test.ts`, and how a connection opens and ends is the subject of
+// `client-lifecycle.test.ts`.
 
 import { expect, test } from "vitest";
 import { WebSocket } from "../../../src/index";

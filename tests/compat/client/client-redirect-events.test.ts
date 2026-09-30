@@ -1,13 +1,13 @@
-//! The `redirect` and `unexpected-response` events, and the requests they carry.
-//!
-//! Their own module because both are about a caller taking responsibility for a decision:
-//! which hop to follow, and what to do about a response that is not a handshake. The
-//! `upgrade` event is the opposite -- it reports a success -- and `client-upgrade-event.ts`
-//! covers it.
-//!
-//! Every case reads something out of the payload that a reduced `(url, status)` pair could
-//! not have provided. A test that only checked the event fired would pass against the
-//! route these replace, which emitted both.
+// The `redirect` and `unexpected-response` events, and the requests they carry.
+//
+// Their own module because both are about a caller taking responsibility for a decision:
+// which hop to follow, and what to do about a response that is not a handshake. The
+// `upgrade` event is the opposite -- it reports a success -- and `client-upgrade-event.ts`
+// covers it.
+//
+// Every case reads something out of the payload that a reduced `(url, status)` pair could
+// not have provided. A test that only checked the event fired would pass against the
+// route these replace, which emitted both.
 
 import type { ClientRequest } from "node:http";
 import { expect, test } from "vitest";

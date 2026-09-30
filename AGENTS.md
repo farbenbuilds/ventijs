@@ -27,7 +27,7 @@ will own parsing, buffers, and backpressure.
   own the socket facade, `server/{server,close,listeners,upgrade,handshake,negotiate,clients}.ts`
   own the server and Node HTTP upgrade path, `client/{address,protocols,request,dial,open,redirect,unexpected,extension}.ts`
   own the `http.ClientRequest` handshake and the three payload events,
-  `extensions/{grammar,scan,format,params,deflate,offer,negotiated,window,threshold}.ts`
+  `extensions/{grammar,scan,format,params,deflate,offer,negotiated,threshold}.ts`
   own RFC 7692 negotiation, and `constructors.ts`, `errors.ts`, `ready-state.ts`,
   `stream.ts` sit at the root. `src/protocol/` holds the pure
   close code, framing, and backpressure helpers.
@@ -41,8 +41,9 @@ will own parsing, buffers, and backpressure.
   `src/engine_tests.zig`; the engine-coupled
   `server`/`connections` modules are covered by the addon-backed tests. Socket
   ops stage into a bounded ring and return typed statuses; the engine-thread
-  drain that frames and writes them is still missing, so the facade's native
-  sockets stage without flushing and the Node upgrade path has no receiver.
+  drain that frames and writes them is still missing, so text and binary flush
+  through `pump_socket` while an app-initiated close has no drain and reports
+  `policy-violation` instead of staging a frame nothing would send.
   `src/lib.zig` also exports `engineLimits`, so the compiled capacities are read
   rather than restated.
   `pnpm build:binding` builds the addon in ReleaseSafe, and

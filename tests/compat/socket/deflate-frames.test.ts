@@ -1,10 +1,10 @@
-//! Whether RSV1 goes out, read off the wire.
-//!
-//! Split out of `permessage-deflate.test.ts` because that module's claim is
-//! interoperability -- a `ws` peer reads what this build writes -- and a `ws` peer
-//! decompresses transparently, so it cannot show *whether* a payload was compressed. These
-//! cases are the only ones that can, and they are the ones that would still pass against
-//! an implementation that never set RSV1 at all.
+// Whether RSV1 goes out, read off the wire.
+//
+// Split out of `permessage-deflate.test.ts` because that module's claim is
+// interoperability -- a `ws` peer reads what this build writes -- and a `ws` peer
+// decompresses transparently, so it cannot show *whether* a payload was compressed. These
+// cases are the only ones that can, and they are the ones that would still pass against
+// an implementation that never set RSV1 at all.
 
 import { expect, test } from "vitest";
 import { WebSocketServer } from "../../../src/index";

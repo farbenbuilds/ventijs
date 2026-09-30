@@ -1,9 +1,9 @@
-//! The Node upgrade route driven by the Zig frame codec, against a real `ws` peer.
-//!
-//! `ws` is the compatibility contract, so every case here runs a real client
-//! against a real HTTP upgrade. The conformance suite compares two `ws` instances
-//! with each other; these prove the thing that suite cannot, which is that the
-//! frames this build puts on the wire are frames `ws` reads.
+// The Node upgrade route driven by the Zig frame codec, against a real `ws` peer.
+//
+// `ws` is the compatibility contract, so every case here runs a real client
+// against a real HTTP upgrade. The conformance suite compares two `ws` instances
+// with each other; these prove the thing that suite cannot, which is that the
+// frames this build puts on the wire are frames `ws` reads.
 
 import { expect, test } from "vitest";
 import { TEST_TIMEOUT_MS } from "../../binding/support";

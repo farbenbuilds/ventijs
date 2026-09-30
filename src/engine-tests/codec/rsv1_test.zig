@@ -48,9 +48,9 @@ test "a compressed frame has its payload inflated rather than delivered raw" {
     try testing.expectEqual(@as(u16, 1007), peer.failure_code());
 }
 
-test "RSV1 on a continuation is ignored, as ws ignores it" {
-    // The 1007 rather than a 1002 is the assertion: the bit did not become a refusal, the
-    // bytes did.
+test "RSV1 on a continuation is a protocol error" {
+    // RFC 7692 section 6 allows the bit only on a message's first frame, which is the one
+    // thing RSV1 cannot mean mid-message even with the extension negotiated.
     var peer = negotiated();
     defer peer.deinit();
     var buffer: [32]u8 = undefined;
@@ -61,7 +61,8 @@ test "RSV1 on a continuation is ignored, as ws ignores it" {
     const rest = with_rsv1(&buffer, true, .continuation, &NOT_DEFLATE);
     const rest_frame = rest;
     _ = peer.feed(rest_frame);
-    try testing.expectEqual(@as(u16, 1007), peer.failure_code());
+    try testing.expectEqual(codec.Failure.unexpected_rsv_1, peer.pending_failure().?);
+    try testing.expectEqual(@as(u16, 1002), peer.failure_code());
 }
 
 test "a compressed control frame is a protocol error" {

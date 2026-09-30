@@ -1,9 +1,9 @@
-//! The `WS_ERR_*` codes a *payload* produces, driven over a real server. The framing
-//! half is in `refusal-codes.test.ts` and the close-payload half in
-//! `refused-close-payload.test.ts`. These are the faults in the bytes rather than the
-//! header, and the two where the close code and the error code are easy to confuse: a
-//! size limit and a fragment limit are both 1000-series policy close codes, and `ws`
-//! gives each its own string.
+// The `WS_ERR_*` codes a *payload* produces, driven over a real server. The framing
+// half is in `refusal-codes.test.ts` and the close-payload half in
+// `refused-close-payload.test.ts`. These are the faults in the bytes rather than the
+// header, and the two where the close code and the error code are easy to confuse: a
+// size limit and a fragment limit are both 1000-series policy close codes, and `ws`
+// gives each its own string.
 
 import { expect, test } from "vitest";
 import { WebSocketServer } from "../../../src/index";

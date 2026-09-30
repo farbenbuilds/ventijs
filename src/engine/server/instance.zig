@@ -56,8 +56,9 @@ pub const Instance = struct {
     config: options.ServerConfig,
     io: std.Io.Threaded = std.Io.Threaded.init_single_threaded,
     cluster: ClusterType,
-    /// Staged payloads the engine refused after the pump took them out of the ring. Written on
-    /// the engine thread and read on the main one, so it is atomic; see `socket_pump.flush`.
+    /// Staged payloads the pump refused after taking them out of the ring.
+    /// `socket_pump.flush` writes it and `server_undelivered_messages` reads it through
+    /// FFI entry points that may run on different Node threads, so it is atomic.
     undelivered: std.atomic.Value(u64) align(std.atomic.cache_line) = .init(0),
     runner: ?std.Thread = null,
     state: std.atomic.Value(State) = .init(.created),

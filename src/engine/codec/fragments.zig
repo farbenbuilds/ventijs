@@ -3,40 +3,38 @@
 
 const growth = @import("growth.zig");
 
-/// Interior *end* positions of one message in progress, ascending; N pieces record N-1 ends.
-pub const ends_are = "interior";
-
 /// Boundaries reserved before a message is fragmented: sixteen is a chat-sized count and 64
 /// bytes, so an unfragmented connection costs 64 bytes rather than 64 KiB.
 pub const initial_boundaries = 16;
 
-pub const fragments = struct {
+/// Interior *end* positions of one message in progress, ascending; N pieces record N-1 ends.
+pub const Fragments = struct {
     ends_: growth.buffer(u32) = .{},
     count: usize = 0,
 
     /// Releases the boundary list, which may never have been allocated.
-    pub fn deinit(self: *fragments) void {
-        self.ends_.deinit();
-        self.count = 0;
+    pub fn deinit(boundaries: *Fragments) void {
+        boundaries.ends_.deinit();
+        boundaries.count = 0;
     }
 
     /// Records where a piece ended, or reports too many pieces for the bound; both faults 1008.
-    pub fn note(self: *fragments, end: usize, bound: usize) error{ TooManyFragments, OutOfMemory }!void {
-        if (self.count >= bound) return error.TooManyFragments;
-        if (self.count == self.ends_.items.len) {
-            const grown = @min(@max(self.count * 2, initial_boundaries), bound);
-            try self.ends_.reserve(grown, bound);
+    pub fn note(boundaries: *Fragments, end: usize, bound: usize) error{ TooManyFragments, OutOfMemory }!void {
+        if (boundaries.count >= bound) return error.TooManyFragments;
+        if (boundaries.count == boundaries.ends_.items.len) {
+            const grown = @min(@max(boundaries.count * 2, initial_boundaries), bound);
+            try boundaries.ends_.reserve(grown, bound);
         }
-        self.ends_.items[self.count] = @intCast(end);
-        self.count += 1;
+        boundaries.ends_.items[boundaries.count] = @intCast(end);
+        boundaries.count += 1;
     }
 
-    pub fn ends(self: *const fragments) []const u32 {
-        return self.ends_.window(self.count);
+    pub fn ends(boundaries: *const Fragments) []const u32 {
+        return boundaries.ends_.window(boundaries.count);
     }
 
     /// Keeps the allocation: a peer that fragments one message will likely fragment the next.
-    pub fn clear(self: *fragments) void {
-        self.count = 0;
+    pub fn clear(boundaries: *Fragments) void {
+        boundaries.count = 0;
     }
 };
