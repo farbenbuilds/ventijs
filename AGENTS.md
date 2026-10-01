@@ -30,7 +30,9 @@ will own parsing, buffers, and backpressure.
   `extensions/{grammar,scan,format,params,deflate,offer,negotiated,threshold}.ts`
   own RFC 7692 negotiation, and `constructors.ts`, `errors.ts`, `ready-state.ts`,
   `stream.ts` sit at the root. `src/protocol/` holds the pure
-  close code, framing, and backpressure helpers.
+  close code, framing, and backpressure helpers. `src/logging/` holds the
+  process-wide ANSI logger and startup splash, deliberately outside the `ws`
+  surface and not re-exported from `src/index.ts`.
   `src/engine/` holds the native foundation grouped by plane: `channel/`
   (threadsafe transport, event vocabulary, ring), `ffi/` (the N-API entry
   points, split into the outbound `socket_pump` and the inbound
