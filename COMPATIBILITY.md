@@ -171,16 +171,24 @@ needs regenerating for it. A listed case that a protocol fix moves does need a
 regenerated baseline, which takes one recorded run of the digest-pinned suite on a
 Docker-capable host.
 
-**Current state, from `.github/workflows/autobahn.yml` run 36338412316, recorded in
-`tests/autobahn/baseline.json`:** 260 of 268 evaluated framing cases passing, 7
-non-strict, 8 failed, 33 capacity-blocked.
+**Current state, from `.github/workflows/autobahn.yml` run 36735219994, recorded in
+`tests/autobahn/baseline.json`:** the full 517-case selection ran because the
+Autobahn target now negotiates `permessage-deflate`; 414 of 422 evaluated cases
+passed, 7 non-strict, 8 failed, and 95 are capacity-blocked. The eight failures
+are the group-9 rate cases below.
 
-| Group  | Failing | What the report says                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 5      | 2       | `5.19` and `5.20` fail with a clean close and no remote close code, so the frame is delivered and the connection is healthy. Neither reproduces on the current build across 28 stress runs, so the recorded run is older than the build                                                                                                                                                                                                                                       |
-| 7      | 1       | `7.1.1` expects an echo and a normal close. The data loss is fixed: a message staged in the same read as a peer close is delivered, and `tests/binding/socket-close-race.test.ts` fails on the previous build and passes on this one. The case still fails for a different reason, because the engine has already closed the transport by the time the echo is written, so the echo cannot be sent, and refusing to write to a closed connection is correct rather than a gap |
-| 9      | 8       | Rate rather than conformance: each case sends 1000 messages as fast as the peer will take them, and the suite marks the case failed when the agent cannot sustain the rate. The boundary is the payload size, not the message cap, because group 1's 65536-byte cases pass. The inbound ring holds 64 messages and the Node main thread drains it, so a burst outruns the consumer                                                                                            |
-| 12, 13 | 132     | `permessage_deflate` is now genuinely wired on the engine route: `RawConfig.permessage_deflate` in `src/engine/server/options.zig:46` and `.compression = .permessage_deflate` in `src/engine/server/connections.zig:18`. They are still listed, and the next recorded run is what decides                                                                                                                                                                                    |
+| Group | Failing | What the report says                                                                                                                                                                                                                                                                                                                                                               |
+| ----- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 9     | 8       | Rate rather than conformance: each case sends 1000 messages as fast as the peer will take them, and the suite marks the case failed when the agent cannot sustain the rate. The boundary is the payload size, not the message cap, because group 1's 65536-byte cases pass. The inbound ring holds 64 messages and the Node main thread drains it, so a burst outruns the consumer |
+
+Groups 12 and 13 left the baseline in the same run: all 132 previously listed
+deflate cases passed once the target negotiated the extension, and the two rows
+that still fail (`12.4.9`, `12.4.14`) are capacity-blocked rather than listed,
+because group 12's dataset 4 slices a decoded string by code points and its
+65536-code-point row encodes to up to 65563 UTF-8 bytes. The wiring is
+`RawConfig.permessage_deflate` in `src/engine/server/options.zig:46` and
+`.compression = .permessage_deflate` in
+`src/engine/server/connections.zig:18`.
 
 `permessage_deflate` crosses `NativeServerConfig` in `src/binding/native.ts`,
 `RawConfig` and `Limits` in `src/engine/server/options.zig` carry it, and

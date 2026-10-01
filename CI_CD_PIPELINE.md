@@ -197,12 +197,14 @@ the suite skipped rather than failed.
 
 `fuzzing-client` builds the addon, runs `tests/autobahn/preflight.ts` to prove
 the addon loads, pulls the fuzzing client by digest, and runs
-`node tests/autobahn/run.ts` with `AUTOBAHN_SHARDS=4`. A pull request runs the
-framing selection, 301 cases;
-`schedule` and `workflow_dispatch` pass `--full` for all 517, which is the weekly
-refresh. A run that passes writes its commit to the watermark cache, so a red run
-is retried on the next push rather than recorded as tested. The report is
-uploaded on every outcome, including failure.
+`node tests/autobahn/run.ts --full` with `AUTOBAHN_SHARDS=4`, so every run is the
+full 517-case selection. The target negotiates permessage-deflate, so the two
+deflate groups are measured rather than reported UNIMPLEMENTED; the local
+`pnpm test:autobahn` still defaults to the faster framing selection. The scheduled
+and manual runs remain the weekly refresh of the report. A run that passes writes
+its commit to the watermark cache, so a red run is retried on the next push rather
+than recorded as tested. The report is uploaded on every outcome, including
+failure.
 
 The gate is a regression gate, not an exclusion list. Any failure outside
 `tests/autobahn/baseline.json` fails the run, and a baseline entry that starts
