@@ -1,6 +1,6 @@
 {
   "name": "ventiws",
-  "version": "1.0.0-alpha.16",
+  "version": "1.0.0-beta",
   "description": "A drop-in replacement for ws for Node.js, built on the first-party µWebZockets Zig engine via napi-zig.",
   "homepage": "https://github.com/farbenbuilds/ventiws#readme",
   "bugs": {
@@ -28,10 +28,18 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
+    "./logging": {
+      "types": {
+        "import": "./dist/logging.d.mts",
+        "require": "./dist/logging.d.cts"
+      },
+      "import": "./dist/logging.mjs",
+      "require": "./dist/logging.cjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "pnpm run build:binding && tsdown && node scripts/finalize-exports.mjs && pnpm run typecheck:dist",
+    "build": "pnpm run build:binding && tsdown && pnpm run finalize:exports && pnpm run typecheck:dist",
     "build:binding": "napi-zig build --optimize safe",
     "build:bindings": "node scripts/build-bindings.mjs",
     "stage:publish": "node scripts/stage-publish.mjs",

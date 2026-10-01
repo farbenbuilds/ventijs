@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Adds the `types` conditions that `tsdown`'s generated `exports` map leaves out.
+// Adds the `types` conditions that `tsdown`'s generated `exports` map leaves out, for
+// every bundled subpath rather than the root alone.
 //
 // The bundler writes the runtime conditions, because it is the thing that knows which
 // files it produced. It does not write the type conditions, and a resolver that
@@ -12,25 +13,49 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const manifestPath = new URL("../package.json", import.meta.url);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const root = manifest.exports?.["."];
+const exports = manifest.exports;
 
-if (root === undefined || typeof root !== "object") {
-  throw new Error('finalize-exports: the exports map has no "." entry to complete');
+if (exports === undefined || typeof exports !== "object") {
+  throw new Error("finalize-exports: the manifest has no exports map to complete");
 }
 
-const declaration = {
-  import: "./dist/index.d.mts",
-  require: "./dist/index.d.cts",
-};
+/// Each bundled runtime path has a declaration beside it, named by the same stem and a
+/// format-specific suffix. Derived rather than listed so a new subpath is covered by
+/// the build that produced it.
+const RUNTIME = [
+  { condition: "import", extension: /\.mjs$/, declaration: ".d.mts" },
+  { condition: "require", extension: /\.cjs$/, declaration: ".d.cts" },
+];
 
-manifest.exports["."] = {
-  types: declaration,
-  ...root,
-};
+function typesFor(entry) {
+  const types = {};
+  for (const runtime of RUNTIME) {
+    const path = entry[runtime.condition];
+    if (typeof path === "string")
+      types[runtime.condition] = path.replace(runtime.extension, runtime.declaration);
+  }
+  return types;
+}
+
+let completed = 0;
+for (const [subpath, entry] of Object.entries(exports)) {
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+  const types = typesFor(entry);
+  if (Object.keys(types).length === 0) continue;
+  // `types` leads the object: a resolver walks the conditions in order, and TypeScript
+  // only reads the `types` condition before the runtime one when it comes first.
+  exports[subpath] = { types, ...entry };
+  completed += 1;
+}
+
+const root = exports["."]?.types?.import;
+if (typeof root !== "string") {
+  throw new Error('finalize-exports: the exports map has no completed "." entry');
+}
 // The top-level `types` field is what a resolver reads when it does not understand
 // `exports` at all -- `moduleResolution: classic` and some older tooling. It pointed
 // at the CJS declaration, which is wrong for every ESM consumer.
-manifest.types = declaration.import;
+manifest.types = root;
 
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-console.log("finalize-exports: added the types conditions");
+console.log(`finalize-exports: added the types conditions for ${completed} subpaths`);

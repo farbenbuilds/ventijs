@@ -12,8 +12,8 @@ observable behaviour rather than its source. ventiws is not affiliated with the
 as the pinned contract, credited in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**ventiws is at `1.0.0-alpha.16`.** The surface may change between alpha
-releases. What "alpha" means here is bounded: the `ws` compatibility
+**ventiws is at `1.0.0-beta`.** The surface may change between beta
+releases. What "beta" means here is bounded: the `ws` compatibility
 contract is tracked row by row in
 [COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventiws knowingly
 differs from `ws` are listed in [CHANGELOG.md](CHANGELOG.md) under "Known
@@ -94,6 +94,22 @@ Both halves run against a real `ws` peer in this repository's suites, and the
 constructors are plain functions returning state records: no `class`, no `this`,
 no prototype.
 
+### Dev logger
+
+ventiws prints lifecycle records as they happen: the splash when a server starts
+listening, then open, close, and error records for every connection, with no
+callbacks to subscribe. It is a zero-dependency ANSI module outside the `ws`
+surface, on by default, and silenced with one switch.
+
+```ts
+import { setLoggerEnabled } from "ventiws/logging";
+
+setLoggerEnabled(false); // VENTIWS_LOG=0 does the same at load
+```
+
+The record format, every recorded moment, and the manual API are in
+[docs/logging.md](docs/logging.md).
+
 ## Status
 
 Option defaults match `ws`: `maxPayload` 100 MiB, `maxFragments` 16384, and
@@ -152,6 +168,7 @@ pnpm format:check
 - [CODEBASE.md](CODEBASE.md): repository layout, the two routes, the boundary, and the compiled capacities.
 - [CODING_CONVENTION.md](CODING_CONVENTION.md): TypeScript and Zig style, the anti-OOP rules, and the module budget.
 - [docs/migrating.md](docs/migrating.md): moving an existing `ws` application over.
+- [docs/logging.md](docs/logging.md): the opt-in dev logger and startup splash.
 - [CONTRIBUTE.md](CONTRIBUTE.md): environment setup, the script contract, and how to release.
 
 MIT. See [LICENSE](LICENSE). `ws` is copyright Einar Otto Stangvik, Arnout

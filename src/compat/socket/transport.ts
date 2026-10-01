@@ -1,4 +1,5 @@
 import type { SocketState } from "../../types/socket";
+import { logSocketError } from "../../logging/lifecycle";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, CONNECTING } from "../ready-state";
@@ -16,6 +17,7 @@ const EMPTY = Buffer.alloc(0);
 export function failTransport(state: SocketState, error: Error): void {
   if (state.readyState === CLOSED) return;
   state.readyState = CLOSING;
+  logSocketError(state, error);
   emitEvent(state, "error", error);
 }
 

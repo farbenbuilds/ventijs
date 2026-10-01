@@ -2,6 +2,7 @@ import type { Duplex } from "node:stream";
 import { CODEC_ROLE } from "../../binding/codec";
 import type { ConnectionHandle } from "../../binding/handle";
 import type { ServerHandle } from "../../binding/server";
+import { logSocketOpen } from "../../logging/lifecycle";
 import type { SocketState } from "../../types/socket";
 import type { WebSocket } from "../../types/ws";
 import { emitEvent } from "../events/emitter";
@@ -101,6 +102,7 @@ export function attachSocket(
 function openSocket(state: SocketState): void {
   if (state.readyState === OPEN) return;
   state.readyState = OPEN;
+  logSocketOpen(state);
   emitEvent(state, "open");
 }
 

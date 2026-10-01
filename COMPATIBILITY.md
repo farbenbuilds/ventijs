@@ -361,8 +361,8 @@ deliberate:
 `tests/compat/server/upgrade*.test.ts` and
 `tests/compat/server/options-parity.test.ts` cover these.
 
-Four more divergences worth naming, all measured against `ws`. The first two are a
-superset rather than a mismatch:
+Five more divergences worth naming, all measured against `ws`. The first two are
+a superset rather than a mismatch:
 
 - `ws` types `close` as `(code?: number, reason?: string | Buffer)` and
   `ping`/`pong` payloads are validated against RFC 6455's 125-byte control cap
@@ -376,7 +376,7 @@ superset rather than a mismatch:
   `clientTracking` is falsy, exactly as `ws` leaves it, rather than present and
   `undefined`.
 
-The other two are a kept difference, and neither is a gap:
+The other three are a kept difference, and none is a gap:
 
 - A `wss:` to `ws:` redirect is refused with `Cannot follow a redirect from wss: to ws:`
   (`src/compat/client/redirect.ts:68`) and the destination is never contacted. `ws` follows
@@ -391,6 +391,13 @@ The other two are a kept difference, and neither is a gap:
   only the value tells the two apart. Recorded by
   `tests/compat/socket/server-url.test.ts`; the honest type is `string | undefined`, which
   means changing `SocketState.url` and the record's getter.
+- ventiws writes lifecycle records to stdout by default, where `ws` is silent: the
+  splash when a server starts listening, and an open, close, or error record per
+  connection. The records come from the compat lifecycle seams rather than a
+  subscription, and never from the per-message path. `setLoggerEnabled(false)` or
+  `VENTIWS_LOG=0` restores `ws` silence; the format and the switch are documented
+  in [docs/logging.md](docs/logging.md) and both states are held by
+  `tests/compat/logging.test.ts`.
 
 ## Verification surface
 
@@ -402,6 +409,7 @@ The other two are a kept difference, and neither is a gap:
 | `tests/compat/events/registry.test.ts`                                                           | Listener registry semantics                                                                                                                                    | done   |
 | `tests/protocol/**`                                                                              | Close code, framing, and backpressure helpers                                                                                                                  | done   |
 | `tests/compat/**`                                                                                | Facade units, option normalization, and coded error factories                                                                                                  | done   |
+| `tests/compat/logging.test.ts`                                                                   | The auto-wired lifecycle records on stdout, and silence while the logger is disabled                                                                           | done   |
 | `tests/compat/events/emitter.test.ts`                                                            | Listener surface parity with `EventEmitter`, `this` binding, unhandled errors                                                                                  | done   |
 | `tests/compat/events/dom-listeners.test.ts`                                                      | DOM listeners, attributes, and event object shapes                                                                                                             | done   |
 | `tests/compat/{socket/socket,server/server,server/upgrade,server/upgrade-policy,stream}.test.ts` | Facade lifecycle and HTTP upgrade policy                                                                                                                       | done   |
