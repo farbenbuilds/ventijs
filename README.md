@@ -12,7 +12,7 @@ observable behaviour rather than its source. ventiws is not affiliated with the
 as the pinned contract, credited in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**ventiws is at `1.0.0-alpha.15`.** The surface may change between alpha
+**ventiws is at `1.0.0-alpha.16`.** The surface may change between alpha
 releases. What "alpha" means here is bounded: the `ws` compatibility
 contract is tracked row by row in
 [COMPATIBILITY.md](COMPATIBILITY.md), and the four places ventiws knowingly
