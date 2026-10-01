@@ -174,9 +174,11 @@ jobs:
       - name: Install the publish client
         # pnpm 11+ strips the bundled npm from the Node runtime, so the npm on PATH is the
         # runner image's npm 10, which predates trusted publishing entirely; `napi-zig
-        # publish` shells out to that client. Install the one the registry exchanges.
+        # publish` shells out to that client. Dist-tag writes over OIDC need npm 12.2.0, so
+        # the client is pinned exactly: a range resolves to the newest release older than
+        # pnpm's minimumReleaseAge, which can be a client that publishes but cannot tag.
         run: |
-          pnpm add -g npm@^12
+          pnpm add -g npm@12.2.0
           echo "node $(node --version)"
           echo "npm  $(npm --version) at $(which npm)"
 

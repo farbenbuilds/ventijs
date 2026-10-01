@@ -55,8 +55,10 @@ test("the OIDC grant sits on the publish job alone", () => {
 
 test("the publish job installs the npm client trusted publishing lives in", () => {
   // `pnpm/setup` strips the bundled npm from the Node runtime, so without this the runner
-  // image's npm 10 runs the publish and every attempt fails ENEEDAUTH.
-  expect(publishJob).toContain("pnpm add -g npm@^12");
+  // image's npm 10 runs the publish and every attempt fails ENEEDAUTH. Pinned exactly at
+  // the first 12.x client that writes dist-tags over OIDC: a range can resolve below it,
+  // because pnpm passes over a release younger than its minimumReleaseAge.
+  expect(publishJob).toContain("pnpm add -g npm@12.2.0");
   expect(publishJob).toContain("npm --version");
 });
 
