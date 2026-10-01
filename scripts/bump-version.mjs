@@ -3,8 +3,8 @@
 //
 // The directive is `release:<kind>` labels on the merge's pull request, or the `bump.yml`
 // dispatch inputs; with none, a prerelease advances its counter and a stable version starts
-// the next patch's train on `alpha.0`. `scripts/next-version.mjs` owns the transition table
-// and `tests/tooling/version.test.ts` holds it; this script owns the files.
+// the next patch's train on `alpha.0`. An untagged tree version is the release as written
+// (`scripts/next-version.mjs` owns the table; `tests/tooling/version.test.ts` holds it).
 //
 // The three files cannot import each other -- a manifest, a Zig build manifest, and a
 // document -- so each is rewritten from the version already in `package.json`, and a
@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { nextVersion } from "./next-version.mjs";
+import { releaseVersion } from "./next-version.mjs";
 
 const PACKAGE = "package.json";
 const CHANGELOG = "CHANGELOG.md";
@@ -128,7 +128,8 @@ function main() {
   if (drifted.length > 0)
     throw new Error(`bump-version: ${drifted.length} sources disagree with ${PACKAGE}`);
 
-  const next = nextVersion(current, releaseKinds(process.argv.slice(2)));
+  const shipped = (git(["tag", "--list", `v${current}`]) ?? "").trim() !== "";
+  const next = releaseVersion(current, releaseKinds(process.argv.slice(2)), shipped);
 
   for (const source of SOURCES)
     write(source.path, read(source.path).replace(source.pattern, `$1${next}$3`));

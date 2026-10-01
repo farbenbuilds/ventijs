@@ -205,12 +205,16 @@ declarations through the package `exports` map; it needs `tsdown` output.
   so a checkout is runnable and a release is not carrying a foreign binary.
   `.github/workflows/publish.yml` builds every published platform on a runner
   that is native for it and publishes six packages, and it runs only for a `v*`
-  tag. It holds no npm secret: `id-token: write` is the whole credential, because
-  every package's trusted publisher on npm is configured against this workflow's
-  filename and the `npm` environment. `.github/workflows/bump.yml` advances the
-  version on a merge by the `release:<kind>` labels it carries (default: the next
-  prerelease counter, or the next patch's train after a stable version), commits
-  it, and pushes the tag with the release app's installation token
+  tag. Every release is promoted to the `latest` dist-tag after publishing,
+  prerelease or not, so an install resolves the newest merge; that OIDC
+  `npm dist-tag add` needs the `ventiws` trusted publisher to allow tag
+  management. It holds no npm secret: `id-token: write` is the whole credential,
+  because every package's trusted publisher on npm is configured against this
+  workflow's filename and the `npm` environment. `.github/workflows/bump.yml`
+  advances the version on a merge by the `release:<kind>` labels it carries
+  (default: the next prerelease counter, or the next patch's train after a stable
+  version; a version the tree states with no tag yet is released as written),
+  commits it, and pushes the tag with the release app's installation token
   (`RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`), because a tag pushed
   with `GITHUB_TOKEN` starts no workflow run. That commit carries no CI skip
   marker, because a release tag points at it and GitHub reads a marker anywhere

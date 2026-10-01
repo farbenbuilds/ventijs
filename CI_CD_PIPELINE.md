@@ -123,9 +123,16 @@ with `GITHUB_TOKEN` starts no run.
 Which version a merge advances follows its `release:<kind>` labels, or the
 dispatch's `base` and `preid` inputs: by default a prerelease advances its
 counter, or a stable version starts the next patch's train; `release:stable`
-promotes the train, and `release:major|minor|patch` bump the base.
-`scripts/next-version.mjs` is the table and `tests/tooling/version.test.ts`
-holds it.
+promotes the train, and `release:major|minor|patch` bump the base. A version the
+tree states with no tag yet is the release as written, so an authored
+`1.0.0-beta` publishes as `1.0.0-beta` rather than being advanced to
+`1.0.0-beta.1`. `scripts/next-version.mjs` is the table and
+`tests/tooling/version.test.ts` holds it.
+
+Every release is then promoted to the `latest` dist-tag, prerelease or not, so
+an install resolves the newest merge. The promotion is an OIDC `npm dist-tag
+add` in the publish job and needs the `ventiws` trusted publisher to allow
+dist-tag management.
 
 The publish is not transactional: a failure part way leaves the earlier packages
 on the registry. `napi-zig publish` treats an already-published version as a

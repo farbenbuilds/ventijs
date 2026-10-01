@@ -9,7 +9,8 @@ on:
       - main
   # The manual lever. With no inputs it finishes a run that failed before its commit; the
   # inputs apply the same directive a pull request label would, so a stable release can be
-  # cut from `main` as it stands. A dispatch always advances.
+  # cut from `main` as it stands. A dispatch follows the merge rule: an untagged version in
+  # the tree is released as written, and one that already shipped advances.
   workflow_dispatch:
     inputs:
       base:
@@ -59,6 +60,9 @@ jobs:
           # `bump-version` scans `git log` for the previous bump commit; a depth-1 checkout
           # has none and writes no changelog section.
           fetch-depth: 0
+          # `bump-version` also asks whether the tree's version is tagged; without tags a
+          # released version looks unpublished and its merge publishes nothing.
+          fetch-tags: true
           # No persisted `GITHUB_TOKEN` credential: its Authorization header would
           # authenticate the tag push below, and a `GITHUB_TOKEN` push starts no run.
           persist-credentials: false

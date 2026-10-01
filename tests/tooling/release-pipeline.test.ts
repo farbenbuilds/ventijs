@@ -67,6 +67,15 @@ test("the publish job stages and publishes the six packages", () => {
   expect(publishJob).toContain("pnpm exec napi-zig publish");
 });
 
+test("every release is promoted to the latest dist-tag", () => {
+  // A prerelease publishes under its preid tag from `napi-zig`, so the promotion is a step
+  // of its own. It uses the job's OIDC token once the trusted publisher allows tag
+  // management; a stored npm secret would be the alternative and is not there.
+  expect(publishJob).toContain("npm dist-tag add");
+  expect(publishJob).toContain('"ventiws@${TAG#v}" latest');
+  expect(publishJob).not.toContain("NPM_TOKEN");
+});
+
 test("the page names the package and is tagged with the version", () => {
   expect(job).toContain("PKG: ventiws");
   expect(job).toContain('--title "$PKG $TAG"');

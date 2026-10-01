@@ -225,6 +225,15 @@ jobs:
         # is not there yet.
         run: pnpm exec napi-zig publish
 
+      - name: Point latest at this release
+        # Every merge publishes the newest version, prerelease or not, so `npm install
+        # ventiws` resolves what just landed. The `ventiws` trusted publisher must grant
+        # the dist-tag action; the OIDC token this job already holds is the credential,
+        # and no npm secret is stored for it.
+        env:
+          TAG: ${{ github.ref_name }}
+        run: npm dist-tag add "ventiws@${TAG#v}" latest
+
       - name: Upload the packed tarballs
         # `always()` because a failed publish is exactly when someone wants to see what was
         # about to go out.
