@@ -28,6 +28,12 @@ const hostAddon = "zig-out/lib/ventiws.node";
 /// setting, and it has to be on for the two harnesses under `tests/autobahn/` and
 /// `bench/`, which run `.ts` under plain `node` with no loader shim.
 export default defineConfig({
+  /// `logging` is a second entry rather than a root re-export: the root is the `ws`
+  /// drop-in surface, and `ventiws/logging` keeps the dev logger opt-in and additive.
+  entry: {
+    index: "src/index.ts",
+    logging: "src/logging/logger.ts",
+  },
   dts: {
     generator: "tsgo",
   },

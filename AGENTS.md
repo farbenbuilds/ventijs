@@ -32,7 +32,8 @@ will own parsing, buffers, and backpressure.
   `stream.ts` sit at the root. `src/protocol/` holds the pure
   close code, framing, and backpressure helpers. `src/logging/` holds the
   process-wide ANSI logger and startup splash, deliberately outside the `ws`
-  surface and not re-exported from `src/index.ts`.
+  surface: it is reached through the `ventiws/logging` subpath, not a root
+  re-export.
   `src/engine/` holds the native foundation grouped by plane: `channel/`
   (threadsafe transport, event vocabulary, ring), `ffi/` (the N-API entry
   points, split into the outbound `socket_pump` and the inbound

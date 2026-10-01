@@ -28,6 +28,14 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
+    "./logging": {
+      "types": {
+        "import": "./dist/logging.d.mts",
+        "require": "./dist/logging.d.cts"
+      },
+      "import": "./dist/logging.mjs",
+      "require": "./dist/logging.cjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

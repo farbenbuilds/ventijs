@@ -94,6 +94,22 @@ Both halves run against a real `ws` peer in this repository's suites, and the
 constructors are plain functions returning state records: no `class`, no `this`,
 no prototype.
 
+### Dev logger
+
+`ventiws/logging` is an opt-in, zero-dependency ANSI logger with a startup
+splash. It is not part of the `ws` surface, and nothing writes to stdout unless
+it is imported.
+
+```ts
+import { info, ready, setLoggerEnabled } from "ventiws/logging";
+
+setLoggerEnabled(process.env.VENTIWS_LOG !== "0");
+info("pnpm build", "ok"); // 10:04:05 | pnpm build : ok
+ready("1.0.0-beta", 42, 8080); // splash, version line, local address
+
+setLoggerEnabled(false); // silent from here
+```
+
 ## Status
 
 Option defaults match `ws`: `maxPayload` 100 MiB, `maxFragments` 16384, and
