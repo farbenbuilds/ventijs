@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-beta.3] - 2026-10-01
+
+### Fixed
+
+- fix(ci): pin the publish client at npm 12.2.0 for dist-tag OIDC
+
 ## [1.0.0-beta.2] - 2026-10-01
 
 ### Fixed
