@@ -1,4 +1,5 @@
 import { closeSocket } from "../../binding/socket";
+import { logSocketClose, logSocketError } from "../../logging/lifecycle";
 import { CLOSE_ABNORMAL, CLOSE_NORMAL } from "../../protocol/close-codes";
 import type { SocketState } from "../../types/socket";
 import { emitEvent } from "../events/emitter";
@@ -31,6 +32,7 @@ export function finishConnection(state: SocketState, code: number, reason: Buffe
   state.closeReason = reason;
   // Released on the terminal transition: the parse can never resume.
   state.pendingInput = [];
+  logSocketClose(state, code, reason);
   emitEvent(state, "close", code, reason);
 }
 
@@ -43,6 +45,7 @@ export function failConnection(state: SocketState, error: Error): void {
   if (!state.errorEmitted) {
     state.errorEmitted = true;
     state.readyState = CLOSING;
+    logSocketError(state, error);
     // The terminal latch must run even when an unhandled `error` throws.
     try {
       emitEvent(state, "error", error);
@@ -63,6 +66,7 @@ export function reportWithoutClosing(state: SocketState, error: Error): void {
   if (state.errorEmitted) return;
   if (state.readyState === CLOSED) return;
   state.errorEmitted = true;
+  logSocketError(state, error);
   emitEvent(state, "error", error);
 }
 

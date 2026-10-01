@@ -31,9 +31,13 @@ will own parsing, buffers, and backpressure.
   own RFC 7692 negotiation, and `constructors.ts`, `errors.ts`, `ready-state.ts`,
   `stream.ts` sit at the root. `src/protocol/` holds the pure
   close code, framing, and backpressure helpers. `src/logging/` holds the
-  process-wide ANSI logger and startup splash, deliberately outside the `ws`
-  surface: it is reached through the `ventiws/logging` subpath, not a root
-  re-export.
+  process-wide ANSI logger, its auto-wired lifecycle records, and the startup
+  splash, deliberately outside the `ws` surface: it is reached through the
+  `ventiws/logging` subpath, not a root re-export, is on by default with
+  `VENTIWS_LOG=0` as the load-time switch, and is called from the compat
+  lifecycle seams in `src/compat/server/{listeners,close}.ts` and
+  `src/compat/socket/{attach,lifecycle,transport,codec-close}.ts` rather than
+  the per-message path.
   `src/engine/` holds the native foundation grouped by plane: `channel/`
   (threadsafe transport, event vocabulary, ring), `ffi/` (the N-API entry
   points, split into the outbound `socket_pump` and the inbound

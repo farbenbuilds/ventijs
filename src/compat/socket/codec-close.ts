@@ -1,4 +1,5 @@
 import type { SocketState } from "../../types/socket";
+import { logSocketError } from "../../logging/lifecycle";
 import { emitEvent } from "../events/emitter";
 import { createError } from "../errors";
 import { CLOSED, CLOSING, OPEN } from "../ready-state";
@@ -26,7 +27,9 @@ export function refuseFramed(state: SocketState, refusal: Refusal): void {
   try {
     if (!state.errorEmitted) {
       state.errorEmitted = true;
-      emitEvent(state, "error", createError(refusal.code, refusal.message, refusal.ctor));
+      const error = createError(refusal.code, refusal.message, refusal.ctor);
+      logSocketError(state, error);
+      emitEvent(state, "error", error);
     }
   } finally {
     finishConnection(state, refusal.closeCode, Buffer.from(refusal.reason, "utf8"));

@@ -46,7 +46,7 @@
       }
     },
     {
-      "files": ["tsdown.config.ts", "src/index.ts"],
+      "files": ["tsdown.config.ts", "vitest.config.ts", "src/index.ts"],
       "rules": {
         "import/no-default-export": "off"
       }

@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
+import { logServerError, logServerListening, logServerPath } from "../../logging/lifecycle";
 import type { ServerState } from "../../types/server";
 import { emitEvent } from "../events/emitter";
 import { handleUpgrade } from "./upgrade";
@@ -19,9 +20,13 @@ export function wireServer(state: ServerState): void {
   if (httpServer === null) return;
   const handlers: ServerHandlers = {
     onListening: (): void => {
+      const address = state.server?.address();
+      if (typeof address === "string") logServerPath(address);
+      else logServerListening(typeof address === "object" && address !== null ? address.port : 0);
       emitEvent(state, "listening");
     },
     onError: (error: Error): void => {
+      logServerError(error);
       emitEvent(state, "error", error);
     },
     onUpgrade: (request: IncomingMessage, socket: Duplex, head: Buffer): void => {

@@ -1,4 +1,5 @@
 import { clientCount } from "./clients";
+import { logServerClosed } from "../../logging/lifecycle";
 import type { ServerState } from "../../types/server";
 import type { AddressInfo } from "../../types/ws";
 import { emitEvent } from "../events/emitter";
@@ -10,6 +11,7 @@ import { createError } from "../errors";
 export function emitClose(state: ServerState): void {
   if (state.lifecycle === "closed") return;
   state.lifecycle = "closed";
+  logServerClosed();
   emitEvent(state, "close");
 }
 

@@ -96,19 +96,19 @@ no prototype.
 
 ### Dev logger
 
-`ventiws/logging` is an opt-in, zero-dependency ANSI logger with a startup
-splash. It is not part of the `ws` surface, and nothing writes to stdout unless
-it is imported.
+ventiws prints lifecycle records as they happen: the splash when a server starts
+listening, then open, close, and error records for every connection, with no
+callbacks to subscribe. It is a zero-dependency ANSI module outside the `ws`
+surface, on by default, and silenced with one switch.
 
 ```ts
-import { info, ready, setLoggerEnabled } from "ventiws/logging";
+import { setLoggerEnabled } from "ventiws/logging";
 
-setLoggerEnabled(process.env.VENTIWS_LOG !== "0");
-info("pnpm build", "ok"); // 10:04:05 | pnpm build : ok
-ready("1.0.0-beta", 42, 8080); // splash, version line, local address
-
-setLoggerEnabled(false); // silent from here
+setLoggerEnabled(false); // VENTIWS_LOG=0 does the same at load
 ```
+
+The record format, every recorded moment, and the manual API are in
+[docs/logging.md](docs/logging.md).
 
 ## Status
 

@@ -1,57 +1,59 @@
 # The ventiws dev logger
 
-`ventiws/logging` is an opt-in, zero-dependency ANSI logger with a startup splash.
-It is additive to the `ws` surface: the root entry still mirrors `ws` exactly, so
-nothing about a `ws` migration changes. Nothing in the library imports the logger
-either, so a `ventiws` process writes to stdout only when the host asks it to.
+ventiws writes lifecycle records to stdout as they happen. There is no callback to
+subscribe and no event to wire: a server prints a Vite-like splash when it starts
+listening, and every connection prints what happens to it. The logger is a
+zero-dependency ANSI module, it is on by default, and one switch silences it.
 
-It exists for the same reason the splash looks familiar: a developer starting a
-server wants one small, consistent place to say what happened, without taking a
-logging dependency to get it.
+It is additive to the `ws` surface. The root entry still mirrors `ws` exactly,
+and the logger is reached through the `ventiws/logging` subpath; a process with
+`VENTIWS_LOG=0` sees the same stdout `ws` does.
 
-## Reaching it
+## What gets recorded
 
-The logger is a subpath, not a root export, because a logger is not part of the
-`ws` API. Both module systems and both `types` conditions are published:
+The compat layer calls the logger at its lifecycle seams, just before it
+dispatches the matching event, so a record still appears when a listener throws.
 
-```ts
-// ESM, and TypeScript under any resolution mode
-import { info, ready, fatal, setLoggerEnabled, warn } from "ventiws/logging";
+| Moment                  | Record                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| server starts listening | the splash, then `ventiws {version} ready in {timeMs}` and `➜  Local: localhost:{port}/` |
+| server closes           | `server : closed` (`info`)                                                               |
+| server error            | `server : {message}` (`fatal`)                                                           |
+| a connection opens      | `connection : open` on the server side, `client : open` on the client                    |
+| a connection closes     | `connection : closed {code} {reason}` or `client : closed ...` (`warn`)                  |
+| a connection errors     | `connection : {message}` or `client : {message}` (`fatal`)                               |
 
-// CommonJS
-const { info, ready, setLoggerEnabled } = require("ventiws/logging");
+Message frames and `ping`/`pong` are deliberately not recorded. A stdout write
+per frame would sit on the hot path and move the echo numbers, and a line per
+message is not what a lifecycle view is for.
+
+## Turning it off
+
+Two doors, one flag:
+
+```sh
+VENTIWS_LOG=0 node server.mjs
 ```
-
-`tests/declarations/logging.ts` and `logging.cts` compile the subpath through the
-package `exports` map with `moduleResolution: node16` and `skipLibCheck: false`,
-so the conditions are held to the same bar as the root entry.
-
-## Turning it on and off
-
-The logger is enabled when the module loads. One process-wide switch governs all
-five functions:
 
 ```ts
 import { setLoggerEnabled } from "ventiws/logging";
 
-setLoggerEnabled(process.env.VENTIWS_LOG !== "0");
+setLoggerEnabled(false); // or true to bring it back
 ```
 
-Every writer opens with `if (!isEnabled) return;`, so a disabled logger formats
-nothing. `setLoggerEnabled` itself is deliberately unguarded: a guard there would
+`VENTIWS_LOG=0` is read once, when the module loads; a host that decides at
+runtime uses the function. The flag is process-wide rather than per-server or
+per-socket, and `setLoggerEnabled` is unguarded on purpose: a guard there would
 make a disabled logger impossible to re-enable.
 
-The switch is process-wide rather than per-server or per-socket, and there is no
-environment variable or option object. The host decides, which is what keeps the
-logger out of the `ws` contract.
+The test suite sets `VENTIWS_LOG=0` once in `vitest.config.ts`, and the two files
+that cover the logger re-enable it themselves. The logger does not detect a TTY,
+so output redirected to a file carries the escape codes: disable it for
+machine-readable output, or strip `\u001B\[[0-9;]*m` at the consumer.
 
-The logger does not detect a TTY. It always emits raw SGR escape codes, so output
-redirected to a file carries them. Disable the logger for machine-readable output,
-or strip `\u001B\[[0-9;]*m` at the consumer.
+## The record shape
 
-## Records: `info`, `warn`, `fatal`
-
-The three record functions share one shape:
+The record functions share one shape:
 
 ```
 {time} | {command} : {status}
@@ -63,18 +65,20 @@ dim, `info` paints the command cyan, `warn` yellow, and `fatal` red, and every
 painted field is reset.
 
 ```ts
-info("pnpm build", "ok"); // 10:04:05 | pnpm build : ok
-warn("pnpm lint", "dirty");
-fatal("pnpm test", "3 failed");
+import { info, warn, fatal } from "ventiws/logging";
+
+info("server", "started"); // 10:04:05 | server : started
+warn("client", "closed 1006");
+fatal("server", "EADDRINUSE");
 ```
 
-`fatal` records and returns; it does not throw or exit the process. The caller owns
-its exit policy.
+`fatal` records and returns; it does not throw or exit the process. The caller
+owns its exit policy.
 
-## The startup splash: `ready`
+## The startup splash
 
-`ready(version, timeMs, port)` prints the banner and address a developer expects on
-startup, in exactly this order:
+The `listening` record is `ready(...)`, the same function the subpath exports.
+It prints, in order:
 
 1. the six-line block banner spelling VENTIWS,
 2. a blank line,
@@ -83,61 +87,53 @@ startup, in exactly this order:
 5. `➜  Local: localhost:{port}/`,
 6. a blank line.
 
-`timeMs` is the caller's measurement and is printed as given, with no unit suffix.
-`ready` binds nothing and reads nothing: it is a formatter, so the host passes the
-version it ships, the time it measured, and the port the listener actually bound.
+The automatic call passes the package version, the milliseconds since process
+start, and the port the listener actually bound. A listener bound to a path
+rather than a port, such as an external server on a Unix socket, records
+`server : listening on {path}` instead, because the `Local:` line is a TCP
+address. A host that wants the splash on its own schedule calls it directly with
+its own numbers:
 
-It is not called automatically by `WebSocketServer`. A server that printed on
-startup would break the drop-in silence `ws` promises; the host wires it into the
-`listening` event.
+```ts
+import { ready } from "ventiws/logging";
+
+ready("1.0.0-beta", 42, 8080);
+```
 
 ## A full example
 
+No logger import, no logger call: the records arrive on their own.
+
 ```ts
 import { WebSocket, WebSocketServer } from "ventiws";
-import { fatal, info, ready, setLoggerEnabled, warn } from "ventiws/logging";
 
-setLoggerEnabled(process.env.VENTIWS_LOG !== "0");
-
-const startedAt = Date.now();
 const server = new WebSocketServer({ port: 8080 });
 
-server.on("listening", () => {
-  ready("1.0.0-beta", Date.now() - startedAt, server.address()?.port ?? 8080);
-});
-
 server.on("connection", (socket) => {
-  info("server", "connection open");
-
   socket.on("message", (data, isBinary) => {
-    info("server", "echo");
     socket.send(isBinary ? data : `echo: ${data.toString()}`);
-  });
-
-  socket.on("close", (code, reason) => {
-    warn(`close ${code}`, reason.toString() || "no reason");
   });
 });
 
 const client = new WebSocket("ws://127.0.0.1:8080/");
 client.on("open", () => client.send("hello"));
-client.on("message", (data) => {
-  info("client", `saw ${data.toString()}`);
-  client.close(1000, "done");
-});
-client.on("error", (error) => fatal("client", error.message));
-
-// Turn it off whenever you like: setLoggerEnabled(false)
 ```
+
+The terminal shows the splash, then `connection : open`, `client : open`, and the
+close records as they happen. The manual API (`info`, `warn`, `fatal`, `ready`)
+shares the same switch, so a host can add its own records to the same stream.
 
 ## What it deliberately is not
 
-- Not part of the `ws` compatibility contract, and not a divergence from it.
-- Not a dependency: the module imports nothing and ships in `dist/` like any entry.
-- Not a logging framework: there are no levels beyond the three functions, no sinks,
-  no formatting options, and no log rotation. Use a dedicated logger for that, and
-  keep this one for the process a developer has open.
-- Not stateful per connection: one flag, one stdout, no files.
+- Not part of the `ws` compatibility contract: the root surface is unchanged, and
+  the automatic output is a documented divergence in
+  [COMPATIBILITY.md](../COMPATIBILITY.md).
+- Not a dependency: the module imports nothing but the package's own version.
+- Not a logging framework: three record functions, one switch, one stdout. No
+  levels, sinks, formatting options, or rotation. Use a dedicated logger for that
+  and keep this one for the process a developer has open.
+- Not per-message: see the table above for the exact set.
 
-The evidence for the behavior above is `tests/logging/logger.test.ts`, which pins
-the record format, the disabled path, the re-enable path, and the splash bytes.
+The evidence is `tests/logging/logger.test.ts` for the record format, the toggle,
+the environment switch, and the splash bytes, and `tests/compat/logging.test.ts`
+for the auto-wired lifecycle and the silent disabled path.

@@ -16,8 +16,9 @@ const SPLASH = `██╗   ██╗███████╗███╗   █�
   ╚═══╝  ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝ ╚══╝╚══╝ ╚══════╝`;
 
 /// Process-wide on purpose: a host silences the library once, and every writer
-/// opens with the same guard so a disabled logger formats nothing.
-let isEnabled = true;
+/// opens with the same guard so a disabled logger formats nothing. On by
+/// default, with `VENTIWS_LOG=0` read once at load as the environment switch.
+let isEnabled = process.env["VENTIWS_LOG"] !== "0";
 
 /// The one function without the guard: assigning under a guard would make a
 /// disabled logger impossible to re-enable.

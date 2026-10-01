@@ -2,7 +2,7 @@
 // default and captures stdout rather than asserting on the terminal. The splash is
 // compared byte-for-byte because its art is the contract, not a decoration.
 
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { fatal, info, ready, setLoggerEnabled, warn } from "../../src/logging/logger";
 
 const SPLASH = `██╗   ██╗███████╗███╗   ██╗████████╗██╗██╗    ██╗███████╗
@@ -27,8 +27,14 @@ function capture(run: () => void): string {
   }
 }
 
+beforeEach(() => {
+  setLoggerEnabled(true);
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.resetModules();
   setLoggerEnabled(true);
 });
 
@@ -36,8 +42,12 @@ test.each([info, warn, fatal])("records the time | command : status format", (re
   expect(visible(capture(() => record("pnpm build", "ok")))).toMatch(RECORD);
 });
 
-test.each([info, warn, fatal])("wraps a record in raw ANSI escapes", (record) => {
-  expect(capture(() => record("pnpm build", "ok"))).toContain("\u001B[");
+test.each([
+  [info, "\u001B[36m"],
+  [warn, "\u001B[33m"],
+  [fatal, "\u001B[31m"],
+])("wraps a record in its level's raw ANSI escapes", (record, color) => {
+  expect(capture(() => record("pnpm build", "ok"))).toContain(color);
 });
 
 // The shape regex passes for any two-digit triple; pinning the clock proves the
@@ -45,6 +55,31 @@ test.each([info, warn, fatal])("wraps a record in raw ANSI escapes", (record) =>
 test("derives the record time from the local system clock", () => {
   vi.setSystemTime(new Date(2024, 0, 2, 3, 4, 5));
   expect(visible(capture(() => info("pnpm build", "ok")))).toBe("03:04:05 | pnpm build : ok\n");
+});
+
+// The environment switch is read once at load, so these two need a fresh module
+// rather than a call to the toggle, and the suite's own VENTIWS_LOG=0 is restored
+// after each of them.
+test("loads enabled unless VENTIWS_LOG is 0", async () => {
+  vi.stubEnv("VENTIWS_LOG", "");
+  vi.resetModules();
+  const fresh = await import("../../src/logging/logger");
+  expect(visible(capture(() => fresh.info("pnpm build", "ok")))).toMatch(RECORD);
+});
+
+test("VENTIWS_LOG=0 loads the logger disabled", async () => {
+  vi.stubEnv("VENTIWS_LOG", "0");
+  vi.resetModules();
+  const fresh = await import("../../src/logging/logger");
+  expect(capture(() => fresh.info("pnpm build", "ok"))).toBe("");
+});
+
+test("VENTIWS_LOG is read once, at load", async () => {
+  vi.stubEnv("VENTIWS_LOG", "");
+  vi.resetModules();
+  const fresh = await import("../../src/logging/logger");
+  vi.stubEnv("VENTIWS_LOG", "0");
+  expect(visible(capture(() => fresh.info("pnpm build", "ok")))).toMatch(RECORD);
 });
 
 test("a disabled logger writes nothing at all", () => {
