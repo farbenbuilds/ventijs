@@ -108,10 +108,12 @@ test("a re-run finds its own commit and an existing tag rather than bumping twic
   expect(BUMP_WORKFLOW).toContain('echo "$TAG already exists"');
 });
 
-test("the bump keeps the history the changelog scan reads", () => {
+test("the bump keeps the history and tags its version rule reads", () => {
   // `bump-version` finds the previous bump commit through `git log`, so a depth-1 checkout
-  // writes no changelog section at all.
+  // writes no changelog section at all; it also treats an untagged version as unpublished,
+  // so a checkout without tags would silently publish nothing for a merge.
   expect(BUMP_WORKFLOW).toContain("fetch-depth: 0");
+  expect(BUMP_WORKFLOW).toContain("fetch-tags: true");
 });
 
 test("a release pushes the tag itself, not only what --follow-tags carries", () => {
