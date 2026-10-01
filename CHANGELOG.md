@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-beta.2] - 2026-10-01
+
+### Fixed
+
+- fix(ci): release the stated version and promote every release to latest (#62)
+
 ## [1.0.0-beta.1] - 2026-10-01
 
 ### Added
