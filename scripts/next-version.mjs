@@ -75,6 +75,14 @@ export function nextVersion(current, kinds) {
   return `${base}-${id}.0`;
 }
 
+/// The version a merge publishes. A version the tree states that has never been
+/// tagged is the release as written, because the table would otherwise turn an
+/// authored `1.0.0-beta` into `1.0.0-beta.1` before it had ever shipped. Once the
+/// tag exists, the table advances it: every later merge is a new release.
+export function releaseVersion(current, kinds, tagged) {
+  return tagged ? nextVersion(current, kinds) : current;
+}
+
 /// -1, 0, or 1: a stable version is newer than its own prereleases, and a prerelease
 /// counter compares within its id.
 export function compareVersions(a, b) {

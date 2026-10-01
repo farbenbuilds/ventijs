@@ -154,6 +154,11 @@ recovery path for a run that failed before its tag.
 
 ### What the next version is
 
+A version the tree states that has no `v<version>` tag yet is the release as
+written: an authored `1.0.0-beta` publishes as `1.0.0-beta`, and an authored
+`1.0.0` or `2.0.0` publishes exactly that. The transition below only runs once
+the version has shipped, so every later merge is a new release.
+
 With no directive a prerelease advances its counter (`1.0.0-alpha.12` ->
 `1.0.0-alpha.13`), and a stable version starts the next patch's train
 (`1.0.0` -> `1.0.1-alpha.0`). A pull request directs the step with
@@ -162,14 +167,20 @@ With no directive a prerelease advances its counter (`1.0.0-alpha.12` ->
 | Label                                               | Result                                                                                    |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `release:alpha` / `release:beta` / `release:rc`     | Continue that train, or switch to it: `1.0.0-alpha.12` + `release:beta` -> `1.0.0-beta.0` |
-| `release:stable`                                    | Drop the prerelease: `1.0.0-beta.3` -> `1.0.0`, published on `latest`                     |
+| `release:stable`                                    | Drop the prerelease: `1.0.0-beta.3` -> `1.0.0`                                            |
 | `release:patch` / `release:minor` / `release:major` | Bump the base from a stable version: `1.0.0` -> `1.0.1`, `1.1.0`, `2.0.0`                 |
 | a base label plus a prerelease label                | Start the new base in that train: `release:major` + `release:beta` -> `2.0.0-beta.0`      |
 
 A base bump from inside a train stays in that train unless `release:stable` is
-also set; a prerelease label on a stable version targets the next patch. Without
-a pull request -- a direct push, or a run by hand -- the same directive is a pair
-of dispatch inputs:
+also set; a prerelease label on a stable version targets the next patch.
+
+Every publish is then promoted to the `latest` dist-tag, prerelease or not, so
+`npm install ventiws` always resolves the newest merge. The promotion is an
+`npm dist-tag add` in `publish.yml` authorized by the same OIDC token, which
+requires the `ventiws` trusted publisher on npm to allow dist-tag management.
+
+Without a pull request -- a direct push, or a run by hand -- the same directive is
+a pair of dispatch inputs:
 
 ```sh
 gh workflow run bump.yml -f base=minor -f preid=stable

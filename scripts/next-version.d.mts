@@ -12,4 +12,9 @@ export type VersionParts = {
 
 export declare function parseVersion(version: string): VersionParts | null;
 export declare function nextVersion(current: string, kinds: readonly string[]): string;
+export declare function releaseVersion(
+  current: string,
+  kinds: readonly string[],
+  tagged: boolean,
+): string;
 export declare function compareVersions(a: string, b: string): number;

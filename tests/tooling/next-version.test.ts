@@ -2,7 +2,7 @@
 // version out. The three version sources and the workflow are held by `version.test.ts`.
 
 import { expect, test } from "vitest";
-import { compareVersions, nextVersion } from "../../scripts/next-version.mjs";
+import { compareVersions, nextVersion, releaseVersion } from "../../scripts/next-version.mjs";
 
 test("a release directive moves the version the way its kinds say", () => {
   const cases: ReadonlyArray<readonly [string, readonly string[], string]> = [
@@ -30,6 +30,23 @@ test("a directive that contradicts itself or the tree is refused", () => {
   expect(() => nextVersion("1.0.0", ["major", "minor"])).toThrow("cannot combine");
   expect(() => nextVersion("1.0.0", ["alpha", "beta"])).toThrow("cannot combine");
   expect(() => nextVersion("1.0.0", ["nope"])).toThrow("unknown release kind");
+});
+
+test("an untagged tree version is released as written", () => {
+  // The regression this holds: an authored `1.0.0-beta` advanced to `1.0.0-beta.1`
+  // before it had ever been published.
+  expect(releaseVersion("1.0.0-beta", [], false)).toBe("1.0.0-beta");
+  expect(releaseVersion("1.0.0-beta", ["beta"], false)).toBe("1.0.0-beta");
+  expect(releaseVersion("1.0.0-rc", ["rc"], false)).toBe("1.0.0-rc");
+  expect(releaseVersion("1.0.0", [], false)).toBe("1.0.0");
+  expect(releaseVersion("2.0.0", [], false)).toBe("2.0.0");
+});
+
+test("a version that already shipped advances by the directive", () => {
+  expect(releaseVersion("1.0.0-beta", [], true)).toBe("1.0.0-beta.1");
+  expect(releaseVersion("1.0.0-beta", ["stable"], true)).toBe("1.0.0");
+  expect(releaseVersion("1.0.0", ["major"], true)).toBe("2.0.0");
+  expect(releaseVersion("1.0.0", ["minor", "beta"], true)).toBe("1.1.0-beta.0");
 });
 
 test("a stable version is newer than its own prereleases", () => {
