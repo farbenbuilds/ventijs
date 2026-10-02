@@ -94,6 +94,14 @@ Both halves run against a real `ws` peer in this repository's suites, and the
 constructors are plain functions returning state records: no `class`, no `this`,
 no prototype.
 
+### Examples
+
+[examples/](examples/) holds the same echo server and client for Node.js, Bun,
+and Deno, each a standalone project with a `package.json` and no build step:
+Node.js strips the types itself, and Bun and Deno run TypeScript natively. The
+commands, and the permissions Deno needs, are in
+[examples/README.md](examples/README.md).
+
 ### Dev logger
 
 ventiws prints lifecycle records as they happen: the splash when a server starts

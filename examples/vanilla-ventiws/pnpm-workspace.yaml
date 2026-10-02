@@ -1,0 +1,8 @@
+# The example is its own workspace root: without this file, a `pnpm install` run
+# inside it resolves the repository workspace above instead. The excludes admit
+# the newest published ventiws and its binding through pnpm's 24-hour
+# supply-chain window, because tracking the latest release is the example's job.
+minimumReleaseAgeExclude:
+  - ventiws
+  - "@ventiws/binding-*"
+  - "@types/node"

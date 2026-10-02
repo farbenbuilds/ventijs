@@ -21,6 +21,15 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 
+# examples resolve their own dependencies; a lockfile there is a per-run
+# artifact, not something the teaching files should carry
+examples/**/bun.lock
+examples/**/bun.lockb
+examples/**/deno.lock
+examples/**/package-lock.json
+examples/**/pnpm-lock.yaml
+examples/**/yarn.lock
+
 # generated run output
 bench/results/*.json
 tests/autobahn/reports/

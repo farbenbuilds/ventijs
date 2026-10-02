@@ -1,0 +1,21 @@
+{
+  "name": "ventiws-example-vanilla",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ventiws quickstart for Node.js in TypeScript",
+  "type": "module",
+  "scripts": {
+    "start": "node index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ventiws": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
