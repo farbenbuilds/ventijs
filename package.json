@@ -25,6 +25,14 @@
         "import": "./dist/index.d.mts",
         "require": "./dist/index.d.cts"
       },
+      "bun": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.cjs"
+      },
+      "deno": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.cjs"
+      },
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
@@ -32,6 +40,14 @@
       "types": {
         "import": "./dist/logging.d.mts",
         "require": "./dist/logging.d.cts"
+      },
+      "bun": {
+        "import": "./dist/logging.mjs",
+        "require": "./dist/logging.cjs"
+      },
+      "deno": {
+        "import": "./dist/logging.mjs",
+        "require": "./dist/logging.cjs"
       },
       "import": "./dist/logging.mjs",
       "require": "./dist/logging.cjs"

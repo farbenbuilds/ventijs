@@ -12,7 +12,8 @@ will own parsing, buffers, and backpressure.
   `src/lib.zig` exposes `engineVersion()`, `http3Available()`, the server
   lifecycle functions, and the per-connection socket operations, following the
   `napi-zig` layout: the Zig root module lives in `src/` next to the TypeScript
-  sources. `src/binding/load.ts` resolves and loads the built `.node`;
+  sources. `src/binding/{load,open}.ts` resolve and load the built `.node` for
+  Node.js, Bun, and Deno, with `runtime.ts`/`host-libc.ts` naming the host;
   `src/binding/{native,handle,server,socket}.ts` declare the addon ABI and wrap
   the lifecycle and socket calls; `src/types/ws.d.ts` vendors the DefinitelyTyped
   `ws` declarations, and `src/index.ts` re-exports that surface as type-only ESM

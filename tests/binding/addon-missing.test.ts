@@ -3,7 +3,7 @@
 // where a missing artifact was an uncaught exception: hence a pure message function.
 
 import { expect, test } from "vitest";
-import { missingAddonMessage } from "../../src/binding/addon-error";
+import { missingAddonMessage, unloadableAddonMessage } from "../../src/binding/addon-error";
 import { PUBLISHED_TARGETS } from "../../src/binding/target";
 import { WebSocketServer } from "../../src/index";
 
@@ -82,4 +82,39 @@ test("the server constructor performs the load", () => {
   } finally {
     server.close();
   }
+});
+
+test("a Deno host is told what Deno needs", () => {
+  // Deno's Node path is not npm's: the binding must be in a local node_modules and the
+  // load is behind a permission, so the Node sentence alone sends the reader nowhere.
+  const message = missingAddonMessage(
+    "/app/node_modules/ventiws",
+    "linux",
+    "x64",
+    "linux-x64-gnu",
+    PUBLISHED_TARGETS,
+    "deno",
+  );
+  expect(message).toContain("--allow-ffi");
+  expect(message).toContain("node_modules");
+});
+
+test("an unloadable artifact on Deno names the permission", () => {
+  // Without --allow-ffi the file exists and dlopen is refused, which is the one
+  // unloadable case whose fix is not a rebuild.
+  const message = unloadableAddonMessage("/app/ventiws.node", "linux", "x64", "deno");
+  expect(message).toContain("--allow-ffi");
+  expect(message).toContain("/app/ventiws.node");
+});
+
+test("a Bun host is pointed at bun install", () => {
+  const message = missingAddonMessage(
+    "/app/node_modules/ventiws",
+    "linux",
+    "x64",
+    "linux-x64-gnu",
+    PUBLISHED_TARGETS,
+    "bun",
+  );
+  expect(message).toContain("bun install");
 });

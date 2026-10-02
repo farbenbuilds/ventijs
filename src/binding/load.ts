@@ -4,7 +4,9 @@ import { arch, platform } from "node:process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { missingAddonMessage, unloadableAddonMessage } from "./addon-error";
+import { openAddon } from "./open";
 import { bindingPackageName, hostAddonTarget, PUBLISHED_TARGETS } from "./target";
+import { runtimeName } from "./runtime";
 import type { AddonTarget } from "./target";
 import type { VentiAddon } from "./native";
 
@@ -19,10 +21,20 @@ const require = createRequire(import.meta.url);
 const checkoutPath = ["zig-out", "lib", "ventiws.node"];
 const legacyPath = ["dist", "ventiws.node"];
 
+/// A Deno host without `--allow-read` throws from the fs module where Node returns
+/// false; the loader's own message is more actionable than that permission error.
+function pathExists(path: string): boolean {
+  try {
+    return existsSync(path);
+  } catch {
+    return false;
+  }
+}
+
 function findPackageRoot(start: string): string | undefined {
   let current: string | undefined = start;
   while (current !== undefined) {
-    if (existsSync(join(current, "package.json"))) return current;
+    if (pathExists(join(current, "package.json"))) return current;
     const parent = dirname(current);
     current = parent === current ? undefined : parent;
   }
@@ -36,13 +48,13 @@ function packageRoot(): string | undefined {
 function checkoutArtifact(root: string | undefined): string | undefined {
   if (root === undefined) return undefined;
   const candidate = join(root, ...checkoutPath);
-  return existsSync(candidate) ? candidate : undefined;
+  return pathExists(candidate) ? candidate : undefined;
 }
 
 function legacyArtifact(root: string | undefined): string | undefined {
   if (root === undefined) return undefined;
   const candidate = join(root, ...legacyPath);
-  return existsSync(candidate) ? candidate : undefined;
+  return pathExists(candidate) ? candidate : undefined;
 }
 
 /// `require.resolve` rather than `require`, so an absent optional dependency is an
@@ -74,25 +86,29 @@ function resolveAddon(): VentiAddon {
   const target = hostAddonTarget();
 
   const checkout = checkoutArtifact(root);
-  if (checkout !== undefined) return requireAddon(checkout);
+  if (checkout !== undefined) return loadArtifact(checkout);
 
   if (target !== undefined) {
     const installed = installedBinding(target);
-    if (installed !== undefined) return requireAddon(installed);
+    if (installed !== undefined) return loadArtifact(installed);
   }
 
   const legacy = legacyArtifact(root);
-  if (legacy !== undefined) return requireAddon(legacy);
+  if (legacy !== undefined) return loadArtifact(legacy);
 
-  throw new Error(missingAddonMessage(root, platform, arch, target, PUBLISHED_TARGETS));
+  throw new Error(
+    missingAddonMessage(root, platform, arch, target, PUBLISHED_TARGETS, runtimeName()),
+  );
 }
 
-function requireAddon(path: string): VentiAddon {
+function loadArtifact(path: string): VentiAddon {
   try {
-    return require(path) as VentiAddon;
+    return openAddon(path);
   } catch (cause) {
     // The raw error for an artifact that exists and will not `dlopen` is a symbol the
     // caller has never heard of, from a file they did not know existed.
-    throw Object.assign(new Error(unloadableAddonMessage(path, platform, arch)), { cause });
+    throw Object.assign(new Error(unloadableAddonMessage(path, platform, arch, runtimeName())), {
+      cause,
+    });
   }
 }
