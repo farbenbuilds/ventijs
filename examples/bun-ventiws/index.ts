@@ -1,7 +1,9 @@
-import { WebSocket, WebSocketServer } from "ventiws";
+import { WebSocketServer } from "ventiws";
 
-// Port 0 binds an ephemeral port, so the example can run repeatedly.
-const server = new WebSocketServer({ port: 0 });
+// PORT pins a known port; Bun.env is how a Bun process reads it.
+const port = Number(Bun.env.PORT ?? 0);
+
+const server = new WebSocketServer({ port });
 
 server.on("connection", (socket) => {
   socket.on("message", (data, isBinary) => {
@@ -9,18 +11,18 @@ server.on("connection", (socket) => {
   });
 });
 
-// The client connects once the server reports the port it actually bound.
+// Bun's built-in WebSocket is the client; ventiws only has to serve it.
 server.on("listening", () => {
   const address = server.address();
   if (address === null || typeof address === "string") return;
 
   const client = new WebSocket(`ws://127.0.0.1:${address.port}`);
 
-  client.on("open", () => client.send("hello from the client"));
-  client.on("message", (data) => {
-    console.log(`client received: ${data.toString()}`);
+  client.onopen = () => client.send("hello from Bun");
+  client.onmessage = (event) => {
+    console.log(`client received: ${event.data}`);
     client.close();
-  });
-  client.on("close", () => server.close());
-  client.on("error", (error) => console.error(error));
+  };
+  client.onclose = () => server.close();
+  client.onerror = (event) => console.error(event);
 });

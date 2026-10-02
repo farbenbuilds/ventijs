@@ -1,9 +1,9 @@
 # ventiws examples
 
 Runnable quickstarts that install the published `ventiws`. The three runtime
-examples share one `index.ts` to show that the `ws` API does not change with
-the host; `effect-rpc-ventiws` shows ventiws behind Effect RPC. Each directory
-is a standalone project, not part of the repository's pnpm workspace.
+examples keep the same server and let each host own the client and the
+configuration; `effect-rpc-ventiws` shows ventiws behind Effect RPC. Each
+directory is a standalone project, not part of the repository's pnpm workspace.
 
 | Example                                    | Stack                 | Run                               |
 | ------------------------------------------ | --------------------- | --------------------------------- |
@@ -27,9 +27,12 @@ Bun and Deno execute it natively. Only the Node.js projects need `@types/node`;
 Bun uses `@types/bun`, and Deno's own `deno check` covers the example without
 an extra package.
 
-The three runtime copies share one `index.ts`. It starts a `WebSocketServer` on
-an ephemeral port, connects a `WebSocket` client once the server is listening,
-sends one text frame, prints the echo, and closes; the run ends by itself.
+All three runtime examples run the same exchange: a ventiws `WebSocketServer`
+echoes one text frame, and the run ends by itself. The host supplies the rest.
+Node reads `process.env` and dials with the ventiws `WebSocket`; Bun reads
+`Bun.env` and dials with Bun's built-in `WebSocket` and DOM handlers; Deno reads
+`Deno.env.get` and dials with Deno's built-in `WebSocket`, setting
+`Deno.exitCode` on error.
 
 `effect-rpc-ventiws` is a four-file project instead: `rpc.ts` defines the RPC
 group and handlers, `server.ts` implements Effect's `SocketServer` over a
@@ -40,8 +43,9 @@ The server setup follows
 with ventiws in place of `ws`; Effect 4 ships `effect/socket` and `effect/rpc`,
 where Effect 3 used `@effect/platform` and `@effect/rpc`.
 
-The Deno run needs `--allow-net` for the sockets, `--allow-env` because
-importing ventiws reads `VENTIWS_LOG`, and `--allow-ffi` for the native addon.
+The Deno run needs `--allow-net` for the sockets, `--allow-env` for `Deno.env`
+and because importing ventiws reads `VENTIWS_LOG`, and `--allow-ffi` for the
+native addon.
 `--allow-read` covers the addon loader's filesystem fallbacks; an installed
 `@ventiws/binding-*` resolves without it. `deno.json` carries all four, and
 exempts ventiws from Deno's own 24-hour minimum dependency age so the example

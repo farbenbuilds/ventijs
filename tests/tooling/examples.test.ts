@@ -1,13 +1,12 @@
-// The runtime examples teach one API on three runtimes, and the teaching file itself is the
-// same `index.ts` in each. The Effect RPC example is a multi-file project: it is held to the
-// same manifest properties, not to a shared entry point.
+// The runtime examples deliberately differ: each keeps the same ventiws server but reads its
+// host's environment API and dials with its host's client, so a shared `index.ts` would undo
+// the teaching. The Effect RPC example is a multi-file project held to the manifest rules.
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
 const ROOT = new URL("../../", import.meta.url);
 const EXAMPLES = ["vanilla", "bun", "deno", "effect-rpc"];
-const SHARED = ["vanilla", "bun", "deno"];
 
 type Manifest = {
   readonly dependencies?: Record<string, string>;
@@ -18,9 +17,17 @@ const read = (path: string) => readFileSync(new URL(path, ROOT), "utf8");
 const example = (runtime: string, file: string) => read(`examples/${runtime}-ventiws/${file}`);
 const manifest = (runtime: string) => JSON.parse(example(runtime, "package.json")) as Manifest;
 
-test("the runtime examples ship the same index.ts", () => {
-  const sources = SHARED.map((runtime) => example(runtime, "index.ts"));
-  expect(new Set(sources).size).toBe(1);
+test("each runtime example names its own host API", () => {
+  expect(example("vanilla", "index.ts")).toContain("process.env");
+  expect(example("bun", "index.ts")).toContain("Bun.env");
+  expect(example("deno", "index.ts")).toContain("Deno.env.get");
+  expect(example("deno", "index.ts")).toContain("Deno.exitCode");
+});
+
+test("only the Node example dials with the ventiws client", () => {
+  expect(example("vanilla", "index.ts")).toContain("{ WebSocket, WebSocketServer }");
+  expect(example("bun", "index.ts")).toContain("{ WebSocketServer }");
+  expect(example("deno", "index.ts")).toContain("{ WebSocketServer }");
 });
 
 test("every example resolves ventiws from the registry, not the workspace", () => {
