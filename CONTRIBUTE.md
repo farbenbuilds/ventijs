@@ -45,15 +45,16 @@ plus `pnpm install`.
 | `pnpm lint:fix`         | oxlint   | Apply the safe lint fixes                                     |
 | `pnpm format`           | oxfmt    | Format TypeScript, JSON, and Markdown                         |
 | `pnpm format:check`     | oxfmt    | Verify formatting without writing                             |
-| `pnpm finalize:exports` | node     | Add the `types` conditions `tsdown` leaves out of `exports`   |
+| `pnpm finalize:exports` | node     | Add the `types` and named-runtime conditions `tsdown` omits   |
 | `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
 | `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
 | `pnpm bump`             | node     | Advance the version by a `--release <kind>` directive         |
 | `pnpm release`          | node     | Tag the version the tree carries by hand, for recovery        |
 | `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
 
-`tsdown` rewrites the `exports` map on every build, so the `types` conditions
-have to be a step rather than a hand-edit the next build would drop.
+`tsdown` rewrites the `exports` map on every build, so the `types` and
+named-runtime conditions have to be a step rather than a hand-edit the next
+build would drop.
 `finalize:exports` is that step, and `pnpm build` runs it before
 `typecheck:dist`. `pnpm bench` needs `pnpm build:binding` first.
 
