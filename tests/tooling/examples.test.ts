@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
 const ROOT = new URL("../../", import.meta.url);
-const EXAMPLES = ["vanilla", "bun", "deno", "effect-rpc"];
+const EXAMPLES = ["vanilla", "bun", "deno", "effect-rpc", "express-session"];
 
 type Manifest = {
   readonly dependencies?: Record<string, string>;
@@ -44,9 +44,15 @@ test("only the Node examples declare @types/node", () => {
   const carriers = EXAMPLES.filter(
     (runtime) => manifest(runtime).devDependencies?.["@types/node"] !== undefined,
   );
-  expect(carriers).toEqual(["vanilla", "effect-rpc"]);
+  expect(carriers).toEqual(["vanilla", "effect-rpc", "express-session"]);
 });
 
-test("the Effect example names its runtime", () => {
+test("the framework examples name their runtimes", () => {
   expect(manifest("effect-rpc").dependencies?.effect).toBeDefined();
+  expect(manifest("express-session").dependencies?.express).toBeDefined();
+});
+
+test("the Express example attaches through the HTTP upgrade", () => {
+  expect(example("express-session", "index.ts")).toContain("noServer: true");
+  expect(example("express-session", "index.ts")).toContain("handleUpgrade");
 });

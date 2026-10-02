@@ -2,15 +2,17 @@
 
 Runnable quickstarts that install the published `ventiws`. The three runtime
 examples keep the same server and let each host own the client and the
-configuration; `effect-rpc-ventiws` shows ventiws behind Effect RPC. Each
-directory is a standalone project, not part of the repository's pnpm workspace.
+configuration; `effect-rpc-ventiws` shows ventiws behind Effect RPC, and
+`express-session-ventiws` attaches ventiws to an Express upgrade. Each directory
+is a standalone project, not part of the repository's pnpm workspace.
 
-| Example                                    | Stack                 | Run                               |
-| ------------------------------------------ | --------------------- | --------------------------------- |
-| [`vanilla-ventiws`](vanilla-ventiws)       | Node.js 22.18+        | `pnpm install && pnpm start`      |
-| [`bun-ventiws`](bun-ventiws)               | Bun                   | `bun install && bun run start`    |
-| [`deno-ventiws`](deno-ventiws)             | Deno 2                | `deno install && deno task start` |
-| [`effect-rpc-ventiws`](effect-rpc-ventiws) | Node.js, Effect RPC 4 | `pnpm install && pnpm start`      |
+| Example                                              | Stack                 | Run                               |
+| ---------------------------------------------------- | --------------------- | --------------------------------- |
+| [`vanilla-ventiws`](vanilla-ventiws)                 | Node.js 22.18+        | `pnpm install && pnpm start`      |
+| [`bun-ventiws`](bun-ventiws)                         | Bun                   | `bun install && bun run start`    |
+| [`deno-ventiws`](deno-ventiws)                       | Deno 2                | `deno install && deno task start` |
+| [`effect-rpc-ventiws`](effect-rpc-ventiws)           | Node.js, Effect RPC 4 | `pnpm install && pnpm start`      |
+| [`express-session-ventiws`](express-session-ventiws) | Node.js, Express 5    | `pnpm install && pnpm start`      |
 
 The Node.js projects carry their own `pnpm-workspace.yaml` so they are their own
 workspace roots: without it, a `pnpm install` run inside the example resolves
@@ -43,6 +45,12 @@ The server setup follows
 with ventiws in place of `ws`; Effect 4 ships `effect/socket` and `effect/rpc`,
 where Effect 3 used `@effect/platform` and `@effect/rpc`.
 
+`express-session-ventiws` follows `ws`'s `express-session-parse` example: one
+`express-session` parser is shared by the HTTP routes and the upgrade handler,
+so the socket reads `request.session.userId`. It uses `noServer: true` and
+`handleUpgrade`, refuses an unauthenticated upgrade with a 401, and serves a
+browser client from `public/`. Run it, then open http://localhost:8080.
+
 The Deno run needs `--allow-net` for the sockets, `--allow-env` for `Deno.env`
 and because importing ventiws reads `VENTIWS_LOG`, and `--allow-ffi` for the
 native addon.
@@ -51,5 +59,5 @@ native addon.
 exempts ventiws from Deno's own 24-hour minimum dependency age so the example
 can track the newest release.
 
-`pnpm typecheck`, `bun run typecheck`, `deno task typecheck`, and the Effect
-example's `pnpm typecheck` check each example without running it.
+`pnpm typecheck`, `bun run typecheck`, and `deno task typecheck` check each
+example without running it.
