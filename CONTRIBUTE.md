@@ -135,7 +135,8 @@ pnpm lockfile.
 
 1. Merge the work. `bump.yml` does the rest: it advances the version, writing
    `package.json`, `build.zig.zon`, `README.md`, and the `CHANGELOG.md` section
-   for that merge's commits; commits it; and pushes the `v<version>` tag.
+   for that merge's commits; commits it; and pushes the `v<version>` tag. A
+   merge labeled `release:skip` stops at the merge and writes none of it.
    `.github/workflows/publish.yml` then builds the six platform packages across
    five runners, checks the tag against `package.json`, assembles `npm/`,
    publishes, and writes the GitHub Release.
@@ -163,7 +164,8 @@ the version has shipped, so every later merge is a new release.
 With no directive a prerelease advances its counter (`1.0.0-alpha.12` ->
 `1.0.0-alpha.13`), and a stable version starts the next patch's train
 (`1.0.0` -> `1.0.1-alpha.0`). A pull request directs the step with
-`release:<kind>` labels, and a base label combines with a prerelease label:
+`release:<kind>` labels -- or suppresses it with `release:skip` -- and a base
+label combines with a prerelease label:
 
 | Label                                               | Result                                                                                    |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -171,9 +173,13 @@ With no directive a prerelease advances its counter (`1.0.0-alpha.12` ->
 | `release:stable`                                    | Drop the prerelease: `1.0.0-beta.3` -> `1.0.0`                                            |
 | `release:patch` / `release:minor` / `release:major` | Bump the base from a stable version: `1.0.0` -> `1.0.1`, `1.1.0`, `2.0.0`                 |
 | a base label plus a prerelease label                | Start the new base in that train: `release:major` + `release:beta` -> `2.0.0-beta.0`      |
+| `release:skip`                                      | Merge without releasing: no version, commit, or tag is written                            |
 
 A base bump from inside a train stays in that train unless `release:stable` is
 also set; a prerelease label on a stable version targets the next patch.
+`release:skip` wins over any other directive, so a docs-only merge can land
+with nothing published. A merge with no release label still releases: use the
+skip label when that is not wanted.
 
 Every publish is then promoted to the `latest` dist-tag, prerelease or not, so
 `npm install ventiws` always resolves the newest merge. The promotion is an
