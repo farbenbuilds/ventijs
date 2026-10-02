@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 [Conventional Commits](.github/COMMIT_CONVENTION.md), so the commit subjects are the
 same information in a form `git log` can filter.
 
+## [1.0.0-beta.5] - 2026-10-02
+
+### Added
+
+- feat(binding): runtime-agnostic addon resolution for Node, Bun, and Deno (#63)
+
 ## [1.0.0-beta.3] - 2026-10-01
 
 ### Fixed

@@ -1,6 +1,6 @@
 .{
     .name = .ventiws,
-    .version = "1.0.0-beta.4",
+    .version = "1.0.0-beta.5",
     .fingerprint = 0x66c665792a0706f4, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
