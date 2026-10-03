@@ -177,6 +177,7 @@ pnpm format:check
 - [CODING_CONVENTION.md](CODING_CONVENTION.md): TypeScript and Zig style, the anti-OOP rules, and the module budget.
 - [docs/migrating.md](docs/migrating.md): moving an existing `ws` application over.
 - [docs/logging.md](docs/logging.md): the opt-in dev logger and startup splash.
+- [docs/performance.md](docs/performance.md): the benchmark harness, its fairness rules, and the durable benchmark-data history.
 - [CONTRIBUTE.md](CONTRIBUTE.md): environment setup, the script contract, and how to release.
 
 MIT. See [LICENSE](LICENSE). `ws` is copyright Einar Otto Stangvik, Arnout

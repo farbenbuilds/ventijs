@@ -1,5 +1,6 @@
 import cluster from "node:cluster";
 import type { EchoConfig, EchoSample, ImplementationId } from "../echo/echo-types.ts";
+import { unavailable } from "../echo/echo-sample.ts";
 import { SPEC_ENV, type SampleMessage } from "../echo/worker.ts";
 import type { BenchOptions } from "./options.ts";
 import {
@@ -9,7 +10,6 @@ import {
   SAMPLE_TIMEOUT_MS,
 } from "./options.ts";
 import type { SampleJob } from "./plan.ts";
-import { IMPLEMENTATIONS } from "./plan.ts";
 
 export type CollectOptions = {
   readonly bench: BenchOptions;
@@ -30,24 +30,15 @@ const isSampleMessage = (message: unknown): message is SampleMessage => {
   return record.kind === "sample" && typeof record.sample === "object" && record.sample !== null;
 };
 
-const failed = (job: SampleJob, reason: string): EchoSample => ({
-  configuration: job.configuration,
-  implementation: job.implementation,
-  payloadBytes: job.payloadBytes,
-  messages: job.messages,
-  status: "unavailable",
-  seconds: null,
-  roundTripsPerSecond: null,
-  wireBytesPerSecond: null,
-  reason,
-});
-
 const configOf = (job: SampleJob, timeoutMs: number): EchoConfig => ({
   implementation: job.implementation,
   payloadBytes: job.payloadBytes,
   messages: job.messages,
   timeoutMs,
 });
+
+const failed = (job: SampleJob, timeoutMs: number, reason: string): EchoSample =>
+  unavailable(configOf(job, timeoutMs), reason);
 
 /// One sample per worker. A fresh isolate per sample keeps a leg from
 /// inheriting the previous leg's JIT state, and a worker that dies takes down
@@ -66,19 +57,25 @@ const runJob = (job: SampleJob, timeoutMs: number): Promise<EchoSample> =>
     };
     const deadline = setTimeout(
       () =>
-        finish(failed(job, `worker reported no sample within ${parentDeadlineMs(timeoutMs)} ms`)),
+        finish(
+          failed(
+            job,
+            timeoutMs,
+            `worker reported no sample within ${parentDeadlineMs(timeoutMs)} ms`,
+          ),
+        ),
       parentDeadlineMs(timeoutMs),
     );
     worker.on("message", (message: unknown) => {
       finish(
         isSampleMessage(message)
           ? message.sample
-          : failed(job, "worker sent an undecodable message"),
+          : failed(job, timeoutMs, "worker sent an undecodable message"),
       );
     });
-    worker.on("error", (error: Error) => finish(failed(job, describeError(error))));
+    worker.on("error", (error: Error) => finish(failed(job, timeoutMs, describeError(error))));
     worker.on("exit", (code: number) =>
-      finish(failed(job, `worker exited with code ${code} before reporting`)),
+      finish(failed(job, timeoutMs, `worker exited with code ${code} before reporting`)),
     );
   });
 
@@ -99,7 +96,7 @@ const probeImplementations = async (
   log: (line: string) => void,
 ): Promise<ReadonlyMap<ImplementationId, string>> => {
   const blocked = new Map<ImplementationId, string>();
-  for (const id of IMPLEMENTATIONS) {
+  for (const id of new Set(jobs.map((job) => job.implementation))) {
     const first = jobs.find((job) => job.implementation === id);
     if (first === undefined) continue;
     const sample = await runJob(probeOf(first), PREFLIGHT_TIMEOUT_MS);
@@ -119,11 +116,14 @@ export const collectSamples = async (
   for (const job of jobs) {
     const blockReason = blocked.get(job.implementation) ?? null;
     if (blockReason !== null) {
-      samples.push(failed(job, blockReason));
+      samples.push(failed(job, SAMPLE_TIMEOUT_MS, blockReason));
       continue;
     }
     if (job.repeat <= options.bench.warmups) {
+      // The warm-up runs the same shape as a measured repeat and is discarded;
+      // a skipped warm-up would warm nothing and make the flag a lie.
       options.log(`  warm-up ${job.repeat} (discarded)  ${job.configuration}`);
+      await runJob(job, SAMPLE_TIMEOUT_MS);
       continue;
     }
     options.log(

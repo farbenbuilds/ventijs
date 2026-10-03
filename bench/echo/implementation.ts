@@ -1,92 +1,17 @@
-import { WebSocket as WsSocket, WebSocketServer as WsServer } from "ws";
-import type {
-  EchoClient,
-  EchoConnection,
-  EchoImplementation,
-  EchoServer,
-  EchoServerOptions,
-  ImplementationId,
-} from "./echo-types.ts";
-import { nativeEchoServer } from "./native-server.ts";
+import type { EchoImplementation, ImplementationId } from "./echo-types.ts";
 
-const readPort = (address: { readonly port: number } | string | null): number => {
-  if (address === null || typeof address === "string") {
-    throw new Error("the server reported no TCP address");
-  }
-  return address.port;
+type ImplementationFactory = () => Promise<EchoImplementation>;
+
+// Lazy imports keep a reference package that cannot load from failing the whole
+// run: the worker reports that leg unavailable and the other legs still measure.
+const FACTORIES: Readonly<Record<ImplementationId, ImplementationFactory>> = {
+  ws: async () => (await import("./implementations/ws.ts")).wsImplementation(),
+  ventiws: async () => (await import("./implementations/ventiws.ts")).ventiwsImplementation(),
+  "uWebSockets.js": async () =>
+    (await import("./implementations/uweb-sockets.ts")).uwebSocketsImplementation(),
+  "socket.io": async () =>
+    (await import("./implementations/socket-io.ts")).socketIoImplementation(),
 };
 
-const listenOn = (server: {
-  once(event: "listening", listener: () => void): unknown;
-  once(event: "error", listener: (error: Error) => void): unknown;
-  address(): { readonly port: number } | string | null;
-}): Promise<number> =>
-  new Promise<number>((resolve, reject) => {
-    server.once("error", reject);
-    server.once("listening", () => resolve(readPort(server.address())));
-  });
-
-const wsConnection = (socket: WsSocket): EchoConnection => ({
-  send: (payload) => {
-    socket.send(payload, { binary: true });
-  },
-  onMessage: (listener) => {
-    socket.on("message", (data: Buffer) => listener(data));
-  },
-  onError: (listener) => {
-    socket.on("error", listener);
-  },
-});
-
-const wsServer = (server: WsServer): EchoServer => ({
-  listen: () => listenOn(server),
-  onConnection: (listener) => {
-    server.on("connection", (socket: WsSocket) => listener(wsConnection(socket)));
-  },
-  onError: (listener) => {
-    server.on("error", listener);
-  },
-  close: () => {
-    server.close();
-  },
-});
-
-const ventiwsImplementation = (): EchoImplementation => ({
-  id: "ventiws",
-  label: "ventiws (native engine, ws client)",
-  createServer: (options: EchoServerOptions): EchoServer => nativeEchoServer(options),
-  // ventiws client construction throws ERR_INVALID_STATE, so the ws client
-  // drives both legs. Holding the client fixed leaves the server as the only
-  // variable between the two rows of the report.
-  connect: (url: string): EchoClient => wsClient(new WsSocket(url, { perMessageDeflate: false })),
-});
-
-const wsClient = (socket: WsSocket): EchoClient => ({
-  send: (payload) => {
-    socket.send(payload, { binary: true });
-  },
-  close: () => {
-    socket.close();
-  },
-  onOpen: (listener) => {
-    socket.on("open", listener);
-  },
-  onMessage: (listener) => {
-    socket.on("message", (data: Buffer) => listener(data));
-  },
-  onError: (listener) => {
-    socket.on("error", listener);
-  },
-});
-
-const wsImplementation = (): EchoImplementation => ({
-  id: "ws",
-  label: "ws (server and client)",
-  createServer: (options) => wsServer(new WsServer(options)),
-  connect: (url) => wsClient(new WsSocket(url, { perMessageDeflate: false })),
-});
-
-export const resolveImplementation = (id: ImplementationId): EchoImplementation => {
-  if (id === "ventiws") return ventiwsImplementation();
-  return wsImplementation();
-};
+export const resolveImplementation = (id: ImplementationId): Promise<EchoImplementation> =>
+  FACTORIES[id]();

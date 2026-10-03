@@ -1,6 +1,8 @@
 import type { EchoConfig, EchoSample } from "./echo-types.ts";
+import { isImplementationId } from "./echo-types.ts";
+import { unavailable } from "./echo-sample.ts";
 import { resolveImplementation } from "./implementation.ts";
-import { runEcho, unavailable } from "./echo-run.ts";
+import { runEcho } from "./echo-run.ts";
 
 // The parent owns the environment channel, so the spec travels through the
 // environment rather than a first IPC message: the worker then starts measuring
@@ -33,7 +35,7 @@ const decodeConfig = (raw: string): EchoConfig => {
   if (typeof parsed !== "object" || parsed === null) throw new Error("bench spec is not an object");
   const record = parsed as Record<string, unknown>;
   const id = readString(record, "implementation");
-  if (id !== "ventiws" && id !== "ws") throw new Error(`unknown implementation "${id}"`);
+  if (!isImplementationId(id)) throw new Error(`unknown implementation "${id}"`);
   return {
     implementation: id,
     payloadBytes: readCount(record, "payloadBytes"),

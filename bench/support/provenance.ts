@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 /// The contract name in `CI_CD_PIPELINE.md`. A report without it cannot be
 /// compared against a stored baseline, because the column set may have moved.
-export const SCHEMA_VERSION = "ventiws-ws-compare/2";
+export const SCHEMA_VERSION = "ventiws-ws-compare/3";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -22,6 +22,10 @@ export type Provenance = {
   readonly lockfileSha256: string;
   readonly ventiwsVersion: string;
   readonly wsVersion: string;
+  readonly uwebSocketsVersion: string;
+  readonly socketIoVersion: string;
+  readonly socketIoClientVersion: string;
+  readonly nodeAbi: string;
   readonly platform: string;
   readonly arch: string;
   readonly cpuModel: string;
@@ -77,6 +81,12 @@ export const captureProvenance = (): Provenance => {
     lockfileSha256: hashLockfile(),
     ventiwsVersion: readPackageVersion("package.json"),
     wsVersion: readPackageVersion("node_modules/ws/package.json"),
+    uwebSocketsVersion: readPackageVersion("node_modules/uWebSockets.js/package.json"),
+    socketIoVersion: readPackageVersion("node_modules/socket.io/package.json"),
+    socketIoClientVersion: readPackageVersion("node_modules/socket.io-client/package.json"),
+    // The ABI is what selects the uWebSockets.js prebuilt, so a Node upgrade
+    // that silently drops a reference leg is visible in the report.
+    nodeAbi: process.versions.modules,
     platform: process.platform,
     arch: process.arch,
     cpuModel: processors[0]?.model ?? UNKNOWN,

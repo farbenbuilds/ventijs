@@ -28,29 +28,29 @@ incremental, so leave `.zig-cache` and `zig-pkg` alone. Cross-compile with
 Run every command through pnpm. This is every script `package.json` defines,
 plus `pnpm install`.
 
-| Command                 | Tool     | Purpose                                                       |
-| ----------------------- | -------- | ------------------------------------------------------------- |
-| `pnpm install`          | pnpm     | Install development dependencies and the `lefthook` hooks     |
-| `pnpm build`            | napi-zig | Build the addon, bundle `dist/`, then check the declarations  |
-| `pnpm build:binding`    | napi-zig | Build the native addon only                                   |
-| `pnpm dev`              | tsdown   | Rebuild the TypeScript bundle in watch mode                   |
-| `pnpm test`             | vitest   | Rebuild the addon, then every suite serially                  |
-| `pnpm test:watch`       | vitest   | Rebuild the addon, then rerun on change                       |
-| `pnpm test:compat`      | vitest   | The `ws` conformance suite in `tests/conformance`             |
-| `pnpm test:autobahn`    | node     | The RFC 6455 suite; `-- --full` selects all 517 cases         |
-| `pnpm bench`            | node     | Echo throughput against `ws`; `-- --gate` applies the verdict |
-| `pnpm typecheck`        | tsc      | `tsconfig.json` then `tsconfig.test.json`, no emit            |
-| `pnpm typecheck:dist`   | tsc      | Built declarations through the `exports` map; needs `tsdown`  |
-| `pnpm lint`             | oxlint   | Lint, then `scripts/check-conventions.mjs`                    |
-| `pnpm lint:fix`         | oxlint   | Apply the safe lint fixes                                     |
-| `pnpm format`           | oxfmt    | Format TypeScript, JSON, and Markdown                         |
-| `pnpm format:check`     | oxfmt    | Verify formatting without writing                             |
-| `pnpm finalize:exports` | node     | Add the `types` and named-runtime conditions `tsdown` omits   |
-| `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`             |
-| `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present   |
-| `pnpm bump`             | node     | Advance the version by a `--release <kind>` directive         |
-| `pnpm release`          | node     | Tag the version the tree carries by hand, for recovery        |
-| `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                   |
+| Command                 | Tool     | Purpose                                                                                           |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `pnpm install`          | pnpm     | Install development dependencies and the `lefthook` hooks                                         |
+| `pnpm build`            | napi-zig | Build the addon, bundle `dist/`, then check the declarations                                      |
+| `pnpm build:binding`    | napi-zig | Build the native addon only                                                                       |
+| `pnpm dev`              | tsdown   | Rebuild the TypeScript bundle in watch mode                                                       |
+| `pnpm test`             | vitest   | Rebuild the addon, then every suite serially                                                      |
+| `pnpm test:watch`       | vitest   | Rebuild the addon, then rerun on change                                                           |
+| `pnpm test:compat`      | vitest   | The `ws` conformance suite in `tests/conformance`                                                 |
+| `pnpm test:autobahn`    | node     | The RFC 6455 suite; `-- --full` selects all 517 cases                                             |
+| `pnpm bench`            | node     | Echo throughput across `ws`, ventiws, uWebSockets.js, and Socket.IO; `--gate` applies the verdict |
+| `pnpm typecheck`        | tsc      | `tsconfig.json` then `tsconfig.test.json`, no emit                                                |
+| `pnpm typecheck:dist`   | tsc      | Built declarations through the `exports` map; needs `tsdown`                                      |
+| `pnpm lint`             | oxlint   | Lint, then `scripts/check-conventions.mjs`                                                        |
+| `pnpm lint:fix`         | oxlint   | Apply the safe lint fixes                                                                         |
+| `pnpm format`           | oxfmt    | Format TypeScript, JSON, and Markdown                                                             |
+| `pnpm format:check`     | oxfmt    | Verify formatting without writing                                                                 |
+| `pnpm finalize:exports` | node     | Add the `types` and named-runtime conditions `tsdown` omits                                       |
+| `pnpm build:bindings`   | node     | Cross-compile the published platforms into `npm/`                                                 |
+| `pnpm stage:publish`    | node     | Assemble `npm/ventiws` and verify every platform is present                                       |
+| `pnpm bump`             | node     | Advance the version by a `--release <kind>` directive                                             |
+| `pnpm release`          | node     | Tag the version the tree carries by hand, for recovery                                            |
+| `pnpm prepublishOnly`   | pnpm     | `pnpm build`, run by pnpm before publishing                                                       |
 
 `tsdown` rewrites the `exports` map on every build, so the `types` and
 named-runtime conditions have to be a step rather than a hand-edit the next
@@ -115,6 +115,8 @@ reviewer checks:
   leak-detecting allocator.
 - Performance work cites measured numbers from `pnpm bench` on a quiet host with
   the `ws` baseline from the same run, and labels estimates as estimates.
+  [docs/performance.md](docs/performance.md) describes the legs, the fairness
+  rules, and the durable `benchmark-data` history.
 
 ## Pull requests
 

@@ -1,11 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { EchoSample } from "../echo/echo-types.ts";
+import type { EchoSample, GateImplementationId, ImplementationId } from "../echo/echo-types.ts";
+import { BASELINE_ID, CANDIDATE_ID } from "../echo/echo-types.ts";
+import { ECHO_PAYLOAD_CEILING_BYTES } from "../echo/echo-limits.ts";
+import type { GateVerdict } from "./gate.ts";
+import { evaluateGate } from "./gate.ts";
 import type { BenchOptions } from "./options.ts";
-import { SAMPLE_TIMEOUT_MS, VENTIWS_MAX_MESSAGE_BYTES } from "./options.ts";
-import type { ConfigurationResult, GateVerdict } from "./plan.ts";
-import { evaluateGate, summarize } from "./plan.ts";
+import { GATE_MIN_RATIO, SAMPLE_TIMEOUT_MS } from "./options.ts";
 import type { Provenance } from "./provenance.ts";
+import type { ConfigurationResult } from "./summary.ts";
+import { summarize } from "./summary.ts";
 
 export type ReportParameters = {
   readonly payloadSizes: readonly number[];
@@ -15,6 +19,11 @@ export type ReportParameters = {
   readonly warmupRepeatsDiscarded: number;
   readonly measuredSamplesPerConfiguration: number;
   readonly timeoutMs: number;
+  readonly implementations: readonly ImplementationId[];
+  readonly gateBaseline: GateImplementationId;
+  readonly gateCandidate: GateImplementationId;
+  readonly gateMinimumRatio: number;
+  readonly wireBytesBasis: "payload-only";
 };
 
 /// The `ventiws-ws-compare` artifact. Raw seconds stay in the report next to
@@ -36,12 +45,17 @@ export const buildReport = (
     provenance,
     parameters: {
       payloadSizes: options.payloadSizes,
-      payloadCeilingBytes: VENTIWS_MAX_MESSAGE_BYTES,
+      payloadCeilingBytes: ECHO_PAYLOAD_CEILING_BYTES,
       messages: options.messages,
       repeats: options.repeats,
       warmupRepeatsDiscarded: options.warmups,
       measuredSamplesPerConfiguration: options.repeats,
       timeoutMs: SAMPLE_TIMEOUT_MS,
+      implementations: options.implementations,
+      gateBaseline: BASELINE_ID,
+      gateCandidate: CANDIDATE_ID,
+      gateMinimumRatio: GATE_MIN_RATIO,
+      wireBytesBasis: "payload-only",
     },
     configurations: results,
     gate: evaluateGate(results),

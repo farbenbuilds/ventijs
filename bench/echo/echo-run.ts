@@ -8,9 +8,16 @@ import type {
   EchoServer,
   EchoServerOptions,
 } from "./echo-types.ts";
+import { ECHO_PAYLOAD_CEILING_BYTES } from "./echo-limits.ts";
+import { measured, unavailable } from "./echo-sample.ts";
 
-// Compression is off on both legs: it would measure deflate, not the transport.
-const SERVER_OPTIONS: EchoServerOptions = { port: 0, perMessageDeflate: false };
+// Compression is off on every leg: it would measure deflate, not the transport.
+const SERVER_OPTIONS: EchoServerOptions = {
+  host: "127.0.0.1",
+  port: 0,
+  perMessageDeflate: false,
+  maxPayloadBytes: ECHO_PAYLOAD_CEILING_BYTES,
+};
 
 type Failure = {
   readonly promise: Promise<never>;
@@ -30,37 +37,6 @@ const failureOf = (): Failure => {
   });
   return { promise, reject };
 };
-
-const configurationOf = (config: EchoConfig): string =>
-  `${config.implementation}@${config.payloadBytes}B`;
-
-const measured = (config: EchoConfig, seconds: number): EchoSample => ({
-  configuration: configurationOf(config),
-  implementation: config.implementation,
-  payloadBytes: config.payloadBytes,
-  messages: config.messages,
-  status: "measured",
-  seconds,
-  roundTripsPerSecond: config.messages / seconds,
-  // Every payload byte crosses the socket twice, once each way. The upstream
-  // `ws` speed harness counts both directions, so the columns stay comparable.
-  wireBytesPerSecond: (config.payloadBytes * 2 * config.messages) / seconds,
-  reason: null,
-});
-
-/// Reported instead of a number when a leg cannot produce one. Every number in
-/// the report came from a `runEcho` that finished; nothing is extrapolated.
-export const unavailable = (config: EchoConfig, reason: string): EchoSample => ({
-  configuration: configurationOf(config),
-  implementation: config.implementation,
-  payloadBytes: config.payloadBytes,
-  messages: config.messages,
-  status: "unavailable",
-  seconds: null,
-  roundTripsPerSecond: null,
-  wireBytesPerSecond: null,
-  reason,
-});
 
 // A client error during connect rejects this promise; a server or connection
 // error reaches the same run through the shared failure channel.

@@ -224,3 +224,11 @@ declarations through the package `exports` map; it needs `tsdown` output.
   in a tagged commit's message.
   `tests/tooling/version.test.ts` holds the three version sources, the
   changelog's shape, the bump loop guard, and that marker rule together.
+- `perf.yml` reports echo throughput for `ws`, ventiws, `uWebSockets.js`, and
+  Socket.IO through one shared harness; `bench/contracts/echo_throughput_v1.env`
+  is the frozen benchmark definition, and trusted runs on `main` append
+  immutable records to the bot-managed `benchmark-data` branch through
+  `scripts/publish-bench-history.mjs`. `docs/performance.md` is the reader's
+  guide; the contract, publisher, and workflow trust split are held together by
+  `tests/tooling/bench-contract.test.ts`, `bench-history.test.ts`, and
+  `perf-workflow.test.ts`.

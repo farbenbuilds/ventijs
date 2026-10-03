@@ -18,7 +18,9 @@ const runPrimary = async (argv: readonly string[]): Promise<number> => {
     log(USAGE);
     return 0;
   }
-  log(`ventiws echo benchmark: ${options.messages} round trips per sample`);
+  log(
+    `ventiws echo benchmark: ${options.messages} round trips per sample across ${options.implementations.length} implementations`,
+  );
   const provenance = captureProvenance();
   const samples = await collectSamples(buildPlan(options), { bench: options, log });
   const report = buildReport(options, provenance, samples);
