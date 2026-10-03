@@ -64,6 +64,7 @@ const legOf = (
 const blankLegs = (reason: string): Record<ImplementationId, Leg> => ({
   ws: emptyLeg(reason),
   ventiws: emptyLeg(reason),
+  "ventiws-engine": emptyLeg(reason),
   "uWebSockets.js": emptyLeg(reason),
   "socket.io": emptyLeg(reason),
 });

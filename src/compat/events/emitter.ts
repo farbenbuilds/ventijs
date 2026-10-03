@@ -21,7 +21,7 @@ export function emitEvent<E extends EventMap, K extends EventName<E>>(
     Object.assign(wrapped, { context: failure });
     throw wrapped;
   }
-  return dispatchWith(state.listeners, state.target, event, ...args) > 0;
+  return dispatchWith(state.listeners, state.target, event, args) > 0;
 }
 
 export function createEmitter<E extends EventMap>(state: EmitterState<E>): Emitter<E> {

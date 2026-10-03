@@ -1,22 +1,12 @@
 import { CODEC_KINDS, type CodecKindName } from "../../binding/codec";
-import { codecOutbound, encodeCodecFrame } from "../../binding/codec-encode";
+import { writeCodecFrame, writeCodecHeader } from "../../binding/codec-encode";
 import type { SocketState } from "../../types/socket";
-import { createError } from "../errors";
-import { isWritable, noTransportError } from "./codec-handle";
-import { statusError } from "./payload";
+import { isWritable } from "./codec-handle";
+import { encodeFailure, type FrameStatus } from "./frame-status";
 
-/// What framing one frame did, in the vocabulary the send path already switches on. The
-/// codec reports a refusal as a negative ordinal; this is where that becomes a status.
-/// The two vocabularies are the same set on purpose: a caller learning two error
-/// vocabularies for one operation will handle only one.
-export type FrameStatus =
-  | "ok"
-  | "backpressure"
-  | "closing"
-  | "closed"
-  | "invalid-handle"
-  | "payload-too-large"
-  | "protocol-error";
+/// What framing one frame did, in the vocabulary the send path already switches on.
+export type { FrameStatus, FailureStatus } from "./frame-status";
+export { frameError, isTransient } from "./frame-status";
 
 function ordinalOf(kind: CodecKindName): number {
   return CODEC_KINDS.indexOf(kind);
@@ -36,6 +26,30 @@ function maskFor(state: SocketState, mask: boolean): Uint8Array {
 
 const NO_MASK = new Uint8Array(0);
 
+/// RFC 6455 section 5.2 wire opcodes; `CODEC_KINDS` ordinals are the ABI, not the wire.
+const WIRE_OPCODES: Readonly<Record<CodecKindName, number>> = {
+  continuation: 0,
+  text: 1,
+  binary: 2,
+  close: 8,
+  ping: 9,
+  pong: 10,
+  rejected: 0,
+};
+
+const CONTROL_KINDS: ReadonlySet<CodecKindName> = new Set(["close", "ping", "pong"]);
+
+/// A small unmasked frame's header is two octets, so it is written here rather than in a
+/// crossing. Everything else (extended lengths, masking, compression) goes to the codec.
+function smallHeader(kind: CodecKindName, fin: boolean, length: number): Buffer | null {
+  if (length >= 126) return null;
+  if (CONTROL_KINDS.has(kind) && (!fin || length > 125)) return null;
+  const header = Buffer.allocUnsafe(2);
+  header[0] = (fin ? 0x80 : 0) | WIRE_OPCODES[kind];
+  header[1] = length;
+  return header;
+}
+
 /// Frames one message and writes it. A server does not mask, so the role is decided by
 /// the codec rather than the caller: a masked frame from a server is a protocol error a
 /// peer may close on, and the only way not to send one is not to offer the choice.
@@ -54,20 +68,50 @@ export function writeFrame(
   const handle = state.codec;
   if (handle === null) return "closed";
   if (!isWritable(state)) return state.transport?.writableEnded === true ? "closed" : "closing";
-  const length = encodeCodecFrame(
+  const ordinal = ordinalOf(kind);
+  // Uncompressed unmasked frames take the writev shape: the header is a few bytes and the
+  // payload goes out as its own chunk, so no frame-sized buffer is allocated or copied per
+  // message. A masked frame stays on the fused path, where the codec masks the payload.
+  if (!compress && (state.isServer || !mask)) {
+    const header = smallHeader(kind, fin, payload.byteLength);
+    if (header !== null) {
+      if (state.transport === null) return "closed";
+      state.transport.cork();
+      state.transport.write(header);
+      state.transport.write(payload);
+      state.transport.uncork();
+      return "ok";
+    }
+    const out = Buffer.allocUnsafe(headerSize(payload.byteLength, false));
+    const written = writeCodecHeader(handle, ordinal, fin, payload.byteLength, mask, NO_MASK, out);
+    if (written < 0) return encodeFailure(-written);
+    if (state.transport === null) return "closed";
+    state.transport.cork();
+    state.transport.write(out);
+    state.transport.write(payload);
+    state.transport.uncork();
+    return "ok";
+  }
+  const framed = writeCodecFrame(
     handle,
-    ordinalOf(kind),
+    ordinal,
     fin,
     payload,
     compress,
     mask,
     maskFor(state, mask),
   );
-  if (length < 0) return encodeFailure(-length);
-  const framed = codecOutbound(handle);
+  if (typeof framed === "number") return encodeFailure(-framed);
   if (state.transport === null) return "closed";
-  state.transport.write(framed.subarray(0, length));
+  state.transport.write(framed);
   return "ok";
+}
+
+/// The physical header size for an uncompressed frame: two base octets, a 16-bit length
+/// for 126 bytes and up, an eight-octet length for 64 KiB and up, and the masking key.
+function headerSize(payloadLength: number, masked: boolean): number {
+  const extended = payloadLength < 126 ? 0 : payloadLength < 65536 ? 2 : 8;
+  return 2 + extended + (masked ? 4 : 0);
 }
 
 /// A pong is not optional: RFC 6455 section 5.5.2 requires one, promptly.
@@ -95,36 +139,4 @@ function closePayload(code: number | undefined, reason: Buffer): Buffer {
   payload.writeUInt16BE(code, 0);
   reason.copy(payload, 2);
   return payload;
-}
-
-function encodeFailure(ordinal: number): FrameStatus {
-  switch (ordinal) {
-    case 1:
-      return "protocol-error";
-    case 2:
-      return "payload-too-large";
-    case 3:
-      return "protocol-error";
-    case 4:
-      return "invalid-handle";
-    default:
-      return "protocol-error";
-  }
-}
-
-export type FailureStatus = Exclude<FrameStatus, "ok">;
-
-export function isTransient(status: FrameStatus): boolean {
-  return status === "backpressure";
-}
-
-/// Typed to the failures rather than to `FrameStatus`, so a caller cannot ask for the
-/// error behind an outcome that has none.
-export function frameError(status: FailureStatus): Error {
-  if (status === "closed" || status === "closing") return noTransportError();
-  // The same code the engine's own backpressure uses, so handling one handles the other.
-  if (status === "backpressure") {
-    return createError("ERR_BACKPRESSURE", "ventiws: the codec's event queue is full");
-  }
-  return statusError(status);
 }

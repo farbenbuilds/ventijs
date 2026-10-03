@@ -62,20 +62,6 @@ export function sendBlob(
   state.pendingSend = reading;
 }
 
-/// Runs `work` after any blob read in flight, or now when there is none.
-///
-/// `ws` puts the read on its own sender queue, so a `send` issued after a blob waits behind
-/// it and the two arrive in the order they were called. Without this the blob arrives after
-/// every synchronous send that followed it.
-export function afterPendingSend(state: SocketState, work: () => void): void {
-  const pending = state.pendingSend;
-  if (pending === null) {
-    work();
-    return;
-  }
-  state.pendingSend = pending.then(work, work);
-}
-
 function asOptions(options: unknown): Record<string, unknown> {
   return typeof options === "object" && options !== null ? { ...options } : {};
 }

@@ -7,6 +7,8 @@ type ImplementationFactory = () => Promise<EchoImplementation>;
 const FACTORIES: Readonly<Record<ImplementationId, ImplementationFactory>> = {
   ws: async () => (await import("./implementations/ws.ts")).wsImplementation(),
   ventiws: async () => (await import("./implementations/ventiws.ts")).ventiwsImplementation(),
+  "ventiws-engine": async () =>
+    (await import("./implementations/ventiws-engine.ts")).ventiwsEngineImplementation(),
   "uWebSockets.js": async () =>
     (await import("./implementations/uweb-sockets.ts")).uwebSocketsImplementation(),
   "socket.io": async () =>

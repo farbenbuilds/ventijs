@@ -1,11 +1,11 @@
-// The frozen definition of `echo-throughput-v1`: the contract env file is
+// The frozen definition of `echo-throughput-v2`: the contract env file is
 // parsed, the report is held to it, and the durable record is built from both.
 // Keeping the three in one place stops a published record from describing a run
 // the contract does not define.
 
 import { createHash } from "node:crypto";
 
-export const BENCHMARK_ID = "echo-throughput-v1";
+export const BENCHMARK_ID = "echo-throughput-v2";
 export const RECORD_SCHEMA_VERSION = 1;
 export const REPORT_SCHEMA_VERSION = "ventiws-ws-compare/3";
 

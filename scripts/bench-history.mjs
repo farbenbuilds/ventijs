@@ -78,19 +78,25 @@ export const publishRecord = (input) => {
   if (!/^[0-9]{4}$/.test(year)) throw new Error("invalid benchmark timestamp");
   const recordPath = `records/${year}/${record.record_id}.json`;
   const rawPath = `raw/${year}/${record.record_id}/${RAW_REPORT}`;
+  const contractDocPath = `contracts/${input.contractDocName}`;
   writeImmutable(join(historyDirectory, recordPath), `${JSON.stringify(record, null, 2)}\n`);
   writeImmutable(join(historyDirectory, rawPath), input.reportSource);
   writeImmutable(join(historyDirectory, "schema", input.schemaName), input.schemaSource);
-  writeImmutable(join(historyDirectory, input.contractName), input.contractSource);
-  writeImmutable(join(historyDirectory, "CONTRACT.md"), input.contractDocSource);
+  writeImmutable(join(historyDirectory, "contracts", input.contractName), input.contractSource);
+  writeImmutable(join(historyDirectory, contractDocPath), input.contractDocSource);
   writeFileSync(join(historyDirectory, NO_JEKYLL), "");
 
   const indexPath = join(historyDirectory, "index.json");
-  const index = readJson(indexPath) ?? {
-    schema_version: 1,
-    benchmark_id: record.benchmark_id,
-    records: [],
-  };
+  const stored = readJson(indexPath);
+  // A new benchmark ID starts a new series; the previous index is archived so its
+  // records stay reachable from the branch.
+  if (stored !== null && stored.benchmark_id !== record.benchmark_id) {
+    writeJson(join(historyDirectory, `index-${stored.benchmark_id}.json`), stored);
+  }
+  const index =
+    stored !== null && stored.benchmark_id === record.benchmark_id
+      ? stored
+      : { schema_version: 1, benchmark_id: record.benchmark_id, records: [] };
   const entry = summarize(record, recordPath, rawPath);
   index.records = [
     entry,
@@ -103,6 +109,6 @@ export const publishRecord = (input) => {
   );
   writeJson(indexPath, index);
   writeJson(join(historyDirectory, "latest.json"), record);
-  writeFileSync(join(historyDirectory, "README.md"), renderReadme(index, record));
+  writeFileSync(join(historyDirectory, "README.md"), renderReadme(index, record, contractDocPath));
   return record.record_id;
 };

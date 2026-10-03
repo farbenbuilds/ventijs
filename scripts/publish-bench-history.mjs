@@ -65,6 +65,7 @@ const main = () => {
     schemaSource: readFile(schemaPath),
     schemaName: basename(schemaPath),
     contractDocSource: readFile(contractDocPath),
+    contractDocName: basename(contractDocPath),
   });
   process.stdout.write(`${recordId}\n`);
 };

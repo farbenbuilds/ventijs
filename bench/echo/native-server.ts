@@ -6,11 +6,10 @@ import type { VentiAddon } from "../../src/binding/native.ts";
 import type { EchoServer, EchoServerOptions } from "./echo-types.ts";
 import { initialState, onEngineEvent } from "./native-state.ts";
 
-/// The bench measures the native engine, not the `ws`-shaped facade. The facade's
-/// HTTP upgrade path adopts a raw Node stream and does no RFC 6455 framing yet,
-/// so a facade leg would measure a handshake that never becomes a message. The
-/// engine is the product, so it is the thing under test; `COMPATIBILITY.md`
-/// records the split.
+/// The engine route, kept as a reference row: the public surface frames with the codec
+/// route (`CODEBASE.md`), so this native listener measures what the threaded engine costs
+/// in a lock-step echo. The engine holds a `*TcpConnection` carved from a startup slab and
+/// admits no adopted socket, which is why the facade cannot use it.
 ///
 /// `src/binding` uses extensionless relative imports, which Node's type stripping
 /// cannot resolve at runtime, so only the ABI declaration is reused here and it

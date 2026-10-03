@@ -15,7 +15,7 @@ it is not proof that no memory or security defect remains.
 | `ts-test.yml`  | Unit and boundary tests                     | push and pull request on a JS/TS or config path, manual                              | `tests/protocol` and `tests/compat/options`                           |
 | `zig-test.yml` | Zig unit tests, Binding lifecycle tests     | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite            |
 | `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance  | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                                  |
-| `perf.yml`     | Echo throughput across four implementations | push and pull request on a Zig, manifest, or `bench/` path, nightly, manual          | nothing: it reports, and trusted `main` runs publish a durable record |
+| `perf.yml`     | Echo throughput across five implementations | push and pull request on a Zig, manifest, or `bench/` path, nightly, manual          | nothing: it reports, and trusted `main` runs publish a durable record |
 | `bump.yml`     | Advance the version, push the tag           | push to `main`, manual                                                               | nothing: it commits the version and starts the publish                |
 | `publish.yml`  | Platform build matrix, publish to npm       | a `v*` tag pushed by a maintainer                                                    | every platform builds and its addon loads and echoes                  |
 
@@ -234,28 +234,32 @@ baseline are in [COMPATIBILITY.md](COMPATIBILITY.md#rfc-6455-conformance) and
 
 ## Benchmark
 
-`perf.yml` runs `pnpm build` and then `pnpm run bench`, which drives `ws`, the
-native engine, `uWebSockets.js`, and Socket.IO through one shared echo path and
-writes a JSON report with provenance and the raw samples behind every median.
-The report is uploaded on every run, including failures.
+`perf.yml` runs `pnpm build` and then `pnpm run bench`, which drives the public
+facade, `ws`, the native engine route, `uWebSockets.js`, and Socket.IO through
+one shared echo path and writes a JSON report with provenance and the raw
+samples behind every median. The report is uploaded on every run, including
+failures.
 
-`ws` is the gate baseline and ventiws the candidate; the two other legs are
-reference rows and never decide the verdict. The comparison is read from the
+`ws` is the gate baseline and the facade is the candidate: the public surface
+frames with the Zig codec route, so that is what the gate reads. The engine
+route is a reference row, because the facade cannot use it and its per-message
+thread crossing is context a reader should see. The comparison is read from the
 run rather than from a status: the `Measure` step deliberately does not pass
-`--gate`, because the gate fails when ventiws's median falls more than ten
-percent behind `ws` on the same host, and the engine is not at parity yet.
-`pnpm bench --gate` gives the same verdict locally. A payload above the
-engine's compiled message capacity is refused by the harness rather than
-compared against an absent row.
+`--gate`, because the gate fails when the facade's median falls more than ten
+percent behind `ws` on the same host at any payload size. `pnpm bench --gate`
+gives the same verdict locally. A payload above the engine's compiled message
+capacity is refused by the harness rather than compared against an absent row.
 
-`bench/contracts/echo_throughput_v1.env` is the frozen benchmark definition. A
+`bench/contracts/echo_throughput_v2.env` is the frozen benchmark definition. A
 report whose parameters drifted from it is refused at publication, so a durable
 record can never describe a run the contract does not define. A trusted run on
 `main` — push, nightly schedule, or manual dispatch — appends the record to the
 bot-managed `benchmark-data` branch through
 `scripts/publish-bench-history.mjs`: the canonical record, its raw report, the
 contract copies, the rolling index, and a generated README. Records are
-immutable and re-publishing identical content is idempotent.
+immutable and re-publishing identical content is idempotent. A new benchmark
+ID archives the previous series as `index-<benchmark-id>.json`, so v1 records
+stay reachable.
 
 The publish job is separate from the measuring job on purpose. The compare job
 runs with `contents: read` and also handles pull requests; the `publish-history`

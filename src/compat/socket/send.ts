@@ -7,7 +7,7 @@ import { sendFramed } from "./codec-send";
 import { reportWithoutClosing } from "./lifecycle";
 import { notAttachedError, reportFailure } from "./send-failure";
 import { defer, notOpenError, statusError, toPayload } from "./payload";
-import { afterPendingSend, isBlob, sendBlob } from "./send-blob";
+import { isBlob, sendBlob } from "./send-blob";
 
 export function sendData(
   state: SocketState,
@@ -16,7 +16,15 @@ export function sendData(
   callback: unknown,
 ): void {
   if (state.readyState === CONNECTING) throw notOpenError(CONNECTING);
-  afterPendingSend(state, () => framePayload(state, data, options, callback));
+  const pending = state.pendingSend;
+  if (pending === null) {
+    framePayload(state, data, options, callback);
+    return;
+  }
+  // A blob read in flight has to finish first: `ws` puts the read on its own sender queue,
+  // so a send issued after a blob waits behind it and the two arrive in the order called.
+  const work = (): void => framePayload(state, data, options, callback);
+  pending.then(work, work);
 }
 
 /// Frames and stages one message. Exported, and not reached through `sendData` by the blob

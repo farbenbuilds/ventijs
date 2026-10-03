@@ -3,6 +3,7 @@ const uwz = @import("uWebZockets");
 const build_options = @import("build_options");
 const codec_lifecycle = @import("engine/ffi/codec_lifecycle.zig");
 const codec_out = @import("engine/ffi/codec_encode.zig");
+const codec_events = @import("engine/ffi/codec_events.zig");
 const codec_io = @import("engine/ffi/codec_io.zig");
 const codec_status = @import("engine/ffi/codec_status.zig");
 const server_io = @import("engine/ffi/server_io.zig");
@@ -37,11 +38,22 @@ pub const codec_failure = codec_status.codec_failure;
 pub const codec_pending = codec_io.codec_pending;
 pub const codec_select = codec_io.codec_select;
 /// The selected event as `[kind, code, payload]`.
-pub const codec_event = codec_io.codec_event;
-pub const codec_take = codec_io.codec_take;
+pub const codec_event = codec_events.codec_event;
+pub const codec_take = codec_events.codec_take;
 /// The fragment boundaries of the selected data message, null when it arrived whole.
-pub const codec_fragments = codec_io.codec_fragments;
+pub const codec_fragments = codec_events.codec_fragments;
+/// Selects, copies, and retires the next event as `[kindCode, payload, ends]`, or null.
+pub const codec_next = codec_events.codec_next;
+/// Folds bytes and copies the first event into a caller-owned buffer, in one crossing.
+pub const codec_process_into = codec_events.codec_process_into;
+/// Copies the selected event into a caller-owned buffer after `codec_process_into`
+/// reported it too small.
+pub const codec_materialize = codec_events.codec_materialize;
 pub const codec_encode = codec_out.codec_encode;
+/// Formats one frame into a Node-owned buffer, or a negative encode-failure ordinal.
+pub const codec_write = codec_out.codec_write;
+/// Formats only the header for a caller writing the payload as its own chunk.
+pub const codec_header = codec_out.codec_header;
 pub const codec_outbound = codec_out.codec_outbound;
 pub const codec_outbound_masked = codec_out.codec_outbound_masked;
 pub const codec_reset = codec_io.codec_reset;

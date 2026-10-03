@@ -13,4 +13,5 @@ export declare function publishRecord(input: {
   readonly schemaSource: string;
   readonly schemaName: string;
   readonly contractDocSource: string;
+  readonly contractDocName: string;
 }): string;

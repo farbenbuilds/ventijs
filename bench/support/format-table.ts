@@ -30,7 +30,7 @@ const rowOf = (result: ConfigurationResult, id: ImplementationId): string =>
     ratioAgainstBaseline(result, id),
   ].join(" | ");
 
-/// One row per payload and implementation: the long form stays readable at four
+/// One row per payload and implementation: the long form stays readable at five
 /// legs, where a column per implementation would triple the table's width.
 export const table = (
   results: readonly ConfigurationResult[],

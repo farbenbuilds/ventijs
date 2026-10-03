@@ -24,14 +24,14 @@ import {
 
 const ROOT = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, ROOT), "utf8");
-const CONTRACT = readContract(parseContract(read("bench/contracts/echo_throughput_v1.env")));
+const CONTRACT = readContract(parseContract(read("bench/contracts/echo_throughput_v2.env")));
 
 type SchemaNode = {
   readonly const?: unknown;
   readonly properties?: Readonly<Record<string, SchemaNode>>;
 };
 
-const SCHEMA = JSON.parse(read("bench/contracts/echo_throughput_v1.schema.json")) as SchemaNode;
+const SCHEMA = JSON.parse(read("bench/contracts/echo_throughput_v2.schema.json")) as SchemaNode;
 
 test("the contract matches the harness defaults it freezes", () => {
   expect(CONTRACT.implementations).toEqual([...ALL_IMPLEMENTATION_IDS]);

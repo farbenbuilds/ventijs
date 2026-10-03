@@ -87,6 +87,9 @@ export async function serve(server: WebSocketServer): Promise<Harness> {
   const httpServer = createServer();
   httpServer.on("upgrade", (incoming, socket, head) => {
     server.handleUpgrade(incoming, socket, head, (accepted, incomingRequest) => {
+      // A reset after a test tears its peer down is expected; without a listener Node
+      // rethrows the socket's `error` as an uncaught exception and fails the whole suite.
+      accepted.on("error", () => undefined);
       server.emit("connection", accepted, incomingRequest);
     });
   });

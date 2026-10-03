@@ -1,9 +1,8 @@
 //! Copying a peer's bytes into the reassembly buffer. `receive.zig` owns the buffers and
 //! the state; this owns the input and is the only module that raises `PayloadTooLarge` or
 //! `InvalidUtf8` from bytes.
-//! The input is scratch: `zslay` unmasks in place, so never feed the same bytes twice --
-//! after the first pass they are plaintext and a second pass over a masked frame is
-//! invalid UTF-8 by construction.
+//! The input is read-only: the codec copies into its own buffer and unmasks the copy, so
+//! the caller's bytes are never mutated and may be fed again after a resume.
 
 const zslay = @import("zslay");
 const uwz = @import("uWebZockets");
@@ -26,13 +25,14 @@ pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !vo
     const count: usize = @intCast(@min(remaining, available));
     const chunk = input[offset.*..][0..count];
 
-    if (decoded.masking_key) |key| uwz.websocket_mask.apply(@constCast(chunk), key, position);
     offset.* += count;
     peer.conn.advance_payload_read(count) catch return error.ProtocolError;
 
     if (opcode.is_control()) {
         const start: usize = @intCast(position);
-        @memcpy(peer.control[start..][0..count], chunk);
+        const written = peer.control[start..][0..count];
+        @memcpy(written, chunk);
+        if (decoded.masking_key) |key| uwz.websocket_mask.apply(written, key, position);
         return;
     }
     // Reset only on the first byte of a message: per chunk it made every later chunk a new one.
@@ -44,15 +44,18 @@ pub fn consume(State: type, peer: *State, input: []const u8, offset: *usize) !vo
     }
     // The one inbound allocation, at most logarithmic over a message, so a peer under
     // `maxPayload` never pays for `maxPayload`; a compressed message is staged, same bound.
-    peer.append(chunk) catch |err| {
+    const written = peer.append(chunk) catch |err| {
         return switch (err) {
             error.TooLarge => error.PayloadTooLarge,
             error.OutOfMemory, error.Overflow => error.PayloadTooLarge,
             error.CorruptPayload => error.InvalidUtf8,
         };
     };
+    // The mask is applied to the copy, never the caller's bytes, so the plaintext is what
+    // the validator below reads and the input may be fed again after a resume.
+    if (decoded.masking_key) |key| uwz.websocket_mask.apply(written, key, position);
     // Compressed bytes are not text until inflated, so validation runs at end of message.
     if (!peer.inflate.is_compressed() and peer.message_opcode == .text and peer.validate_utf8) {
-        peer.utf8_state = utf8.feed(peer.utf8_state, chunk) orelse return error.InvalidUtf8;
+        peer.utf8_state = utf8.feed(peer.utf8_state, written) orelse return error.InvalidUtf8;
     }
 }

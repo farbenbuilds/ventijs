@@ -1,6 +1,6 @@
 # Performance
 
-ventiws ships a benchmark harness that measures its native engine against the
+ventiws ships a benchmark harness that measures the public facade against the
 libraries developers actually compare it with: `ws`, `uWebSockets.js`, and
 Socket.IO. This document explains what the numbers mean, how to reproduce them,
 and where the durable history lives.
@@ -23,39 +23,39 @@ the reported number is the median of three measured repeats.
 
 ### The legs
 
-| id               | server                 | client           | what the row isolates                   |
-| ---------------- | ---------------------- | ---------------- | --------------------------------------- |
-| `ws`             | `ws` `WebSocketServer` | `ws`             | the compatibility baseline              |
-| `ventiws`        | the native engine      | `ws`             | the engine under test                   |
-| `uWebSockets.js` | uWebSockets.js v20     | `ws`             | a native uSockets stack, no Node `http` |
-| `socket.io`      | Socket.IO v4           | socket.io-client | an application protocol over websocket  |
+| id               | server                     | client           | what the row isolates                        |
+| ---------------- | -------------------------- | ---------------- | -------------------------------------------- |
+| `ws`             | `ws` `WebSocketServer`     | `ws`             | the compatibility baseline                   |
+| `ventiws`        | the public facade          | `ws`             | the candidate: Zig codec over Node transport |
+| `ventiws-engine` | the native engine listener | `ws`             | the threaded engine route as a reference     |
+| `uWebSockets.js` | uWebSockets.js v20         | `ws`             | a native uSockets stack, no Node `http`      |
+| `socket.io`      | Socket.IO v4               | socket.io-client | an application protocol over websocket       |
 
-`ws`, ventiws, and `uWebSockets.js` share the same `ws` client, so the server is
-the only variable between those rows. ventiws client construction throws
-`ERR_INVALID_STATE` today, and uWebSockets.js v20 has no client API at all.
+`ws`, the facade, and `uWebSockets.js` share the same `ws` client, so the server
+is the only variable between those rows. Socket.IO pairs its own client and is
+forced to its websocket transport on both sides (`transports: ["websocket"]`,
+`allowUpgrades: false`). Engine.IO and Socket.IO framing still ride on every
+message: an `emit` with a binary payload costs a JSON packet plus a binary
+attachment frame in each direction where raw `ws` costs one frame. That
+overhead is the row's subject, and the report says so. The `wire` column counts
+payload bytes only on every leg, so it excludes that framing.
 
-Socket.IO pairs its own client and is forced to its websocket transport on both
-sides (`transports: ["websocket"]`, `allowUpgrades: false`). Engine.IO and
-Socket.IO framing still ride on every message: an `emit` with a binary payload
-costs a JSON packet plus a binary attachment frame in each direction where raw
-`ws` costs one frame. That overhead is the row's subject, and the report says
-so. The `wire` column counts payload bytes only on every leg, so it excludes
-that framing.
+### Why the facade is the candidate
 
-### Why the native engine and not the facade
-
-`bench/echo/native-server.ts` binds the engine route directly. The public
-`ws`-shaped facade's HTTP upgrade path does not do RFC 6455 framing yet, so a
-facade leg would time a handshake that never becomes a message.
-[COMPATIBILITY.md](../COMPATIBILITY.md) records the split; the engine is the
-product, so it is what the benchmark drives.
+The public `ws` surface uses the codec route: Node owns the transport and a Zig
+frame codec owns the framing on the Node thread (`CODEBASE.md`, and
+[docs/adr/0001](adr/0001-transport-and-framing-ownership.md)). That is what a
+consumer runs, so it is what the gate reads. The engine route binds µWebZockets'
+own listener and crosses an engine thread per message; the public surface
+cannot use it, and it is kept as a reference row so the cost of that boundary
+stays visible in every report.
 
 ## Running it
 
 ```sh
 pnpm install
-pnpm build          # builds the addon and the bundle the harness imports
-pnpm bench          # the full four-leg matrix
+pnpm build          # builds the addon and the bundle the facade leg loads
+pnpm bench          # the full five-leg matrix
 pnpm bench --gate   # exit non-zero when ventiws is below 90 percent of ws
 ```
 
@@ -68,7 +68,7 @@ pnpm bench --implementations=ws,ventiws --messages=20000 --repeats=2
 
 | flag                    | meaning                                                       |
 | ----------------------- | ------------------------------------------------------------- |
-| `--implementations=...` | comma-separated legs; default is all four                     |
+| `--implementations=...` | comma-separated legs; default is all five                     |
 | `--sizes=...`           | payload matrix in bytes; default 64,1024,16384,32768          |
 | `--messages=<count>`    | round trips per sample; default 200000                        |
 | `--repeats=<count>`     | measured repeats per configuration, at least 2; default 3     |
@@ -101,6 +101,17 @@ count, and the fairness notes. Absolute numbers are only comparable within a
 matching runner and toolchain cohort; the ratio to the same-host `ws` baseline
 is the durable claim.
 
+### The 64 B row
+
+This shape measures round-trip latency, so the facade's per-message boundary
+cost is at its largest at 64 B and amortizes as the payload grows. In the
+v2 history the facade sits near the 90 percent gate at 64 B and at or above
+parity from 1 KiB up, leading `ws` by more than 20 percent at 32 KiB. A
+JavaScript lock-step echo cannot show a native stack's throughput advantage
+either: uWebSockets' own benchmark notes that a JS client cannot saturate
+uWebSockets.js. Near-uWS absolute throughput needs a pipelined or
+multi-connection shape, which is deliberately not this series.
+
 ## The durable history
 
 A benchmark number is only useful if it can be traced to a run. Every trusted
@@ -111,16 +122,17 @@ branch:
 - `records/<year>/<record-id>.json`: the canonical record, with every median,
   raw sample, the runner, the toolchain, and the exact contract digest.
 - `raw/<year>/<record-id>/report.json`: the full harness report.
-- `index.json` and `latest.json`: the rolling history and the newest record.
+- `index.json` and `latest.json`: the active series, with earlier series
+  archived as `index-<benchmark-id>.json`.
 - `README.md`: a generated summary with the latest per-payload results.
-- `CONTRACT.md`, `echo_throughput_v1.env`, and the JSON schema: the frozen
-  benchmark definition.
+- `contracts/` and `schema/`: the frozen benchmark definition and its JSON
+  schema.
 
-The contract in `bench/contracts/echo_throughput_v1.env` is the frozen
-definition of the benchmark. The publisher refuses a report whose parameters
-drifted from it, so a record's methodology columns cannot disagree with the
-contract hash they carry. Changing a parameter means a new benchmark ID and a
-new history series.
+The contract in `bench/contracts/echo_throughput_v2.env` is the frozen
+definition of the active benchmark. The publisher refuses a report whose
+parameters drifted from it, so a record's methodology columns cannot disagree
+with the contract hash they carry. Changing a parameter means a new benchmark
+ID and a new history series.
 
 `perf.yml` runs on pushes to `main` that touch the engine or the harness, on a
 nightly schedule, and on manual dispatch. The compare job runs with a read-only
@@ -137,9 +149,10 @@ still publishes its evidence, exactly as the local `--gate` flag is opt-in.
 Add the id to `ImplementationId`, `IMPLEMENTATION_LABELS`, and the reference
 list in `bench/echo/echo-types.ts`, then add its factory to the record in
 `bench/echo/implementation.ts` and an adapter under
-`bench/echo/implementations/`. The label map and the factory map are total over
-the id union, so a missing entry fails typecheck. Adding a leg to the frozen
-contract is a new benchmark series, not an edit.
+`bench/echo/implementations/`. The label map, the factory map, and the leg
+totality in `bench/support/summary.ts` are total over the id union, so a missing
+entry fails typecheck. Adding a leg to the frozen contract is a new benchmark
+series, not an edit.
 
 ## Citing numbers
 
