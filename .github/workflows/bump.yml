@@ -67,18 +67,10 @@ jobs:
           # authenticate the tag push below, and a `GITHUB_TOKEN` push starts no run.
           persist-credentials: false
 
-      # The checkout keeps the default `GITHUB_TOKEN` on purpose: the bump commit reaches
-      # `main` without starting a second round of CI, and only the tag push needs a
-      # credential that triggers runs.
-      - uses: actions/create-github-app-token@v3
-        id: app-token
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-
       # A push run reads the directive from the merged pull request's labels; a dispatch run
-      # reads it from its inputs. Both paths end at one kinds string for the bump.
+      # reads it from its inputs. Both paths end at one kinds string for the bump. A
+      # `release:skip` label ends it at a skip instead: the merge still lands, and no
+      # version, commit, or tag is written for it.
       - name: Read the release directive
         id: release
         env:
@@ -87,19 +79,36 @@ jobs:
           PREID: ${{ inputs.preid }}
         run: |
           kinds=""
+          skip="false"
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             if [ -n "${BASE}" ] && [ "${BASE}" != "auto" ]; then kinds="${BASE}"; fi
             if [ -n "${PREID}" ] && [ "${PREID}" != "auto" ]; then kinds="${kinds:+${kinds},}${PREID}"; fi
           fi
           if [ -z "${kinds}" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
             labels=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].labels[].name' 2>/dev/null || true)
+            if printf '%s\n' "${labels}" | grep -qx 'release:skip'; then skip="true"; fi
             kinds=$(printf '%s\n' "${labels}" | sed -n 's/^release:\(major\|minor\|patch\|alpha\|beta\|rc\|stable\)$/\1/p' | paste -sd, -)
           fi
           echo "kinds=${kinds}" >> "$GITHUB_OUTPUT"
-          echo "release directive: ${kinds:-default}"
+          echo "skip=${skip}" >> "$GITHUB_OUTPUT"
+          suffix=""
+          if [ "${skip}" = "true" ]; then suffix=" (skipped)"; fi
+          echo "release directive: ${kinds:-default}${suffix}"
+
+      # The checkout keeps the default `GITHUB_TOKEN` on purpose: the bump commit reaches
+      # `main` without starting a second round of CI, and only the tag push needs a
+      # credential that triggers runs.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        if: steps.release.outputs.skip != 'true'
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
 
       - name: Advance the version
         id: bump
+        if: steps.release.outputs.skip != 'true'
         env:
           KINDS: ${{ steps.release.outputs.kinds }}
         run: |
@@ -116,6 +125,7 @@ jobs:
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Commit the version
+        if: steps.release.outputs.skip != 'true'
         env:
           # Through the environment: a version string is manifest data, and manifest data
           # interpolated into a `run:` line is shell input.
@@ -142,6 +152,7 @@ jobs:
           git push "https://x-access-token:${BRANCH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
 
       - name: Tag the version
+        if: steps.release.outputs.skip != 'true'
         env:
           TAG: v${{ steps.bump.outputs.version }}
           TOKEN: ${{ steps.app-token.outputs.token }}

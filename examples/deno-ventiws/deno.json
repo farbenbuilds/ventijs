@@ -1,0 +1,11 @@
+{
+  "nodeModulesDir": "auto",
+  "minimumDependencyAge": {
+    "age": "P1D",
+    "exclude": ["npm:ventiws", "npm:@ventiws/binding-*"]
+  },
+  "tasks": {
+    "start": "deno run --allow-net --allow-read --allow-env --allow-ffi index.ts",
+    "typecheck": "deno check index.ts"
+  }
+}

@@ -215,7 +215,9 @@ declarations through the package `exports` map; it needs `tsdown` output.
   advances the version on a merge by the `release:<kind>` labels it carries
   (default: the next prerelease counter, or the next patch's train after a stable
   version; a version the tree states with no tag yet is released as written),
-  commits it, and pushes the tag with the release app's installation token
+  unless the pull request carries `release:skip`, which lands the merge with no
+  version, commit, or tag. It commits the version and pushes the tag with the
+  release app's installation token
   (`RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`), because a tag pushed
   with `GITHUB_TOKEN` starts no workflow run. That commit carries no CI skip
   marker, because a release tag points at it and GitHub reads a marker anywhere

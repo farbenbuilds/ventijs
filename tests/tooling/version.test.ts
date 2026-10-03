@@ -82,6 +82,23 @@ test("the merge's release directive reaches the bump as labels or inputs", () =>
   expect(BUMP_WORKFLOW).toContain("inputs.preid");
 });
 
+test("a release:skip label lands the merge with nothing written", () => {
+  // Every step that mints a credential or writes a version, commit, or tag gates on `skip`.
+  expect(BUMP_WORKFLOW).toMatch(/grep\s+-[A-Za-z]*x[A-Za-z]*\s+'release:skip'/);
+  for (const header of [
+    "- uses: actions/create-github-app-token@v3",
+    "- name: Advance the version",
+    "- name: Commit the version",
+    "- name: Tag the version",
+  ]) {
+    const start = BUMP_WORKFLOW.indexOf(header);
+    const next = BUMP_WORKFLOW.indexOf("\n      - ", start);
+    expect(BUMP_WORKFLOW.slice(start, next === -1 ? undefined : next), header).toContain(
+      "steps.release.outputs.skip != 'true'",
+    );
+  }
+});
+
 test("the bump tags through the release app, the one credential that starts a run", () => {
   // `publish.yml` takes no dispatch, and a tag pushed with `GITHUB_TOKEN` starts no run, so
   // the tag is pushed with an installation token; the bump commit itself stays silent.

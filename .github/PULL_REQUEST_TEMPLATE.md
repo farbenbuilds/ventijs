@@ -14,9 +14,9 @@ Describe the change and why it belongs in ventiws. Link the issue it closes.
 
 ## Release
 
-Every merge releases. Label this pull request `release:stable`,
-`release:minor`, `release:major`, `release:beta`, `release:rc`, or
-`release:patch` to direct the version step; an unlabeled merge advances the
+Every merge releases unless this pull request is labeled `release:skip`. Label
+it with a `release:<kind>` label (`stable`, `patch`, `minor`, `major`, `alpha`,
+`beta`, or `rc`) to direct the version step; an unlabeled merge advances the
 current train, or starts the next patch's train after a stable version. See
 [CONTRIBUTE.md](../CONTRIBUTE.md#releasing).
 
