@@ -29,10 +29,13 @@ export function toPayload(data: unknown): SocketPayload {
 }
 
 /// Reads a binary container as the byte sequence it represents, matching `ws`'s
-/// `toBuffer`. An `ArrayBufferView` is read through `.buffer`, `.byteOffset` and
-/// `.byteLength`, not element by element: `Buffer.from(view)` keeps one byte per element,
-/// so a two-element `Uint16Array` would be 2 bytes where `ws` puts 4 on the wire.
+/// `toBuffer`, which returns a `Buffer` unchanged: a copy here would put an allocation
+/// and a memcpy inside every `send` of an already-native buffer. An `ArrayBufferView` is
+/// read through `.buffer`, `.byteOffset` and `.byteLength`, not element by element:
+/// `Buffer.from(view)` keeps one byte per element, so a two-element `Uint16Array` would
+/// put 2 bytes on the wire where `ws` puts 4.
 function toBytes(data: unknown): Buffer {
+  if (Buffer.isBuffer(data)) return data;
   if (ArrayBuffer.isView(data)) {
     return Buffer.from(data.buffer as ArrayBuffer, data.byteOffset, data.byteLength);
   }
@@ -54,8 +57,6 @@ export function statusError(status: ErrorStatus): CodedError {
 
 /// `ws` reports its sender's queue length, and a transport's is the same number:
 /// `writableLength` is the one property on a Node stream that means "waiting to go out".
-/// A `DESTROYED` stream reports zero, which is right for a socket that will never write
-/// again, so reading it on a closed socket is harmless.
 export function queuedBytes(state: SocketState): number {
   if (state.transport === null) return 0;
   return state.transport.writableLength;

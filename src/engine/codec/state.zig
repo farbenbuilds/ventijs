@@ -9,7 +9,6 @@ const driver = @import("driver.zig");
 const events = @import("events.zig");
 const inbound = @import("receive.zig");
 const limits = @import("limits.zig");
-const copy_in = @import("ingest.zig");
 const framing = @import("encode.zig");
 const outbound = @import("outbound.zig");
 const result = @import("feed_result.zig");
@@ -73,14 +72,10 @@ pub fn codec(comptime control_slots: usize) type {
         }
 
         /// Folds `input` into the codec, stopping when the input runs out, the queue fills,
-        /// or a frame is refused. `input` is scratch and is unmasked in place; see
-        /// `ingest.zig`.
+        /// or a frame is refused. `input` is read-only: the codec copies into its own buffer
+        /// and unmasks the copy, so the caller's bytes may be fed again after a resume.
         pub fn feed(peer: *Self, input: []const u8) FeedResult {
             return peer.note(driver.feed(Self, peer, input));
-        }
-
-        pub fn ingest(peer: *Self, input: []const u8) FeedResult {
-            return peer.note(copy_in.ingest(Self, peer, input));
         }
 
         /// Formats one outbound frame. `compress` is the caller's decision -- see

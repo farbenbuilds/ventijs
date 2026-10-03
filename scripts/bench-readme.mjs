@@ -42,12 +42,13 @@ const historyTable = (entries) =>
     ]),
   );
 
-export const renderReadme = (index, latest) => `# ventiws benchmark history
+export const renderReadme = (index, latest, contractPath) => `# ventiws benchmark history
 
 This branch is the durable, machine-readable history for \`${latest.benchmark_id}\`.
-See [CONTRACT.md](CONTRACT.md) for the guarantee and reproduction procedure.
-\`index.json\` retains the complete history; the table below shows the latest
-${README_HISTORY_LIMIT} runs.
+See [the contract](${contractPath}) for the guarantee and reproduction procedure.
+\`index.json\` retains the active series; the table below shows the latest
+${README_HISTORY_LIMIT} runs. Earlier series stay as \`index-<benchmark-id>.json\`
+beside the records.
 
 ## Latest results
 

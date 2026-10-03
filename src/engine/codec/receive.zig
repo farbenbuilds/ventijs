@@ -81,14 +81,19 @@ pub fn receive() type {
             return rx.inflate.inspect(first);
         }
 
-        /// The ceiling is the message cap either way, since a compressed message cannot inflate past it.
-        pub fn append(rx: *Self, chunk: []const u8) !void {
+        /// The appended bytes are returned so the caller can unmask the destination rather
+        /// than the input: the caller's bytes stay read-only and a held `Buffer` is never
+        /// mutated. The ceiling is the message cap either way, since a compressed message
+        /// cannot inflate past it.
+        pub fn append(rx: *Self, chunk: []const u8) ![]u8 {
             if (rx.inflate.is_compressed()) {
                 try rx.inflate.stage(chunk, rx.max_message_bytes);
-                return;
+                return rx.inflate.staged.tail(chunk.len);
             }
             try rx.message.grow(chunk.len, rx.max_message_bytes);
-            @memcpy(rx.message.tail(chunk.len), chunk);
+            const written = rx.message.tail(chunk.len);
+            @memcpy(written, chunk);
+            return written;
         }
 
         pub fn note_fragment(rx: *Self) error{ TooManyFragments, OutOfMemory }!void {

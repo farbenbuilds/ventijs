@@ -34,9 +34,9 @@ test("the history push is made as the GitHub Actions bot", () => {
 
 test("the publisher reads the contract files this repository owns", () => {
   for (const path of [
-    "bench/contracts/echo_throughput_v1.env",
-    "bench/contracts/echo_throughput_v1.schema.json",
-    "bench/contracts/CONTRACT.md",
+    "bench/contracts/echo_throughput_v2.env",
+    "bench/contracts/echo_throughput_v2.schema.json",
+    "bench/contracts/CONTRACT-v2.md",
     "scripts/publish-bench-history.mjs",
   ]) {
     expect(existsSync(new URL(path, ROOT))).toBe(true);

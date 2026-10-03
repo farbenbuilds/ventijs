@@ -106,19 +106,18 @@ jobs:
       - name: Measure
         # Deliberately runs without `--gate`.
         #
-        # The gate fails when ventiws's median falls more than ten percent behind
-        # `ws` on the same host, and ventiws is not there yet: the first
-        # measurement with a working engine drain came out between 0.51 and 0.65
-        # of `ws` across 64 B to 16 KiB payloads. Failing every pull request on
-        # that would be reporting the project's honest starting point as a
-        # regression against itself, and would train contributors to ignore the
-        # job.
+        # The gate fails when the facade's median falls more than ten percent behind
+        # `ws` on the same host at any payload size. The 64 B row is the lock-step
+        # boundary's worst case and sits at the gate's edge, while 1 KiB and up are
+        # at or above parity. Failing every pull request on that would report the
+        # project's honest starting point as a regression against itself, and would
+        # train contributors to ignore the job.
         #
         # So this job reports: the report and its `ws` baseline are uploaded as
         # an artifact on every run, including failures, and the comparison is
         # read from the run rather than from a status. `--gate` stays available
         # locally through `pnpm bench --gate` for a developer who wants the
-        # verdict. The gate becomes blocking when the engine reaches parity, and
+        # verdict. The gate becomes blocking when the 64 B row clears it, and
         # the switch is one flag on this step.
         run: pnpm run bench
 
@@ -194,9 +193,9 @@ jobs:
           publish() {
             node publisher/scripts/publish-bench-history.mjs \
               --report artifact/report.json \
-              --contract publisher/bench/contracts/echo_throughput_v1.env \
-              --schema publisher/bench/contracts/echo_throughput_v1.schema.json \
-              --contract-doc publisher/bench/contracts/CONTRACT.md \
+              --contract publisher/bench/contracts/echo_throughput_v2.env \
+              --schema publisher/bench/contracts/echo_throughput_v2.schema.json \
+              --contract-doc publisher/bench/contracts/CONTRACT-v2.md \
               --history history \
               --repository "$GITHUB_REPOSITORY" \
               --event-name "$GITHUB_EVENT_NAME" \

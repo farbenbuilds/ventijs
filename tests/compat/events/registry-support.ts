@@ -12,7 +12,7 @@ export function dispatch<E extends EventMap, K extends EventName<E>>(
   event: K,
   ...args: E[K]
 ): number {
-  return dispatchWith(registry, undefined, event, ...args);
+  return dispatchWith(registry, undefined, event, args);
 }
 
 export function unsubscribe<E extends EventMap, K extends EventName<E>>(

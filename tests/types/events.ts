@@ -137,9 +137,9 @@ export function registerMessage(
 }
 
 export function announceClose(socket: SocketState): number {
-  return dispatchWith(socket.listeners, socket, "close", 1000, Buffer.from("done"));
+  return dispatchWith(socket.listeners, socket, "close", [1000, Buffer.from("done")]);
 }
 
 export function announceOpen(): number {
-  return dispatchWith(createRegistry<SocketEventMap>(), undefined, "open");
+  return dispatchWith(createRegistry<SocketEventMap>(), undefined, "open", []);
 }

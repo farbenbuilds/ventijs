@@ -15,6 +15,3 @@ pub const control_slots: usize = 8;
 
 /// Ceiling on `maxFragments`, matching `ws`'s 16384, which `ws` treats as a policy failure (1008). A ceiling and not a reservation: the boundary list starts at `fragments.initial_boundaries`.
 pub const max_fragments: usize = 16_384;
-
-/// Bytes one `ingest` call copies before feeding them. A 16 KiB scratch means a 64 KiB socket read crosses the boundary four times rather than once, and the copy happens once per piece.
-pub const ingest_scratch: usize = 16 * 1024;

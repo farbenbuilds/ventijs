@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/farbenbuilds/ventiws/main/bench/contracts/echo_throughput_v2.schema.json",
+  "title": "ventiws echo throughput benchmark record v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "benchmark_id",
+    "record_id",
+    "recorded_at",
+    "guarantee",
+    "methodology",
+    "provenance",
+    "runner",
+    "toolchain",
+    "results"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "benchmark_id": { "const": "echo-throughput-v2" },
+    "record_id": { "type": "string", "pattern": "^[0-9]+-[0-9]+-[0-9a-f]{12}$" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "guarantee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula", "minimum_baseline_ratio", "passed"],
+      "properties": {
+        "formula": {
+          "const": "candidate_median_round_trips_per_second >= baseline_median_round_trips_per_second * minimum_baseline_ratio"
+        },
+        "minimum_baseline_ratio": { "const": 0.9 },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "methodology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_sha256",
+        "statistic",
+        "messages",
+        "repeats",
+        "warmups",
+        "payload_sizes_bytes",
+        "per_message_deflate",
+        "wire_bytes_basis",
+        "implementations",
+        "gate_baseline",
+        "gate_candidate"
+      ],
+      "properties": {
+        "contract_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "statistic": { "const": "median" },
+        "messages": { "type": "integer", "minimum": 1 },
+        "repeats": { "type": "integer", "minimum": 2 },
+        "warmups": { "type": "integer", "minimum": 0 },
+        "payload_sizes_bytes": {
+          "type": "array",
+          "items": { "type": "integer", "exclusiveMinimum": 0 },
+          "minItems": 1
+        },
+        "per_message_deflate": { "const": false },
+        "wire_bytes_basis": { "const": "payload-only" },
+        "implementations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 2
+        },
+        "gate_baseline": { "type": "string", "minLength": 1 },
+        "gate_candidate": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "event_name",
+        "git_ref",
+        "commit_sha",
+        "workflow_run_url",
+        "run_id",
+        "run_attempt"
+      ],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "event_name": { "type": "string", "minLength": 1 },
+        "git_ref": { "type": "string", "minLength": 1 },
+        "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "workflow_run_url": { "type": "string", "format": "uri" },
+        "run_id": { "type": "integer", "minimum": 1 },
+        "run_attempt": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "name",
+        "image",
+        "cpu_model",
+        "cpu_count",
+        "kernel",
+        "total_memory_bytes"
+      ],
+      "properties": {
+        "os": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "cpu_model": { "type": "string", "minLength": 1 },
+        "cpu_count": { "type": "integer", "minimum": 1 },
+        "kernel": { "type": "string", "minLength": 1 },
+        "total_memory_bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_version",
+        "node_abi",
+        "pnpm_version",
+        "zig_version",
+        "lockfile_sha256",
+        "ventiws_version",
+        "ws_version",
+        "uweb_sockets_version",
+        "socket_io_version",
+        "socket_io_client_version"
+      ],
+      "properties": {
+        "node_version": { "type": "string", "minLength": 1 },
+        "node_abi": { "type": "string", "minLength": 1 },
+        "pnpm_version": { "type": "string", "minLength": 1 },
+        "zig_version": { "type": "string", "minLength": 1 },
+        "lockfile_sha256": { "type": "string", "minLength": 1 },
+        "ventiws_version": { "type": "string", "minLength": 1 },
+        "ws_version": { "type": "string", "minLength": 1 },
+        "uweb_sockets_version": { "type": "string", "minLength": 1 },
+        "socket_io_version": { "type": "string", "minLength": 1 },
+        "socket_io_client_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configurations"],
+      "properties": {
+        "configurations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/configuration" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "leg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "median_seconds",
+        "median_round_trips_per_second",
+        "median_wire_bytes_per_second",
+        "spread",
+        "samples_seconds",
+        "reason"
+      ],
+      "properties": {
+        "status": { "enum": ["measured", "unavailable"] },
+        "median_seconds": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "median_round_trips_per_second": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "median_wire_bytes_per_second": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "spread": { "type": ["number", "null"], "minimum": 0 },
+        "samples_seconds": {
+          "type": "array",
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payload_bytes", "candidate_to_baseline_ratio", "legs"],
+      "properties": {
+        "payload_bytes": { "type": "integer", "exclusiveMinimum": 0 },
+        "candidate_to_baseline_ratio": {
+          "anyOf": [{ "type": "number", "exclusiveMinimum": 0 }, { "type": "null" }]
+        },
+        "legs": {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": { "$ref": "#/$defs/leg" }
+        }
+      }
+    }
+  }
+}

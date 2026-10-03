@@ -65,12 +65,13 @@ export function eventNames<E extends EventMap>(registry: Registry<E>): EventName
 }
 
 /// Dispatches with the emitter as `this`, which is the contract the vendored `@types/ws`
-/// listeners declare. `Reflect.apply` accepts the readonly tuple the event map carries.
+/// listeners declare. `args` is the one array the caller built, rather than a second rest
+/// spread: the message path runs this per frame and two arrays per event is one too many.
 export function dispatchWith<E extends EventMap, K extends EventName<E>>(
   registry: Registry<E>,
   target: unknown,
   event: K,
-  ...args: E[K]
+  args: E[K],
 ): number {
   const bucket = registry[event];
   if (bucket === undefined) return 0;
