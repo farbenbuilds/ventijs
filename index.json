@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "echo-throughput-v1",
+  "records": [
+    {
+      "record_id": "37102633805-1-20a0dcc1ca4b",
+      "recorded_at": "2026-10-03T06:46:37.451Z",
+      "commit_sha": "20a0dcc1ca4bb191692e6b343a8b52d18bcf37a6",
+      "passed": false,
+      "median_ratio": 0.3634211716839829,
+      "worst_payload_bytes": 64,
+      "worst_ratio": 0.22023435579470652,
+      "record_path": "records/2026/37102633805-1-20a0dcc1ca4b.json",
+      "raw_path": "raw/2026/37102633805-1-20a0dcc1ca4b/report.json"
+    }
+  ]
+}
