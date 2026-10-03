@@ -5,6 +5,6 @@
     "emitDeclarationOnly": false,
     "noEmit": true
   },
-  "include": ["tests"],
+  "include": ["tests", "bench"],
   "exclude": ["tests/declarations"]
 }

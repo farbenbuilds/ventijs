@@ -1,15 +1,14 @@
-/// The pinned engine compiles `message_capacity` to 32 KiB
-/// (`src/engine/server/options.zig`), so a larger payload cannot be echoed by
-/// ventiws at any speed. `ws` accepts hundreds of MiB, which means a size above
-/// the ceiling is not a slower run, it is a run ventiws cannot finish. The
-/// matrix stops at the ceiling so a row can never claim a win it did not earn.
-export const VENTIWS_MAX_MESSAGE_BYTES = 32 * 1024;
+import type { ImplementationId } from "../echo/echo-types.ts";
+import { ALL_IMPLEMENTATION_IDS, GATE_IMPLEMENTATION_IDS } from "../echo/echo-types.ts";
+import { ECHO_PAYLOAD_CEILING_BYTES } from "../echo/echo-limits.ts";
+import { readImplementations } from "./implementation-options.ts";
+import { readCount, readSizes } from "./option-values.ts";
 
 export const DEFAULT_PAYLOAD_SIZES: readonly number[] = [
   64,
   1024,
   16 * 1024,
-  VENTIWS_MAX_MESSAGE_BYTES,
+  ECHO_PAYLOAD_CEILING_BYTES,
 ];
 
 // `CI_CD_PIPELINE.md` fixes the protocol: repeat three times, discard the
@@ -43,6 +42,7 @@ export const PREFLIGHT_MESSAGES = 1;
 export const GATE_MIN_RATIO = 0.9;
 
 export type BenchOptions = {
+  readonly implementations: readonly ImplementationId[];
   readonly payloadSizes: readonly number[];
   readonly repeats: number;
   readonly warmups: number;
@@ -52,40 +52,16 @@ export type BenchOptions = {
   readonly help: boolean;
 };
 
-const readCount = (
-  flag: string,
-  raw: string | undefined,
-  fallback: number,
-  minimum = 1,
-): number => {
-  if (raw === undefined) return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < minimum) {
-    throw new Error(`${flag} expects an integer of at least ${minimum}, received "${raw}"`);
-  }
-  return value;
-};
-
-const readSizes = (
-  flag: string,
-  raw: string | undefined,
-  fallback: readonly number[],
-): readonly number[] => {
-  if (raw === undefined) return fallback;
-  const sizes = raw.split(",").map((field) => readCount(flag, field.trim(), 0));
-  if (sizes.length === 0) throw new Error(`${flag} expects at least one payload size`);
-  return sizes;
-};
-
 const assertWithinCeiling = (size: number): void => {
-  if (size <= VENTIWS_MAX_MESSAGE_BYTES) return;
+  if (size <= ECHO_PAYLOAD_CEILING_BYTES) return;
   throw new Error(
-    `payload size ${size} exceeds the ventiws engine ceiling of ${VENTIWS_MAX_MESSAGE_BYTES} bytes ` +
+    `payload size ${size} exceeds the ventiws engine ceiling of ${ECHO_PAYLOAD_CEILING_BYTES} bytes ` +
       "(src/engine/server/options.zig); comparing above it would measure a capability ventiws lacks, not a speed",
   );
 };
 
 export const parseOptions = (argv: readonly string[]): BenchOptions => {
+  let implementations = ALL_IMPLEMENTATION_IDS;
   let repeats = DEFAULT_REPEATS;
   let warmups = DEFAULT_WARMUPS;
   let messages = DEFAULT_MESSAGES;
@@ -99,6 +75,9 @@ export const parseOptions = (argv: readonly string[]): BenchOptions => {
     const flag = separator === -1 ? argument : argument.slice(0, separator);
     const value = separator === -1 ? undefined : argument.slice(separator + 1);
     switch (flag) {
+      case "--implementations":
+        implementations = readImplementations(flag, value, implementations);
+        break;
       case "--repeats":
         repeats = readCount(flag, value, repeats);
         break;
@@ -129,5 +108,10 @@ export const parseOptions = (argv: readonly string[]): BenchOptions => {
     throw new Error(`--repeats must be at least 2, because a median of one sample is not a median`);
   }
   for (const size of payloadSizes) assertWithinCeiling(size);
-  return { payloadSizes, repeats, warmups, messages, gate, reportPath, help };
+  if (gate) {
+    for (const id of GATE_IMPLEMENTATION_IDS) {
+      if (!implementations.includes(id)) throw new Error(`--gate requires the ${id} leg`);
+    }
+  }
+  return { implementations, payloadSizes, repeats, warmups, messages, gate, reportPath, help };
 };

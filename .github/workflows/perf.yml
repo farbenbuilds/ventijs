@@ -42,6 +42,10 @@ on:
       - "pnpm-lock.yaml"
       - "tsconfig.json"
       - ".github/workflows/perf.yml"
+  schedule:
+    # A nightly main-against-main control run: it measures runner drift while
+    # keeping a long series on the benchmark-data branch between code changes.
+    - cron: "23 4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -53,12 +57,15 @@ concurrency:
 
 jobs:
   echo-throughput:
-    name: Echo throughput against ws
+    name: Echo throughput across implementations
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment:
       name: Performance
       url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    outputs:
+      commit_sha: ${{ steps.revision.outputs.commit_sha }}
+      report_written: ${{ steps.report.outputs.written }}
     steps:
       - uses: actions/checkout@v6
 
@@ -92,6 +99,10 @@ jobs:
         # exist before the measurement starts.
         run: pnpm build
 
+      - name: Capture the measured revision
+        id: revision
+        run: echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Measure
         # Deliberately runs without `--gate`.
         #
@@ -103,13 +114,23 @@ jobs:
         # regression against itself, and would train contributors to ignore the
         # job.
         #
-        # So this job reports: the raw samples and the `ws` baseline are uploaded
-        # as an artifact on every run, including failures, and the comparison is
+        # So this job reports: the report and its `ws` baseline are uploaded as
+        # an artifact on every run, including failures, and the comparison is
         # read from the run rather than from a status. `--gate` stays available
-        # locally through `pnpm bench -- --gate` for a developer who wants the
+        # locally through `pnpm bench --gate` for a developer who wants the
         # verdict. The gate becomes blocking when the engine reaches parity, and
         # the switch is one flag on this step.
         run: pnpm run bench
+
+      - name: Check the report
+        id: report
+        if: always()
+        run: |
+          if [ -f bench/results/report.json ]; then
+            echo "written=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "written=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload the report
         if: always()
@@ -119,3 +140,91 @@ jobs:
           path: bench/results
           if-no-files-found: warn
           retention-days: 30
+
+  publish-history:
+    name: Publish durable benchmark history
+    needs: echo-throughput
+    # Untrusted pull-request runs never reach this job, and a run that produced
+    # no report has nothing to publish; a failed gate still records, because the
+    # history is evidence rather than a status.
+    if: >-
+      always() &&
+      needs.echo-throughput.outputs.report_written == 'true' &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout trusted publisher
+        uses: actions/checkout@v6
+        with:
+          path: publisher
+          ref: ${{ needs.echo-throughput.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Checkout history branch
+        uses: actions/checkout@v6
+        with:
+          path: history
+          fetch-depth: 0
+
+      - name: Download the report
+        uses: actions/download-artifact@v4
+        with:
+          name: echo-throughput
+          path: artifact
+
+      - name: Prepare benchmark-data
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git -C history ls-remote --exit-code --heads origin benchmark-data >/dev/null; then
+            git -C history fetch origin benchmark-data
+            git -C history checkout -B benchmark-data FETCH_HEAD
+          else
+            git -C history checkout --orphan benchmark-data
+            git -C history rm -rf . || true
+          fi
+
+      - name: Publish and push the record
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish() {
+            node publisher/scripts/publish-bench-history.mjs \
+              --report artifact/report.json \
+              --contract publisher/bench/contracts/echo_throughput_v1.env \
+              --schema publisher/bench/contracts/echo_throughput_v1.schema.json \
+              --contract-doc publisher/bench/contracts/CONTRACT.md \
+              --history history \
+              --repository "$GITHUB_REPOSITORY" \
+              --event-name "$GITHUB_EVENT_NAME" \
+              --git-ref "$GITHUB_REF" \
+              --commit-sha "${{ needs.echo-throughput.outputs.commit_sha }}" \
+              --workflow-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              --run-id "$GITHUB_RUN_ID" \
+              --run-attempt "$GITHUB_RUN_ATTEMPT" \
+              --runner-os "$RUNNER_OS" \
+              --runner-arch "$RUNNER_ARCH" \
+              --runner-name "$RUNNER_NAME" \
+              --runner-image "${ImageOS:-unknown}/${ImageVersion:-unknown}" \
+              --kernel "$(uname -srvmo)"
+          }
+          git -C history config user.name "github-actions[bot]"
+          git -C history config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            record_id=$(publish)
+            git -C history add --all
+            if git -C history diff --cached --quiet; then
+              exit 0
+            fi
+            git -C history commit -m "benchmark: record $record_id"
+            if git -C history push origin HEAD:benchmark-data; then
+              exit 0
+            fi
+            # Another writer landed first: rewind to its tip and publish again.
+            git -C history fetch origin benchmark-data
+            git -C history reset --hard FETCH_HEAD
+          done
+          exit 1

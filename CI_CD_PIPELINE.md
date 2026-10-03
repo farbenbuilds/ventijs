@@ -7,17 +7,17 @@ it is not proof that no memory or security defect remains.
 
 ## Job matrix
 
-| Workflow       | Jobs                                       | Triggers                                                                             | Gates on                                                   |
-| -------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| `ts-lint.yml`  | TypeScript and formatting                  | push and pull request to `main` on a JS/TS or config path, manual                    | `pnpm lint`, `pnpm format:check`, `pnpm typecheck`         |
-| `zig-lint.yml` | Zig formatting                             | push and pull request on `**.zig`, `build.zig`, `build.zig.zon`, manual              | `zig fmt --check`                                          |
-| `nix-lint.yml` | Nix formatting                             | push and pull request on `**.nix` or `flake.lock`, manual                            | `nix fmt -- --check` over tracked `.nix` files             |
-| `ts-test.yml`  | Unit and boundary tests                    | push and pull request on a JS/TS or config path, manual                              | `tests/protocol` and `tests/compat/options`                |
-| `zig-test.yml` | Zig unit tests, Binding lifecycle tests    | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite |
-| `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                       |
-| `perf.yml`     | Echo throughput against `ws`               | push and pull request on a Zig, manifest, or `bench/` path, manual                   | the benchmark report, uploaded as an artifact              |
-| `bump.yml`     | Advance the version, push the tag          | push to `main`, manual                                                               | nothing: it commits the version and starts the publish     |
-| `publish.yml`  | Platform build matrix, publish to npm      | a `v*` tag pushed by a maintainer                                                    | every platform builds and its addon loads and echoes       |
+| Workflow       | Jobs                                        | Triggers                                                                             | Gates on                                                              |
+| -------------- | ------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `ts-lint.yml`  | TypeScript and formatting                   | push and pull request to `main` on a JS/TS or config path, manual                    | `pnpm lint`, `pnpm format:check`, `pnpm typecheck`                    |
+| `zig-lint.yml` | Zig formatting                              | push and pull request on `**.zig`, `build.zig`, `build.zig.zon`, manual              | `zig fmt --check`                                                     |
+| `nix-lint.yml` | Nix formatting                              | push and pull request on `**.nix` or `flake.lock`, manual                            | `nix fmt -- --check` over tracked `.nix` files                        |
+| `ts-test.yml`  | Unit and boundary tests                     | push and pull request on a JS/TS or config path, manual                              | `tests/protocol` and `tests/compat/options`                           |
+| `zig-test.yml` | Zig unit tests, Binding lifecycle tests     | push and pull request on a Zig, `src/`, `tests/`, `scripts/`, or config path, manual | `zig build test`, `typecheck:dist`, the whole vitest suite            |
+| `autobahn.yml` | Autobahn engine gate, RFC 6455 conformance  | push and pull request on a Zig, manifest, or harness path, weekly, manual            | the committed known-failure baseline                                  |
+| `perf.yml`     | Echo throughput across four implementations | push and pull request on a Zig, manifest, or `bench/` path, nightly, manual          | nothing: it reports, and trusted `main` runs publish a durable record |
+| `bump.yml`     | Advance the version, push the tag           | push to `main`, manual                                                               | nothing: it commits the version and starts the publish                |
+| `publish.yml`  | Platform build matrix, publish to npm       | a `v*` tag pushed by a maintainer                                                    | every platform builds and its addon loads and echoes                  |
 
 Every gating workflow runs on `ubuntu-24.04`. Node is `node@24` and pnpm
 `12.4.2` through `pnpm/setup@v2`, Zig is `0.16.0` through
@@ -234,18 +234,38 @@ baseline are in [COMPATIBILITY.md](COMPATIBILITY.md#rfc-6455-conformance) and
 
 ## Benchmark
 
-`perf.yml` runs `pnpm build` and then `pnpm run bench`, which drives `ws` and
-the native engine through one shared echo path and writes a JSON report with
-provenance and the raw samples behind every median. The report is uploaded on
-every run, including failures.
+`perf.yml` runs `pnpm build` and then `pnpm run bench`, which drives `ws`, the
+native engine, `uWebSockets.js`, and Socket.IO through one shared echo path and
+writes a JSON report with provenance and the raw samples behind every median.
+The report is uploaded on every run, including failures.
 
-It deliberately does not pass `--gate`. The gate fails when ventiws's median falls
-more than ten percent behind `ws` on the same host, and the engine is not at
-parity, so a blocking threshold would report the project's starting point as a
-regression against itself. The switch is the `--gate` flag on its `Measure` step,
-and `pnpm bench -- --gate` gives the same verdict locally. A payload above the
+`ws` is the gate baseline and ventiws the candidate; the two other legs are
+reference rows and never decide the verdict. The comparison is read from the
+run rather than from a status: the `Measure` step deliberately does not pass
+`--gate`, because the gate fails when ventiws's median falls more than ten
+percent behind `ws` on the same host, and the engine is not at parity yet.
+`pnpm bench --gate` gives the same verdict locally. A payload above the
 engine's compiled message capacity is refused by the harness rather than
 compared against an absent row.
+
+`bench/contracts/echo_throughput_v1.env` is the frozen benchmark definition. A
+report whose parameters drifted from it is refused at publication, so a durable
+record can never describe a run the contract does not define. A trusted run on
+`main` — push, nightly schedule, or manual dispatch — appends the record to the
+bot-managed `benchmark-data` branch through
+`scripts/publish-bench-history.mjs`: the canonical record, its raw report, the
+contract copies, the rolling index, and a generated README. Records are
+immutable and re-publishing identical content is idempotent.
+
+The publish job is separate from the measuring job on purpose. The compare job
+runs with `contents: read` and also handles pull requests; the `publish-history`
+job holds `contents: write`, runs only for non-pull-request events on `main`,
+checks out the trusted revision, and pushes as `github-actions[bot]`. A
+pull-request run can therefore measure and upload its artifact but can never
+write history, and a failing gate still publishes its evidence.
+
+[docs/performance.md](docs/performance.md) is the developer-facing companion:
+what each leg isolates, how to read the table, and how to cite a number.
 
 ## Cost per job
 
@@ -280,7 +300,7 @@ default and finish in a couple of minutes.
 | `ts-test.yml`  | `pnpm exec vitest run tests/protocol tests/compat/options`                                                                                                   |
 | `zig-test.yml` | `zig build test` and `pnpm test`                                                                                                                             |
 | `autobahn.yml` | `pnpm test:autobahn`, or `-- --full`; needs Docker                                                                                                           |
-| `perf.yml`     | `pnpm bench`, or `pnpm bench -- --gate` for the verdict                                                                                                      |
+| `perf.yml`     | `pnpm bench`, or `pnpm bench --gate` for the verdict                                                                                                         |
 | `publish.yml`  | `pnpm run build:bindings -- --platform=<one of the five>`, then `pnpm exec vitest run --no-file-parallelism tests/binding/addon.test.ts tests/binding/codec` |
 
 `pnpm lint` already runs `scripts/check-conventions.mjs`, so a full-tree

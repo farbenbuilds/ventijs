@@ -67,23 +67,26 @@ is replaced wholesale when the pinned `ws` version changes.
 The following are development dependencies. They are not shipped in the
 published package and require no runtime attribution.
 
-| Component   | License    |
-| ----------- | ---------- |
-| lefthook    | MIT        |
-| oxfmt       | MIT        |
-| oxlint      | MIT        |
-| tsdown      | MIT        |
-| vitest      | MIT        |
-| vite        | MIT        |
-| TypeScript  | Apache-2.0 |
-| bumpp       | MIT        |
-| @types/node | MIT        |
-| @types/ws   | MIT        |
-| ws          | MIT        |
-| Node.js     | MIT        |
-| pnpm        | MIT        |
-| Zig         | MIT        |
-| Nix         | LGPL-2.1   |
+| Component        | License    |
+| ---------------- | ---------- |
+| lefthook         | MIT        |
+| oxfmt            | MIT        |
+| oxlint           | MIT        |
+| tsdown           | MIT        |
+| vitest           | MIT        |
+| vite             | MIT        |
+| TypeScript       | Apache-2.0 |
+| bumpp            | MIT        |
+| @types/node      | MIT        |
+| @types/ws        | MIT        |
+| ws               | MIT        |
+| uWebSockets.js   | Apache-2.0 |
+| socket.io        | MIT        |
+| socket.io-client | MIT        |
+| Node.js          | MIT        |
+| pnpm             | MIT        |
+| Zig              | MIT        |
+| Nix              | LGPL-2.1   |
 
 ## CI-only conformance tooling
 
@@ -105,14 +108,20 @@ built from.
 
 ## Benchmark provenance
 
-The benchmark harness in `bench/` runs `ws` 8.21.3, a devDependency, alongside
-the candidate build and writes a JSON report. It vendors no third-party code. A
-report records its own provenance, so a number can be traced to the run that
-produced it: the schema version, the commit and whether the tree was dirty, the
-Node.js, pnpm, and Zig versions, the `pnpm-lock.yaml` hash, the resolved `ws`
-version, and the CPU model, count, and memory of the host. No benchmark number is
-recorded in this file; the retained reports are the evidence, as described in
-[CI_CD_PIPELINE.md](CI_CD_PIPELINE.md).
+The benchmark harness in `bench/` runs `ws` 8.21.3, `uWebSockets.js` 20.71.0,
+`socket.io` 4.8.4, and `socket.io-client` 4.8.4, all devDependencies, alongside
+the candidate build and writes a JSON report. It vendors no third-party code.
+`uWebSockets.js` is fetched from its GitHub tag because it is not published to
+the npm registry; the lockfile pins the tarball and its integrity. A report
+records its own provenance, so a number can be traced to the run that produced
+it: the schema version, the commit and whether the tree was dirty, the Node.js,
+pnpm, and Zig versions, the Node ABI that selects the `uWebSockets.js`
+prebuilt, the `pnpm-lock.yaml` hash, the resolved versions of `ws`, ventiws,
+and both Socket.IO packages, and the CPU model, count, and memory of the host.
+Trusted runs on `main` publish immutable records to the `benchmark-data`
+branch, as described in [CI_CD_PIPELINE.md](CI_CD_PIPELINE.md) and
+[docs/performance.md](docs/performance.md). No benchmark number is recorded in
+this file; the retained records are the evidence.
 
 ## Maintenance
 

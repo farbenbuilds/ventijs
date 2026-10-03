@@ -49,7 +49,7 @@ function loadAddon(): VentiAddon {
 export function nativeEchoServer(options: EchoServerOptions): EchoServer {
   const a = loadAddon();
   const state = initialState();
-  state.server = a.createServer({ host: "127.0.0.1", port: options.port, path: "/" }, (event) => {
+  state.server = a.createServer({ host: options.host, port: options.port, path: "/" }, (event) => {
     onEngineEvent(a, state, event);
   });
   a.listenServer(state.server);

@@ -1,35 +1,9 @@
-import { humanBytes } from "./units.ts";
-import type { ConfigurationResult, Leg } from "./plan.ts";
+import { table } from "./format-table.ts";
 import type { BenchmarkReport } from "./report.ts";
+import type { Leg } from "./summary.ts";
+import { humanBytes } from "./units.ts";
 
 const MISSING = "n/a";
-
-const fixed = (value: number, digits: number): string => value.toFixed(digits);
-
-const integer = (value: number | null): string =>
-  value === null ? MISSING : Math.round(value).toLocaleString("en-US");
-
-const legCell = (value: number | null, render: (input: number) => string): string =>
-  value === null ? MISSING : render(value);
-
-const outcomeOf = (result: ConfigurationResult): string => {
-  const ws = result.ws.medianRoundTripsPerSecond;
-  const ventiws = result.ventiws.medianRoundTripsPerSecond;
-  if (ws === null || ventiws === null) return "unverified";
-  return (ventiws / ws).toFixed(3);
-};
-
-const rowOf = (result: ConfigurationResult): string =>
-  [
-    humanBytes(result.payloadBytes),
-    legCell(result.ws.medianSeconds, (value) => fixed(value, 4)),
-    integer(result.ws.medianRoundTripsPerSecond),
-    legCell(result.ws.medianWireBytesPerSecond, (value) => `${humanBytes(value)}/s`),
-    legCell(result.ventiws.medianSeconds, (value) => fixed(value, 4)),
-    integer(result.ventiws.medianRoundTripsPerSecond),
-    legCell(result.ventiws.medianWireBytesPerSecond, (value) => `${humanBytes(value)}/s`),
-    outcomeOf(result),
-  ].join(" | ");
 
 const spreadCell = (leg: Leg): string =>
   leg.spread === null ? MISSING : `${(leg.spread * 100).toFixed(1)}%`;
@@ -39,33 +13,31 @@ const header = (report: BenchmarkReport): readonly string[] => {
   return [
     `ventiws echo benchmark (${p.schemaVersion})`,
     `commit    ${p.gitCommit}${p.gitDirty ? " (dirty tree)" : ""}`,
-    `toolchain node ${p.nodeVersion}  pnpm ${p.pnpmVersion}  zig ${p.zigVersion}`,
+    `toolchain node ${p.nodeVersion} (ABI ${p.nodeAbi})  pnpm ${p.pnpmVersion}  zig ${p.zigVersion}`,
     `lockfile  ${p.lockfileSha256.slice(0, 16)}  ventiws ${p.ventiwsVersion}  ws ${p.wsVersion}`,
+    `refs      uWebSockets.js ${p.uwebSocketsVersion}  socket.io ${p.socketIoVersion}  socket.io-client ${p.socketIoClientVersion}`,
     `host      ${p.cpuModel} x${p.cpuCount}  ${p.platform}/${p.arch}  ${humanBytes(p.totalMemoryBytes)} RAM`,
     `workload  ${a.messages} round trips per sample, lock-step echo, perMessageDeflate off`,
     `samples   ${a.repeats} measured repeats per configuration, ${a.warmupRepeatsDiscarded} warm-up repeats discarded`,
+    `gate      ${a.gateCandidate} must reach ${a.gateMinimumRatio} of ${a.gateBaseline} per payload`,
     `ceiling   ventiws is capped at ${humanBytes(a.payloadCeilingBytes)} per message by its pinned engine;`,
     `          ws accepts far more, so a row above the ceiling would compare a missing capability, not a speed.`,
+    `fairness  ${a.wireBytesBasis} wire bytes on every leg; Socket.IO adds Engine.IO framing over websocket-only`,
+    `          transport, so its time includes overhead its bytes column omits.`,
   ];
 };
 
-const table = (results: readonly ConfigurationResult[]): readonly string[] => [
-  "",
-  "| payload | ws median s | ws round trips/s | ws wire | ventiws median s | ventiws round trips/s | ventiws wire | ventiws vs ws |",
-  "| --- | --- | --- | --- | --- | --- | --- | --- |",
-  ...results.map((result) => `| ${rowOf(result)} |`),
-];
-
-const notes = (results: readonly ConfigurationResult[]): readonly string[] => {
+const notes = (report: BenchmarkReport): readonly string[] => {
   const lines: string[] = [];
-  for (const result of results) {
-    if (result.ws.reason !== null) lines.push(`- ${result.configuration}: ws ${result.ws.reason}`);
-    if (result.ventiws.reason !== null)
-      lines.push(`- ${result.configuration}: ventiws ${result.ventiws.reason}`);
-    if (result.ws.spread !== null && result.ws.spread > 0.1) {
-      lines.push(
-        `- ${result.configuration}: ws sample spread ${spreadCell(result.ws)} exceeds 10 percent; the host was not quiet`,
-      );
+  for (const result of report.configurations) {
+    for (const id of report.parameters.implementations) {
+      const leg = result.legs[id];
+      if (leg.reason !== null) lines.push(`- ${result.configuration}: ${id} ${leg.reason}`);
+      if (leg.spread !== null && leg.spread > 0.1) {
+        lines.push(
+          `- ${result.configuration}: ${id} sample spread ${spreadCell(leg)} exceeds 10 percent; the host was not quiet`,
+        );
+      }
     }
   }
   if (lines.length === 0) return [];
@@ -84,7 +56,7 @@ const gate = (report: BenchmarkReport, enabled: boolean): readonly string[] => [
 export const renderReport = (report: BenchmarkReport, gateEnabled: boolean): string =>
   [
     ...header(report),
-    ...table(report.configurations),
-    ...notes(report.configurations),
+    ...table(report.configurations, report.parameters.implementations),
+    ...notes(report),
     ...gate(report, gateEnabled),
   ].join("\n");
